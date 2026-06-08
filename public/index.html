@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HAUNT CTRL v3</title>
+<style>
+  :root{
+    --bg:#0a0a0a;--panel:#111;--border:#2a1500;--accent:#ff6a00;
+    --accent2:#ff9900;--danger:#cc0000;--success:#228b22;
+    --text:#e8e8e8;--dim:#888;--fog:#4fc3f7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',monospace;min-height:100vh}
+  header{background:#0d0000;border-bottom:2px solid var(--accent);padding:10px 20px;
+         display:flex;align-items:center;justify-content:space-between}
+  .logo{font-size:1.6em;font-weight:900;letter-spacing:3px;color:var(--accent);
+        text-shadow:0 0 20px var(--accent)}
+  .status-bar{display:flex;gap:16px;align-items:center;font-size:.85em}
+  .dot{width:10px;height:10px;border-radius:50%;background:#333;display:inline-block}
+  .dot.on{background:var(--success);box-shadow:0 0 8px var(--success)}
+  .dot.warn{background:var(--danger);box-shadow:0 0 8px var(--danger)}
+  .dot.fog{background:var(--fog);box-shadow:0 0 8px var(--fog)}
+
+  /* Global controls */
+  .global-bar{background:#1a0500;padding:10px 20px;display:flex;gap:10px;flex-wrap:wrap;
+              border-bottom:1px solid var(--border);align-items:center}
+  .btn{padding:10px 18px;border:none;border-radius:6px;cursor:pointer;font-size:.9em;
+       font-weight:700;letter-spacing:1px;transition:all .15s;text-transform:uppercase}
+  .btn:active{transform:scale(.96)}
+  .btn-danger{background:#8b0000;color:#fff;border:2px solid var(--danger)}
+  .btn-danger:hover{background:var(--danger)}
+  .btn-warn{background:#5a4000;color:#ffd700;border:2px solid #ffd700}
+  .btn-warn:hover{background:#8b6500}
+  .btn-orange{background:#6b2d00;color:var(--accent2);border:2px solid var(--accent)}
+  .btn-orange:hover{background:#8b3d00}
+  .btn-green{background:#003300;color:#00ff88;border:2px solid var(--success)}
+  .btn-green:hover{background:#004400}
+  .btn-fog{background:#003344;color:var(--fog);border:2px solid var(--fog)}
+  .btn-fog:hover{background:#004455}
+  .btn-sm{padding:6px 12px;font-size:.8em}
+  .btn-lg{padding:16px 30px;font-size:1.1em}
+  .btn.active{box-shadow:0 0 15px currentColor}
+
+  /* Tabs */
+  .tabs{display:flex;background:#0d0000;border-bottom:2px solid var(--border);
+        overflow-x:auto}
+  .tab{padding:12px 22px;cursor:pointer;font-size:.9em;font-weight:700;
+       letter-spacing:2px;text-transform:uppercase;color:var(--dim);white-space:nowrap;
+       border-bottom:3px solid transparent;transition:all .15s}
+  .tab:hover{color:var(--accent2)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+  .content{padding:20px;max-width:1100px;margin:0 auto}
+  .pane{display:none}
+  .pane.active{display:block}
+
+  /* Panels */
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+         padding:16px;margin-bottom:16px}
+  .panel-title{font-size:.75em;letter-spacing:3px;text-transform:uppercase;
+               color:var(--accent);margin-bottom:12px;border-bottom:1px solid var(--border);
+               padding-bottom:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+  /* Scene buttons */
+  .scene-btn{background:#1a0a00;border:1px solid var(--border);border-radius:8px;
+             padding:14px;cursor:pointer;text-align:center;transition:all .2s;color:var(--text)}
+  .scene-btn:hover{border-color:var(--accent);background:#2a1200;color:var(--accent2)}
+  .scene-btn .icon{font-size:1.8em;display:block;margin-bottom:6px}
+  .scene-btn .label{font-size:.8em;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+
+  /* Volume */
+  .vol-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .vol-label{width:70px;font-size:.85em;font-weight:700;color:var(--accent2)}
+  .vol-slider{flex:1;-webkit-appearance:none;height:6px;border-radius:3px;
+              background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--pct,0%),#333 var(--pct,0%),#333 100%);
+              cursor:pointer;outline:none}
+  .vol-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;
+    border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px var(--accent)}
+  .vol-val{width:36px;text-align:right;font-size:.85em;color:var(--dim)}
+  .vol-cap{font-size:.7em;color:var(--danger);width:50px}
+  .mute-btn{padding:5px 10px;font-size:.75em;background:#222;border:1px solid #444;
+            color:#888;border-radius:4px;cursor:pointer}
+  .mute-btn.muted{background:#5a0000;color:#ff6666;border-color:var(--danger)}
+
+  /* Character cards */
+  .char-card{background:#0d0800;border:1px solid var(--border);border-radius:8px;
+             padding:16px;cursor:pointer;transition:all .2s;text-align:center}
+  .char-card:hover{border-color:var(--accent);box-shadow:0 0 20px rgba(255,106,0,.3)}
+  .char-card .cicon{font-size:3em;margin-bottom:8px;display:block}
+  .char-card h3{font-size:.9em;letter-spacing:2px;text-transform:uppercase;
+                color:var(--accent2);margin-bottom:6px}
+  .char-card p{font-size:.75em;color:var(--dim)}
+
+  /* Storm */
+  .strike-btn{width:100%;padding:30px;font-size:1.3em;background:#1a1400;
+              border:2px solid #ffd700;color:#ffd700;border-radius:8px;cursor:pointer;
+              letter-spacing:3px;transition:all .2s;text-transform:uppercase;font-weight:900}
+  .strike-btn:hover{background:#2a2000;box-shadow:0 0 30px #ffd700}
+  .strike-btn:active{transform:scale(.97);box-shadow:0 0 60px #ffd700}
+  .storm-preset{padding:12px 16px;border:1px solid var(--border);background:#111;
+                border-radius:6px;cursor:pointer;font-size:.85em;font-weight:700;
+                letter-spacing:1px;text-transform:uppercase;color:var(--dim);transition:all .2s}
+  .storm-preset:hover{border-color:var(--accent)}
+  .storm-preset.selected{border-color:#ffd700;color:#ffd700;background:#1a1400}
+
+  /* Log */
+  #log-box{background:#050505;border:1px solid #1a1a1a;border-radius:6px;
+           padding:10px;height:180px;overflow-y:auto;font-family:monospace;font-size:.8em}
+  #log-box .entry{color:#666;padding:1px 0}
+  #log-box .entry.new{color:#aaa}
+  #log-box .entry.warn{color:#cc4400}
+
+  /* Setup */
+  .field-row{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .field-row label{font-size:.8em;color:var(--dim);width:120px}
+  .field-row input{background:#1a1a1a;border:1px solid #333;color:var(--text);
+                   padding:8px 12px;border-radius:4px;font-size:.9em;flex:1;min-width:150px}
+  .field-row input:focus{outline:none;border-color:var(--accent)}
+
+  /* Kid/Battle indicator */
+  .mode-badge{padding:4px 10px;border-radius:4px;font-size:.75em;font-weight:700;
+              letter-spacing:1px;display:none}
+  .mode-badge.kid{background:#004400;color:#00ff88;display:inline-block}
+  .mode-badge.battle{background:#4a0000;color:#ff4444;display:inline-block}
+
+  @media(max-width:600px){
+    .grid2,.grid3,.grid4{grid-template-columns:1fr 1fr}
+    .btn-lg{padding:12px 20px;font-size:1em}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🎃 HAUNT CTRL v3</span>
+  <div class="status-bar">
+    <span id="mode-badge-kid" class="mode-badge kid">KID MODE</span>
+    <span id="mode-badge-battle" class="mode-badge battle">BATTLE MODE</span>
+    <span><span id="dot-rx" class="dot"></span> Receiver</span>
+    <span><span id="dot-fog" class="dot"></span> Fog</span>
+    <span><span id="dot-storm" class="dot"></span> Storm</span>
+    <span id="pause-indicator" style="color:#ffd700;display:none">⏸ PAUSED</span>
+  </div>
+</header>
+
+<div class="global-bar">
+  <button class="btn btn-danger btn-lg" onclick="api('/api/allstop')">⛔ ALL STOP</button>
+  <button class="btn btn-warn btn-lg" id="pause-btn" onclick="api('/api/pause')">⏸ PAUSE</button>
+  <button class="btn btn-green" id="kid-btn" onclick="api('/api/kidmode')">🧸 Kid Mode</button>
+  <button class="btn btn-danger" onclick="api('/api/battlemode')">💀 Neighbor Battle</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-pane="cmd">Command</div>
+  <div class="tab" data-pane="graveyard">Graveyard</div>
+  <div class="tab" data-pane="jamboree">Jamboree</div>
+  <div class="tab" data-pane="storm">Storm</div>
+  <div class="tab" data-pane="audio">Audio</div>
+  <div class="tab" data-pane="setup">Setup</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ COMMAND ════ -->
+<div class="content">
+<div class="pane active" id="pane-cmd">
+
+  <div class="panel">
+    <div class="panel-title">Scene Presets</div>
+    <div class="grid4" style="grid-template-columns:repeat(5,1fr)">
+      <div class="scene-btn" onclick="setScene('ambient')">
+        <span class="icon">🌙</span><span class="label">Ambient</span>
+      </div>
+      <div class="scene-btn" onclick="setScene('active')">
+        <span class="icon">👻</span><span class="label">Active</span>
+      </div>
+      <div class="scene-btn" onclick="setScene('peakscare')">
+        <span class="icon">💀</span><span class="label">Peak Scare</span>
+      </div>
+      <div class="scene-btn" onclick="setScene('quiet')">
+        <span class="icon">🕯️</span><span class="label">Quiet</span>
+      </div>
+      <div class="scene-btn" onclick="setScene('battle')">
+        <span class="icon">🔥</span><span class="label">Battle Mode</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Fog Machine</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-fog" onclick="fireFog(5000)">💨 5s Burst</button>
+        <button class="btn btn-fog" onclick="fireFog(10000)">💨 10s Blast</button>
+        <button class="btn btn-fog" onclick="fireFog(20000)">💨 20s Max</button>
+        <button class="btn btn-danger btn-sm" onclick="api('/api/fog/stop')">■ Stop Fog</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Raw ISCP Command</div>
+      <div style="display:flex;gap:8px">
+        <input id="raw-cmd" placeholder="e.g. PWRQSTN" style="background:#1a1a1a;border:1px solid #333;
+          color:var(--text);padding:8px;border-radius:4px;flex:1;font-family:monospace"/>
+        <button class="btn btn-orange btn-sm" onclick="sendRaw()">SEND</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Activity Log</div>
+    <div id="log-box"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ GRAVEYARD ════ -->
+<div class="pane" id="pane-graveyard">
+
+  <div class="panel">
+    <div class="panel-title">Character Triggers</div>
+    <div class="grid3">
+      <div class="char-card" onclick="triggerChar('grimreaper')">
+        <span class="cicon">☠️</span>
+        <h3>Grim Reaper</h3>
+        <p>Vol 55 · Fog 6s</p>
+      </div>
+      <div class="char-card" onclick="triggerChar('headlesshorseman')">
+        <span class="cicon">🐴</span>
+        <h3>Headless Horseman</h3>
+        <p>Vol 60 · Fog 8s</p>
+      </div>
+      <div class="char-card" onclick="triggerChar('pumpkinking')">
+        <span class="cicon">🎃</span>
+        <h3>Pumpkin King</h3>
+        <p>Vol 50 · Lights</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Graveyard Ambient (Z2)</div>
+      <div class="vol-row">
+        <span class="vol-label">Zone 2</span>
+        <input type="range" class="vol-slider" id="vol-grave-z2" min="0" max="60"
+          oninput="updateSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
+        <span class="vol-val" id="val-grave-z2">25</span>
+        <span class="vol-cap">/ 60</span>
+      </div>
+      <button class="btn btn-orange btn-sm" onclick="setVol('z2',35);setSlider('vol-grave-z2',35)">
+        Set Ambient Level
+      </button>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Witch Auto-Fire</div>
+      <p style="font-size:.8em;color:var(--dim);margin-bottom:10px">
+        Every 2–3 min — briefly boosts Zone 2 for witch cackle
+      </p>
+      <button class="btn btn-orange" id="witch-btn" onclick="toggleWitch()">🧙 Start Witch Timer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ JAMBOREE ════ -->
+<div class="pane" id="pane-jamboree">
+
+  <div class="panel">
+    <div class="panel-title">Jack-o-Lantern Jamboree Projector</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="btn btn-orange" onclick="api('/api/onkyo/command',{command:'PWR01'})">
+        🔌 Power On
+      </button>
+      <button class="btn btn-warn" onclick="api('/api/onkyo/command',{command:'PWR00'})">
+        🔌 Power Off
+      </button>
+      <button class="btn btn-orange" onclick="api('/api/onkyo/command',{command:'SLI01'})">
+        📺 Input 1
+      </button>
+    </div>
+    <div class="panel-title">Zone 1 Volume (Jamboree)</div>
+    <div class="vol-row">
+      <span class="vol-label">Zone 1</span>
+      <input type="range" class="vol-slider" id="vol-jam-z1" min="0" max="65"
+        oninput="updateSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
+      <span class="vol-val" id="val-jam-z1">30</span>
+      <span class="vol-cap">/ 65</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-orange btn-sm" onclick="setVol('z1',30);setSlider('vol-jam-z1',30)">30 Ambient</button>
+      <button class="btn btn-orange btn-sm" onclick="setVol('z1',45);setSlider('vol-jam-z1',45)">45 Active</button>
+      <button class="btn btn-orange btn-sm" onclick="setVol('z1',55);setSlider('vol-jam-z1',55)">55 Party</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ STORM ════ -->
+<div class="pane" id="pane-storm">
+
+  <div class="panel">
+    <button class="strike-btn" onclick="api('/api/storm/strike')">
+      ⚡ MANUAL LIGHTNING STRIKE ⚡
+    </button>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Auto Storm Presets</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="storm-preset selected" id="preset-distant"
+             onclick="selectPreset('distant')">
+          🌩️ Distant — every 3–5 min, low rumble
+        </div>
+        <div class="storm-preset" id="preset-movingin"
+             onclick="selectPreset('movingin')">
+          🌧️ Moving In — every 2–3 min, building
+        </div>
+        <div class="storm-preset" id="preset-ontop"
+             onclick="selectPreset('ontop')">
+          ⚡ Right On Top — every 30–90 sec, full crack + fog
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Storm Control</div>
+      <button class="btn btn-warn btn-lg" id="storm-toggle-btn"
+              onclick="toggleStorm()" style="width:100%;margin-bottom:12px">
+        ▶ Start Auto Storm
+      </button>
+      <div id="storm-status" style="font-size:.8em;color:var(--dim)">Storm inactive</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ AUDIO ════ -->
+<div class="pane" id="pane-audio">
+  <div class="panel">
+    <div class="panel-title">Zone Volumes — Safety Caps Enforced</div>
+
+    <div class="vol-row">
+      <span class="vol-label">Zone 1</span>
+      <input type="range" class="vol-slider" id="vol-z1" min="0" max="65"
+        oninput="updateSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
+      <span class="vol-val" id="val-z1">30</span>
+      <span class="vol-cap">/ <span id="cap-z1">65</span></span>
+      <button class="mute-btn" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label">Zone 2</span>
+      <input type="range" class="vol-slider" id="vol-z2" min="0" max="60"
+        oninput="updateSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
+      <span class="vol-val" id="val-z2">25</span>
+      <span class="vol-cap">/ <span id="cap-z2">60</span></span>
+      <button class="mute-btn" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label">Zone 3</span>
+      <input type="range" class="vol-slider" id="vol-z3" min="0" max="55"
+        oninput="updateSlider(this,'z3')" onchange="setVol('z3',this.value)"/>
+      <span class="vol-val" id="val-z3">20</span>
+      <span class="vol-cap">/ <span id="cap-z3">55</span></span>
+      <button class="mute-btn" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SETUP ════ -->
+<div class="pane" id="pane-setup">
+  <div class="panel">
+    <div class="panel-title">Receiver Connection</div>
+    <div class="field-row">
+      <label>Receiver IP</label>
+      <input id="cfg-ip" value="192.168.1.190"/>
+    </div>
+    <div class="field-row">
+      <label>Port</label>
+      <input id="cfg-port" value="60128" style="max-width:100px"/>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-orange" onclick="saveConfig()">💾 Save &amp; Connect</button>
+      <span id="connect-status" style="font-size:.85em;align-self:center;color:var(--dim)">
+        Not tested
+      </span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Max Volume Caps (Onkyo 0–80 scale)</div>
+    <div class="field-row">
+      <label>Zone 1 Max</label>
+      <input id="cfg-z1" type="number" min="0" max="80" value="65" style="max-width:80px"/>
+    </div>
+    <div class="field-row">
+      <label>Zone 2 Max</label>
+      <input id="cfg-z2" type="number" min="0" max="80" value="60" style="max-width:80px"/>
+    </div>
+    <div class="field-row">
+      <label>Zone 3 Max</label>
+      <input id="cfg-z3" type="number" min="0" max="80" value="55" style="max-width:80px"/>
+    </div>
+    <button class="btn btn-orange btn-sm" onclick="saveCaps()">💾 Save Caps</button>
+  </div>
+</div>
+</div><!-- /.content -->
+
+<script>
+// ─── WebSocket ───────────────────────────────────────────────────────────────
+let ws, wsRetry = 1000;
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => { wsRetry = 1000; };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'state') applyState(msg.data);
+    if (msg.type === 'config') applyConfig(msg.data);
+    if (msg.type === 'log') appendLog(msg.msg);
+  };
+  ws.onclose = () => {
+    setTimeout(connectWS, wsRetry);
+    wsRetry = Math.min(wsRetry * 2, 10000);
+  };
+}
+connectWS();
+
+// ─── State / Config sync ─────────────────────────────────────────────────────
+function applyState(s) {
+  document.getElementById('dot-rx').className = 'dot ' + (s.connected ? 'on' : 'warn');
+  document.getElementById('dot-fog').className = 'dot ' + (s.fogActive ? 'fog' : '');
+  document.getElementById('dot-storm').className = 'dot ' + (s.stormActive ? 'warn' : '');
+  document.getElementById('pause-indicator').style.display = s.paused ? '' : 'none';
+  document.getElementById('pause-btn').textContent = s.paused ? '▶ Resume' : '⏸ Pause';
+  document.getElementById('kid-btn').className = 'btn btn-green' + (s.kidMode ? ' active' : '');
+  document.getElementById('mode-badge-kid').style.display = s.kidMode ? '' : 'none';
+
+  // Storm button
+  const stBtn = document.getElementById('storm-toggle-btn');
+  stBtn.textContent = s.stormActive ? '■ Stop Storm' : '▶ Start Auto Storm';
+  stBtn.className = s.stormActive ? 'btn btn-danger btn-lg' : 'btn btn-warn btn-lg';
+  document.getElementById('storm-status').textContent = s.stormActive
+    ? `Storm active [${s.stormPreset}]` : 'Storm inactive';
+
+  // Volumes
+  ['z1','z2','z3'].forEach(z => {
+    const v = s.volumes[z] ?? 0;
+    syncSliders(z, v);
+    const mb = document.getElementById(`mute-${z}`);
+    if (mb) mb.className = 'mute-btn' + (s.mute?.[z] ? ' muted' : '');
+  });
+}
+
+function applyConfig(c) {
+  document.getElementById('cfg-ip').value = c.receiverIp;
+  document.getElementById('cfg-port').value = c.receiverPort;
+  document.getElementById('cfg-z1').value = c.maxVol.z1;
+  document.getElementById('cfg-z2').value = c.maxVol.z2;
+  document.getElementById('cfg-z3').value = c.maxVol.z3;
+  // Update slider max attrs and cap displays
+  document.getElementById('cap-z1').textContent = c.maxVol.z1;
+  document.getElementById('cap-z2').textContent = c.maxVol.z2;
+  document.getElementById('cap-z3').textContent = c.maxVol.z3;
+  document.getElementById('vol-z1').max = c.maxVol.z1;
+  document.getElementById('vol-z2').max = c.maxVol.z2;
+  document.getElementById('vol-z3').max = c.maxVol.z3;
+  document.getElementById('vol-jam-z1').max = c.maxVol.z1;
+  document.getElementById('vol-grave-z2').max = c.maxVol.z2;
+}
+
+function syncSliders(zone, val) {
+  ['', 'jam-', 'grave-'].forEach(pfx => {
+    const el = document.getElementById(`vol-${pfx}${zone}`);
+    if (el) { el.value = val; updateSlider(el, zone); }
+    const vl = document.getElementById(`val-${pfx}${zone}`);
+    if (vl) vl.textContent = val;
+  });
+}
+
+// ─── API helper ──────────────────────────────────────────────────────────────
+async function api(url, body) {
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: body ? JSON.stringify(body) : '{}',
+    });
+    const data = await r.json();
+    if (!r.ok) appendLog(`ERROR: ${data.error}`, 'warn');
+    return data;
+  } catch(e) {
+    appendLog(`NETWORK ERROR: ${e.message}`, 'warn');
+  }
+}
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+function setScene(s) { api('/api/scene', { scene: s }); }
+function fireFog(ms) { api('/api/fog/fire', { duration: ms }); }
+function triggerChar(c) { api('/api/character', { character: c }); }
+
+function sendRaw() {
+  const v = document.getElementById('raw-cmd').value.trim();
+  if (!v) return;
+  api('/api/onkyo/command', { command: v });
+}
+
+function setVol(zone, val) { api('/api/onkyo/volume', { zone, value: parseInt(val, 10) }); }
+
+function toggleMute(zone) {
+  const btn = document.getElementById(`mute-${zone}`);
+  const muted = !btn.classList.contains('muted');
+  api('/api/onkyo/mute', { zone, mute: muted });
+}
+
+// ─── Sliders ─────────────────────────────────────────────────────────────────
+function updateSlider(el, zone) {
+  const pct = (el.value / el.max * 100).toFixed(1) + '%';
+  el.style.setProperty('--pct', pct);
+  ['', 'jam-', 'grave-'].forEach(pfx => {
+    const vl = document.getElementById(`val-${pfx}${zone}`);
+    if (vl) vl.textContent = el.value;
+  });
+}
+
+function setSlider(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = val;
+  const zone = id.replace('vol-','').replace('jam-','').replace('grave-','');
+  updateSlider(el, zone);
+}
+
+// ─── Storm ───────────────────────────────────────────────────────────────────
+let currentPreset = 'distant';
+function selectPreset(p) {
+  currentPreset = p;
+  ['distant','movingin','ontop'].forEach(x => {
+    document.getElementById(`preset-${x}`).classList.toggle('selected', x === p);
+  });
+}
+
+function toggleStorm() {
+  api('/api/storm/toggle', { preset: currentPreset });
+}
+
+// ─── Witch Timer ─────────────────────────────────────────────────────────────
+let witchTimer = null, witchActive = false;
+function toggleWitch() {
+  const btn = document.getElementById('witch-btn');
+  if (witchActive) {
+    clearTimeout(witchTimer);
+    witchActive = false;
+    btn.textContent = '🧙 Start Witch Timer';
+    btn.className = 'btn btn-orange';
+  } else {
+    witchActive = true;
+    btn.textContent = '🧙 Stop Witch Timer';
+    btn.className = 'btn btn-danger';
+    scheduleWitch();
+  }
+}
+
+function scheduleWitch() {
+  if (!witchActive) return;
+  const delay = 120000 + Math.random() * 60000; // 2–3 min
+  witchTimer = setTimeout(() => {
+    api('/api/graveyard/witch');
+    scheduleWitch();
+  }, delay);
+}
+
+// ─── Config ──────────────────────────────────────────────────────────────────
+async function saveConfig() {
+  const ip = document.getElementById('cfg-ip').value.trim();
+  const port = document.getElementById('cfg-port').value.trim();
+  document.getElementById('connect-status').textContent = 'Connecting…';
+  await api('/api/config', { receiverIp: ip, receiverPort: port });
+  const r = await api('/api/connect');
+  document.getElementById('connect-status').textContent =
+    r?.connected ? '✅ Connected' : '❌ Unreachable';
+}
+
+function saveCaps() {
+  const z1 = parseInt(document.getElementById('cfg-z1').value, 10);
+  const z2 = parseInt(document.getElementById('cfg-z2').value, 10);
+  const z3 = parseInt(document.getElementById('cfg-z3').value, 10);
+  api('/api/config', { maxVol: { z1, z2, z3 } });
+}
+
+// ─── Log ─────────────────────────────────────────────────────────────────────
+function appendLog(msg, cls) {
+  const box = document.getElementById('log-box');
+  const ts = new Date().toLocaleTimeString();
+  const d = document.createElement('div');
+  d.className = 'entry new' + (cls ? ` ${cls}` : '');
+  d.textContent = `[${ts}] ${msg}`;
+  box.prepend(d);
+  // Keep last 200 entries
+  while (box.children.length > 200) box.removeChild(box.lastChild);
+}
+
+// ─── Tabs ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`pane-${tab.dataset.pane}`).classList.add('active');
+  });
+});
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+appendLog('HAUNT CTRL v3 ready');
+</script>
+</body>
+</html>
