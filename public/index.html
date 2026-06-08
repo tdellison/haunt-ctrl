@@ -942,7 +942,6 @@ header {
   <div class="tab active" data-pane="cmd">⚡&nbsp;COMMAND</div>
   <div class="tab" data-pane="graveyard">☠️&nbsp;GRAVEYARD</div>
   <div class="tab" data-pane="jamboree">🎃&nbsp;JAMBOREE</div>
-  <div class="tab" data-pane="storm">🌩️&nbsp;STORM</div>
   <div class="tab" data-pane="audio">🔊&nbsp;AUDIO</div>
   <div class="tab" data-pane="lights">💡&nbsp;LIGHTS</div>
   <div class="tab" data-pane="setup">⚙️&nbsp;SETUP</div>
@@ -997,6 +996,38 @@ header {
   <div class="panel">
     <div class="panel-title">Activity Log</div>
     <div id="log-box"></div>
+  </div>
+
+  <!-- Storm section -->
+  <div class="panel">
+    <button class="strike-btn" onclick="api('/api/storm/strike')">
+      ⚡ &nbsp; MANUAL LIGHTNING STRIKE &nbsp; ⚡
+    </button>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Storm Intensity</div>
+      <div class="storm-presets">
+        <div class="storm-preset selected" id="preset-distant"  onclick="selectPreset('distant')">
+          🌩️ &nbsp;DISTANT — every 3–5 min, low rumble
+        </div>
+        <div class="storm-preset" id="preset-movingin" onclick="selectPreset('movingin')">
+          🌧️ &nbsp;MOVING IN — every 2–3 min, building
+        </div>
+        <div class="storm-preset" id="preset-ontop" onclick="selectPreset('ontop')">
+          ⚡ &nbsp;RIGHT ON TOP — 30–90 sec, full crack + fog
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Auto Storm</div>
+      <button class="btn btn-warn btn-lg" id="storm-toggle-btn"
+              onclick="toggleStorm()" style="width:100%;margin-bottom:14px">
+        ▶ &nbsp;Start Auto Storm
+      </button>
+      <div id="storm-status">Storm inactive</div>
+    </div>
   </div>
 
 </div>
@@ -1075,42 +1106,6 @@ header {
       <button class="btn btn-orange btn-sm" onclick="setVol('z1',55);setSlider('vol-jam-z1',55)">55 — Party</button>
     </div>
   </div>
-</div>
-
-<!-- ────────────────────────────── STORM ── -->
-<div class="pane" id="pane-storm">
-
-  <div class="panel">
-    <button class="strike-btn" onclick="api('/api/storm/strike')">
-      ⚡ &nbsp; MANUAL LIGHTNING STRIKE &nbsp; ⚡
-    </button>
-  </div>
-
-  <div class="grid2">
-    <div class="panel">
-      <div class="panel-title">Storm Intensity</div>
-      <div class="storm-presets">
-        <div class="storm-preset selected" id="preset-distant"  onclick="selectPreset('distant')">
-          🌩️ &nbsp;DISTANT — every 3–5 min, low rumble
-        </div>
-        <div class="storm-preset" id="preset-movingin" onclick="selectPreset('movingin')">
-          🌧️ &nbsp;MOVING IN — every 2–3 min, building
-        </div>
-        <div class="storm-preset" id="preset-ontop" onclick="selectPreset('ontop')">
-          ⚡ &nbsp;RIGHT ON TOP — 30–90 sec, full crack + fog
-        </div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">Auto Storm</div>
-      <button class="btn btn-warn btn-lg" id="storm-toggle-btn"
-              onclick="toggleStorm()" style="width:100%;margin-bottom:14px">
-        ▶ &nbsp;Start Auto Storm
-      </button>
-      <div id="storm-status">Storm inactive</div>
-    </div>
-  </div>
-
 </div>
 
 <!-- ────────────────────────────── AUDIO ── -->
