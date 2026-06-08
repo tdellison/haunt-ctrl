@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAUNT CTRL v3</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --panel: #141414;
+    --card: #1c1c1c;
+    --border: #2a2a2a;
+    --orange: #ff6600;
+    --orange-dim: #cc4400;
+    --orange-glow: rgba(255,102,0,0.35);
+    --red: #cc2200;
+    --red-glow: rgba(204,34,0,0.4);
+    --green: #22aa44;
+    --yellow: #ddaa00;
+    --text: #e8e0d0;
+    --text-dim: #888;
+    --fog-blue: #4488cc;
+    --purple: #8844cc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 2px solid var(--orange);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .logo {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: var(--orange);
+    text-shadow: 0 0 10px var(--orange-glow);
+    letter-spacing: 2px;
+  }
+  .status-bar {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    font-size: 0.8em;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    margin-right: 5px;
+  }
+  .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.active { background: var(--orange); box-shadow: 0 0 6px var(--orange-glow); }
+
+  /* Global action strip */
+  .action-strip {
+    background: #0f0f0f;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.3); }
+  .btn:active { transform: scale(0.97); }
+  .btn-danger {
+    background: var(--red);
+    border-color: #ff4422;
+    color: #fff;
+    font-weight: bold;
+    font-size: 1em;
+    padding: 10px 22px;
+    box-shadow: 0 0 12px var(--red-glow);
+  }
+  .btn-warn {
+    background: #553300;
+    border-color: var(--orange);
+    color: var(--orange);
+    font-weight: bold;
+  }
+  .btn-orange {
+    background: var(--orange);
+    border-color: #ff8800;
+    color: #000;
+    font-weight: bold;
+  }
+  .btn-purple {
+    background: #3a1a5a;
+    border-color: var(--purple);
+    color: var(--purple);
+  }
+  .btn-fog {
+    background: #0a1a2a;
+    border-color: var(--fog-blue);
+    color: var(--fog-blue);
+  }
+  .btn-green {
+    background: #0a2a14;
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    background: var(--panel);
+    border-bottom: 2px solid var(--border);
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    font-size: 0.85em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--orange); }
+  .tab.active {
+    color: var(--orange);
+    border-bottom-color: var(--orange);
+  }
+
+  /* Tab content */
+  .tab-content { display: none; padding: 20px; flex: 1; }
+  .tab-content.active { display: block; }
+
+  /* Grid helpers */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media(max-width: 700px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .card h3 {
+    color: var(--orange);
+    font-size: 0.85em;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+
+  /* Scene buttons */
+  .scene-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+  }
+
+  /* Volume fader */
+  .fader-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .fader-label {
+    width: 36px;
+    font-size: 0.8em;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  input[type=range] {
+    flex: 1;
+    accent-color: var(--orange);
+    cursor: pointer;
+  }
+  .fader-val {
+    width: 28px;
+    text-align: right;
+    font-size: 0.85em;
+    color: var(--orange);
+  }
+  .fader-max {
+    font-size: 0.7em;
+    color: var(--text-dim);
+    width: 40px;
+    flex-shrink: 0;
+  }
+  .mute-btn {
+    padding: 3px 8px;
+    font-size: 0.75em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--panel);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .mute-btn.muted { background: var(--red); color: #fff; border-color: #ff4422; }
+
+  /* Character triggers */
+  .char-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .char-name {
+    font-size: 0.9em;
+    color: var(--orange);
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .char-desc { font-size: 0.75em; color: var(--text-dim); }
+
+  /* Storm */
+  .storm-preset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .preset-btn {
+    padding: 8px;
+    text-align: center;
+    font-size: 0.75em;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+  }
+  .preset-btn:hover { color: var(--orange); border-color: var(--orange); }
+  .preset-btn.selected { background: #2a1500; border-color: var(--orange); color: var(--orange); }
+
+  /* Lightning flash overlay */
+  #lightning-overlay {
+    position: fixed;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 9999;
+    transition: opacity 0.05s;
+  }
+  #lightning-overlay.flash { opacity: 0.85; }
+
+  /* Setup inputs */
+  .form-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .form-row label { width: 150px; font-size: 0.85em; color: var(--text-dim); flex-shrink: 0; }
+  .form-row input {
+    flex: 1;
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9em;
+  }
+  .form-row input:focus { outline: none; border-color: var(--orange); }
+
+  /* Fog indicator */
+  .fog-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8em;
+    color: var(--fog-blue);
+  }
+  .fog-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #334;
+    transition: background 0.3s;
+  }
+  .fog-dot.active { background: var(--fog-blue); box-shadow: 0 0 8px var(--fog-blue); }
+
+  /* Storm indicator */
+  .storm-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8em;
+    color: var(--yellow);
+  }
+
+  /* Responsive fixes */
+  @media(max-width: 500px) {
+    .action-strip { justify-content: center; }
+    .storm-preset-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="lightning-overlay"></div>
+
+<header>
+  <div class="logo">&#x1F383; HAUNT CTRL v3</div>
+  <div class="status-bar">
+    <span><span class="status-dot" id="recv-dot"></span><span id="recv-label">OFFLINE</span></span>
+    <span class="fog-indicator"><span class="fog-dot" id="fog-dot"></span>FOG</span>
+    <span class="storm-indicator" id="storm-badge" style="opacity:0.3">&#9928; STORM</span>
+  </div>
+</header>
+
+<div class="action-strip">
+  <button class="btn btn-danger" onclick="api('/api/allstop','POST')">&#9632; ALL STOP</button>
+  <button class="btn btn-warn" onclick="api('/api/pause','POST')">&#9646;&#9646; PAUSE</button>
+  <button class="btn btn-green" onclick="api('/api/resume','POST')">&#9654; RESUME</button>
+  <button class="btn btn-orange" onclick="api('/api/battlemode','POST')">&#9889; NEIGHBOR BATTLE</button>
+  <button class="btn btn-purple" onclick="api('/api/kidmode','POST')">&#128118; KID MODE</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('command')">Command</div>
+  <div class="tab" onclick="switchTab('graveyard')">Graveyard</div>
+  <div class="tab" onclick="switchTab('jamboree')">Jamboree</div>
+  <div class="tab" onclick="switchTab('storm')">Storm</div>
+  <div class="tab" onclick="switchTab('audio')">Audio</div>
+  <div class="tab" onclick="switchTab('setup')">Setup</div>
+</div>
+
+<!-- COMMAND TAB -->
+<div class="tab-content active" id="tab-command">
+  <div class="grid2">
+    <div class="card">
+      <h3>Scene Presets</h3>
+      <div class="scene-grid">
+        <button class="btn" onclick="api('/api/scene','POST',{scene:'ambient'})">Ambient</button>
+        <button class="btn" onclick="api('/api/scene','POST',{scene:'active'})">Active</button>
+        <button class="btn btn-warn" onclick="api('/api/scene','POST',{scene:'peakscare'})">Peak Scare</button>
+        <button class="btn" onclick="api('/api/scene','POST',{scene:'quiet'})">Quiet</button>
+        <button class="btn btn-orange" onclick="api('/api/scene','POST',{scene:'battle'})">Battle</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Fog Machine</h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-fog" onclick="api('/api/fog/fire','POST',{duration:3000})">Fog Burst (3s)</button>
+        <button class="btn btn-fog" onclick="api('/api/fog/fire','POST',{duration:8000})">Fog Blast (8s)</button>
+        <button class="btn btn-fog" onclick="api('/api/fog/fire','POST',{duration:20000})">Fog Flood (20s)</button>
+        <button class="btn" onclick="api('/api/fog/stop','POST')">Stop Fog</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GRAVEYARD TAB -->
+<div class="tab-content" id="tab-graveyard">
+  <div class="grid3">
+    <div class="char-card">
+      <div class="char-name">&#129497; Grim Reaper</div>
+      <div class="char-desc">Vol Z1:55 Z2:50 Z3:45 · Fog 6s</div>
+      <button class="btn btn-warn" onclick="api('/api/character/reaper','POST')">TRIGGER</button>
+    </div>
+    <div class="char-card">
+      <div class="char-name">&#128014; Headless Horseman</div>
+      <div class="char-desc">Vol Z1:50 Z2:45 Z3:40 · Fog 5s</div>
+      <button class="btn btn-warn" onclick="api('/api/character/horseman','POST')">TRIGGER</button>
+    </div>
+    <div class="char-card">
+      <div class="char-name">&#127875; Pumpkin King</div>
+      <div class="char-desc">Vol Z1:45 Z2:40 Z3:35 · Fog 4s</div>
+      <button class="btn btn-orange" onclick="api('/api/character/pumpkinking','POST')">TRIGGER</button>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Graveyard Ambient</h3>
+    <div class="fader-row">
+      <span class="fader-label">Z1</span>
+      <input type="range" min="0" max="65" value="25" id="grave-z1"
+             oninput="document.getElementById('grave-z1-val').textContent=this.value"
+             onchange="setVol('z1',this.value)">
+      <span class="fader-val" id="grave-z1-val">25</span>
+      <span class="fader-max">max 65</span>
+    </div>
+    <div style="font-size:0.75em;color:var(--text-dim);margin-top:6px">
+      &#127975; Witch auto-fires every 2-3 min — listen for it
+    </div>
+  </div>
+</div>
+
+<!-- JAMBOREE TAB -->
+<div class="tab-content" id="tab-jamboree">
+  <div class="card">
+    <h3>Jack-o-Lantern Jamboree Projector</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:360px">
+      <button class="btn btn-orange" onclick="api('/api/scene','POST',{scene:'active'})">Start Jamboree</button>
+      <button class="btn btn-warn" onclick="api('/api/scene','POST',{scene:'peakscare'})">Peak Jamboree</button>
+      <button class="btn" onclick="api('/api/scene','POST',{scene:'quiet'})">Wind Down</button>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px;max-width:420px">
+    <h3>Zone 1 Volume</h3>
+    <div class="fader-row">
+      <span class="fader-label">Z1</span>
+      <input type="range" min="0" max="65" value="30" id="jam-z1"
+             oninput="document.getElementById('jam-z1-val').textContent=this.value"
+             onchange="setVol('z1',this.value)">
+      <span class="fader-val" id="jam-z1-val">30</span>
+      <span class="fader-max">max 65</span>
+      <button class="mute-btn" id="jam-mute-z1" onclick="toggleMute('z1')">MUTE</button>
+    </div>
+  </div>
+</div>
+
+<!-- STORM TAB -->
+<div class="tab-content" id="tab-storm">
+  <div class="grid2">
+    <div class="card">
+      <h3>Manual Strike</h3>
+      <button class="btn btn-warn" style="width:100%;padding:16px;font-size:1.1em"
+              onclick="api('/api/storm/strike','POST')">&#9889; LIGHTNING STRIKE</button>
+    </div>
+    <div class="card">
+      <h3>Auto Storm</h3>
+      <div class="storm-preset-grid" id="storm-preset-grid">
+        <div class="preset-btn selected" data-preset="distant" onclick="selectPreset(this,'distant')">
+          Distant<br><span style="font-size:0.85em;opacity:0.7">3–5 min</span>
+        </div>
+        <div class="preset-btn" data-preset="moving" onclick="selectPreset(this,'moving')">
+          Moving In<br><span style="font-size:0.85em;opacity:0.7">2–3 min</span>
+        </div>
+        <div class="preset-btn" data-preset="ontop" onclick="selectPreset(this,'ontop')">
+          On Top<br><span style="font-size:0.85em;opacity:0.7">30–90 sec</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-orange" id="storm-start-btn" onclick="stormStart()">Start Storm</button>
+        <button class="btn btn-danger" onclick="api('/api/storm/stop','POST').then(()=>updateStormUI(false))">Stop Storm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AUDIO TAB -->
+<div class="tab-content" id="tab-audio">
+  <div class="card" style="max-width:520px">
+    <h3>Zone Volumes</h3>
+    <div class="fader-row">
+      <span class="fader-label">Z1</span>
+      <input type="range" min="0" max="65" value="30" id="vol-z1"
+             oninput="document.getElementById('vol-z1-val').textContent=this.value"
+             onchange="setVol('z1',this.value)">
+      <span class="fader-val" id="vol-z1-val">30</span>
+      <span class="fader-max">max 65</span>
+      <button class="mute-btn" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
+    </div>
+    <div class="fader-row">
+      <span class="fader-label">Z2</span>
+      <input type="range" min="0" max="60" value="25" id="vol-z2"
+             oninput="document.getElementById('vol-z2-val').textContent=this.value"
+             onchange="setVol('z2',this.value)">
+      <span class="fader-val" id="vol-z2-val">25</span>
+      <span class="fader-max">max 60</span>
+      <button class="mute-btn" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
+    </div>
+    <div class="fader-row">
+      <span class="fader-label">Z3</span>
+      <input type="range" min="0" max="55" value="20" id="vol-z3"
+             oninput="document.getElementById('vol-z3-val').textContent=this.value"
+             onchange="setVol('z3',this.value)">
+      <span class="fader-val" id="vol-z3-val">20</span>
+      <span class="fader-max">max 55</span>
+      <button class="mute-btn" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETUP TAB -->
+<div class="tab-content" id="tab-setup">
+  <div class="card" style="max-width:500px">
+    <h3>Receiver Connection</h3>
+    <div class="form-row">
+      <label>Receiver IP</label>
+      <input type="text" id="cfg-ip" value="192.168.1.190">
+    </div>
+    <div class="form-row">
+      <label>Port</label>
+      <input type="number" id="cfg-port" value="60128">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-green" onclick="applyConfig()">Connect / Update</button>
+      <button class="btn" onclick="api('/api/status').then(s=>alert(JSON.stringify(s,null,2)))">Status Dump</button>
+    </div>
+  </div>
+  <div class="card" style="max-width:500px;margin-top:16px">
+    <h3>Max Volume Caps</h3>
+    <div class="form-row">
+      <label>Zone 1 Max</label>
+      <input type="number" id="cfg-z1-max" value="65" min="0" max="80">
+    </div>
+    <div class="form-row">
+      <label>Zone 2 Max</label>
+      <input type="number" id="cfg-z2-max" value="60" min="0" max="80">
+    </div>
+    <div class="form-row">
+      <label>Zone 3 Max</label>
+      <input type="number" id="cfg-z3-max" value="55" min="0" max="80">
+    </div>
+    <button class="btn btn-orange" onclick="applyConfig()">Save Caps</button>
+  </div>
+  <div class="card" style="max-width:500px;margin-top:16px">
+    <h3>Raw ISCP Command</h3>
+    <div class="form-row">
+      <label>Command</label>
+      <input type="text" id="raw-cmd" placeholder="MVL32">
+    </div>
+    <button class="btn" onclick="sendRaw()">Send</button>
+    <div id="raw-result" style="margin-top:10px;font-size:0.8em;color:var(--text-dim)"></div>
+  </div>
+</div>
+
+<script>
+// ── WebSocket ────────────────────────────────────────────────────────────────
+let ws;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onmessage = (e) => handleWS(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connectWS, 3000);
+}
+
+function handleWS(msg) {
+  if (msg.type === 'init' || msg.type === 'receiverStatus') {
+    updateReceiverStatus(msg.receiverOnline !== undefined ? msg.receiverOnline : msg.online);
+    if (msg.zoneVolume) {
+      setFaderUI('z1', msg.zoneVolume.z1);
+      setFaderUI('z2', msg.zoneVolume.z2);
+      setFaderUI('z3', msg.zoneVolume.z3);
+    }
+    if (msg.zoneMute) {
+      updateMuteUI('z1', msg.zoneMute.z1);
+      updateMuteUI('z2', msg.zoneMute.z2);
+      updateMuteUI('z3', msg.zoneMute.z3);
+    }
+    if (msg.fogActive !== undefined) updateFogUI(msg.fogActive);
+    if (msg.stormActive !== undefined) updateStormUI(msg.stormActive);
+  }
+  if (msg.type === 'volumeUpdate') setFaderUI(msg.zone, msg.volume);
+  if (msg.type === 'muteUpdate') {
+    if (msg.zone === 'all') {
+      updateMuteUI('z1', msg.mute);
+      updateMuteUI('z2', msg.mute);
+      updateMuteUI('z3', msg.mute);
+    } else {
+      updateMuteUI(msg.zone, msg.mute);
+    }
+  }
+  if (msg.type === 'fogStatus') updateFogUI(msg.active);
+  if (msg.type === 'stormStatus') updateStormUI(msg.active);
+  if (msg.type === 'lightningStrike') doFlash();
+  if (msg.type === 'witchSound') console.log('[UI] witch sound triggered');
+  if (msg.type === 'characterTrigger') doFlash(msg.character);
+}
+
+// ── Fader sync ───────────────────────────────────────────────────────────────
+function setFaderUI(zone, val) {
+  const ids = zone === 'z1' ? ['vol-z1','vol-z1-val','grave-z1','grave-z1-val','jam-z1','jam-z1-val']
+            : zone === 'z2' ? ['vol-z2','vol-z2-val']
+            : ['vol-z3','vol-z3-val'];
+  // update range inputs
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (el.tagName === 'INPUT') el.value = val;
+    else el.textContent = val;
+  }
+}
+
+function updateMuteUI(zone, muted) {
+  const ids = ['mute-' + zone, 'jam-mute-' + zone];
+  for (const id of ids) {
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle('muted', !!muted);
+  }
+}
+
+function updateFogUI(active) {
+  document.getElementById('fog-dot').classList.toggle('active', !!active);
+}
+
+function updateStormUI(active) {
+  document.getElementById('storm-badge').style.opacity = active ? '1' : '0.3';
+}
+
+function updateReceiverStatus(online) {
+  const dot = document.getElementById('recv-dot');
+  const lbl = document.getElementById('recv-label');
+  dot.classList.toggle('online', !!online);
+  lbl.textContent = online ? 'ONLINE' : 'OFFLINE';
+}
+
+// ── Lightning flash ───────────────────────────────────────────────────────────
+function doFlash() {
+  const overlay = document.getElementById('lightning-overlay');
+  overlay.classList.add('flash');
+  setTimeout(() => overlay.classList.remove('flash'), 120);
+  setTimeout(() => {
+    overlay.classList.add('flash');
+    setTimeout(() => overlay.classList.remove('flash'), 80);
+  }, 200);
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(path, method='GET', body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const r = await fetch(path, opts);
+    const data = await r.json();
+    if (!data.ok && data.error) console.warn('[API] error:', data.error);
+    return data;
+  } catch(e) {
+    console.error('[API] fetch error:', e);
+  }
+}
+
+// ── Volume helpers ────────────────────────────────────────────────────────────
+function setVol(zone, vol) {
+  api('/api/onkyo/volume', 'POST', { zone, volume: Number(vol) });
+}
+
+function toggleMute(zone) {
+  const btn = document.getElementById('mute-' + zone) || document.getElementById('jam-mute-' + zone);
+  const nowMuted = btn ? btn.classList.contains('muted') : false;
+  api('/api/onkyo/mute', 'POST', { zone, mute: !nowMuted });
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── Storm ─────────────────────────────────────────────────────────────────────
+let selectedPreset = 'distant';
+function selectPreset(el, preset) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedPreset = preset;
+}
+
+function stormStart() {
+  api('/api/storm/start', 'POST', { preset: selectedPreset }).then(() => updateStormUI(true));
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+function applyConfig() {
+  api('/api/config', 'POST', {
+    receiverIp:   document.getElementById('cfg-ip').value,
+    receiverPort: Number(document.getElementById('cfg-port').value),
+    maxCaps: {
+      z1: Number(document.getElementById('cfg-z1-max').value),
+      z2: Number(document.getElementById('cfg-z2-max').value),
+      z3: Number(document.getElementById('cfg-z3-max').value),
+    }
+  });
+}
+
+// ── Raw ISCP ──────────────────────────────────────────────────────────────────
+async function sendRaw() {
+  const cmd = document.getElementById('raw-cmd').value.trim();
+  if (!cmd) return;
+  const res = await api('/api/onkyo/command', 'POST', { command: cmd });
+  document.getElementById('raw-result').textContent = res ? JSON.stringify(res) : 'No response';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+connectWS();
+api('/api/status').then(s => {
+  if (!s) return;
+  updateReceiverStatus(s.receiverOnline);
+  if (s.zoneVolume) {
+    setFaderUI('z1', s.zoneVolume.z1);
+    setFaderUI('z2', s.zoneVolume.z2);
+    setFaderUI('z3', s.zoneVolume.z3);
+  }
+  if (s.fogActive !== undefined) updateFogUI(s.fogActive);
+  if (s.stormActive !== undefined) updateStormUI(s.stormActive);
+  if (s.config) {
+    document.getElementById('cfg-ip').value = s.config.receiverIp;
+    document.getElementById('cfg-port').value = s.config.receiverPort;
+    if (s.config.maxCaps) {
+      document.getElementById('cfg-z1-max').value = s.config.maxCaps.z1 || 65;
+      document.getElementById('cfg-z2-max').value = s.config.maxCaps.z2 || 60;
+      document.getElementById('cfg-z3-max').value = s.config.maxCaps.z3 || 55;
+    }
+  }
+});
+</script>
+</body>
+</html>
