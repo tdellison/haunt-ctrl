@@ -2,6 +2,7 @@ const express = require('express');
 const { WebSocketServer } = require('ws');
 const http = require('http');
 const net = require('net');
+const dgram = require('dgram');
 const path = require('path');
 
 const app = express();
@@ -16,6 +17,138 @@ let config = {
   receiverIp: '192.168.1.190',
   receiverPort: 60128,
   maxVol: { z1: 65, z2: 60, z3: 55 },
+};
+
+// ─── Govee Devices (up to 8) ──────────────────────────────────────────────────
+// Each: { id, name, ip, model, on, color:{r,g,b}, brightness }
+let goveeDevices = [];
+
+const GOVEE_CMD_PORT = 4003;   // send commands to device on this port
+const GOVEE_LISTEN_PORT = 4002; // devices respond / send status here
+const GOVEE_SCAN_PORT = 4001;   // multicast scan port
+const GOVEE_MULTICAST = '239.255.255.250';
+
+// ─── Govee UDP socket ─────────────────────────────────────────────────────────
+const goveeSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+
+goveeSocket.on('error', (err) => {
+  console.error(`[GOVEE] Socket error: ${err.message}`);
+});
+
+goveeSocket.bind(GOVEE_LISTEN_PORT, () => {
+  try { goveeSocket.addMembership(GOVEE_MULTICAST); } catch (_) {}
+  console.log(`[GOVEE] Listening on port ${GOVEE_LISTEN_PORT}`);
+});
+
+// Parse discovery / status responses from devices
+goveeSocket.on('message', (msg, rinfo) => {
+  try {
+    const data = JSON.parse(msg.toString());
+    const m = data?.msg;
+    if (!m) return;
+
+    if (m.cmd === 'scan') {
+      // Discovery response
+      const ip = rinfo.address;
+      const existing = goveeDevices.find(d => d.ip === ip);
+      if (!existing && goveeDevices.length < 8) {
+        const dev = {
+          id: `govee-${goveeDevices.length + 1}`,
+          name: m.data?.sku || `Light ${goveeDevices.length + 1}`,
+          ip,
+          model: m.data?.sku || 'Unknown',
+          on: true,
+          color: { r: 255, g: 98, b: 0 },
+          brightness: 100,
+        };
+        goveeDevices.push(dev);
+        console.log(`[GOVEE] Discovered: ${dev.name} @ ${ip}`);
+        broadcastGovee();
+      }
+    }
+
+    if (m.cmd === 'devStatus') {
+      const ip = rinfo.address;
+      const dev = goveeDevices.find(d => d.ip === ip);
+      if (dev) {
+        if (m.data?.onOff !== undefined) dev.on = !!m.data.onOff;
+        if (m.data?.brightness !== undefined) dev.brightness = m.data.brightness;
+        if (m.data?.color) dev.color = m.data.color;
+        broadcastGovee();
+      }
+    }
+  } catch (_) {}
+});
+
+// Send a command JSON to a specific device IP
+function goveeSend(ip, cmdObj) {
+  return new Promise((resolve, reject) => {
+    const payload = Buffer.from(JSON.stringify({ msg: cmdObj }));
+    goveeSocket.send(payload, 0, payload.length, GOVEE_CMD_PORT, ip, (err) => {
+      if (err) { console.error(`[GOVEE] Send error to ${ip}: ${err.message}`); reject(err); }
+      else { console.log(`[GOVEE] → ${ip} cmd=${cmdObj.cmd}`); resolve(); }
+    });
+  });
+}
+
+// Broadcast a command to all known devices (or filtered subset)
+async function goveeAll(cmdObj, ids) {
+  const targets = ids
+    ? goveeDevices.filter(d => ids.includes(d.id))
+    : goveeDevices;
+  await Promise.allSettled(targets.map(d => goveeSend(d.ip, cmdObj)));
+}
+
+// High-level helpers
+async function goveeSetColor(r, g, b, ids) {
+  const cmd = { cmd: 'colorwc', data: { color: { r, g, b }, colorTemInKelvin: 0 } };
+  const targets = ids ? goveeDevices.filter(d => ids.includes(d.id)) : goveeDevices;
+  await Promise.allSettled(targets.map(d => {
+    d.color = { r, g, b };
+    return goveeSend(d.ip, cmd);
+  }));
+  broadcastGovee();
+}
+
+async function goveeSetBrightness(pct, ids) {
+  const val = Math.max(0, Math.min(100, pct));
+  const cmd = { cmd: 'brightness', data: { value: val } };
+  const targets = ids ? goveeDevices.filter(d => ids.includes(d.id)) : goveeDevices;
+  await Promise.allSettled(targets.map(d => {
+    d.brightness = val;
+    return goveeSend(d.ip, cmd);
+  }));
+  broadcastGovee();
+}
+
+async function goveeSetPower(on, ids) {
+  const cmd = { cmd: 'turn', data: { value: on ? 1 : 0 } };
+  const targets = ids ? goveeDevices.filter(d => ids.includes(d.id)) : goveeDevices;
+  await Promise.allSettled(targets.map(d => {
+    d.on = on;
+    return goveeSend(d.ip, cmd);
+  }));
+  broadcastGovee();
+}
+
+function broadcastGovee() {
+  const payload = JSON.stringify({ type: 'govee', data: goveeDevices });
+  wss.clients.forEach(c => { if (c.readyState === 1) c.send(payload); });
+}
+
+// Named color presets
+const GOVEE_COLORS = {
+  orange:    { r: 255, g:  98, b:   0 },
+  green:     { r:   0, g: 200, b:  50 },
+  purple:    { r: 155, g:  32, b: 224 },
+  blue:      { r:  60, g:   0, b: 255 }, // blacklight vibe
+  white:     { r: 255, g: 255, b: 255 }, // lightning
+  red:       { r: 220, g:   0, b:   0 },
+  deepred:   { r: 120, g:   0, b:   0 },
+  teal:      { r:   0, g: 200, b: 180 },
+  pink:      { r: 255, g:  20, b: 120 },
+  yellow:    { r: 255, g: 200, b:   0 },
+  off:       { r:   0, g:   0, b:   0 },
 };
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -116,8 +249,9 @@ function broadcastLog(msg) {
 }
 
 wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'state', data: state }));
+  ws.send(JSON.stringify({ type: 'state',  data: state }));
   ws.send(JSON.stringify({ type: 'config', data: config }));
+  ws.send(JSON.stringify({ type: 'govee',  data: goveeDevices }));
 });
 
 // ─── Volume Helpers ───────────────────────────────────────────────────────────
@@ -169,9 +303,19 @@ function scheduleNextStrike() {
       // Thunder rumble on zone 1
       const v = clampVol('z1', p.vol);
       await sendISCP(`${ZONE_CMD.z1}${volToHex(v)}`);
-      // Lights flash
+      if (p.fog) {
+        await Promise.allSettled([
+          goveeSetColor(255, 255, 255), goveeSetBrightness(100),
+          fogOn(),
+        ]);
+        state.fogTimer = setTimeout(fogOff, 4000);
+        setTimeout(() => goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b), 300);
+      } else {
+        // Distant/moving-in: brief white flash
+        goveeSetColor(255, 255, 255);
+        setTimeout(() => goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b), 200);
+      }
       broadcastState();
-      if (p.fog) { await fogOn(); state.fogTimer = setTimeout(fogOff, 4000); }
     } catch (e) {
       broadcastLog(`Storm strike error: ${e.message}`);
     }
@@ -343,21 +487,24 @@ app.post('/api/scene', async (req, res) => {
   const { scene } = req.body;
   console.log(`[API] /api/scene scene=${scene}`);
   const scenes = {
-    ambient:   { z1: 35, z2: 30, z3: 25, fog: false },
-    active:    { z1: 45, z2: 40, z3: 35, fog: false },
-    peakscare: { z1: 60, z2: 55, z3: 50, fog: true  },
-    quiet:     { z1: 20, z2: 15, z3: 15, fog: false },
-    battle:    { z1: 65, z2: 60, z3: 55, fog: true  },
+    ambient:   { z1: 35, z2: 30, z3: 25, fog: false, light: 'deepred', bri: 40  },
+    active:    { z1: 45, z2: 40, z3: 35, fog: false, light: 'orange',  bri: 70  },
+    peakscare: { z1: 60, z2: 55, z3: 50, fog: true,  light: 'red',     bri: 100 },
+    quiet:     { z1: 20, z2: 15, z3: 15, fog: false, light: 'purple',  bri: 25  },
+    battle:    { z1: 65, z2: 60, z3: 55, fog: true,  light: 'orange',  bri: 100 },
   };
   const s = scenes[scene?.toLowerCase().replace(/\s/g, '')];
   if (!s) return res.status(400).json({ error: 'unknown scene' });
   broadcastLog(`Scene: ${scene}`);
   try {
+    const lc = GOVEE_COLORS[s.light] || GOVEE_COLORS.orange;
     await Promise.allSettled([
       sendISCP(`${ZONE_CMD.z1}${volToHex(clampVol('z1', s.z1))}`),
       sendISCP(`${ZONE_CMD.z2}${volToHex(clampVol('z2', s.z2))}`),
       sendISCP(`${ZONE_CMD.z3}${volToHex(clampVol('z3', s.z3))}`),
       s.fog ? fogOn() : fogOff(),
+      goveeSetColor(lc.r, lc.g, lc.b),
+      goveeSetBrightness(s.bri),
     ]);
     state.volumes = {
       z1: clampVol('z1', s.z1),
@@ -376,15 +523,20 @@ app.post('/api/character', async (req, res) => {
   const { character } = req.body;
   console.log(`[API] /api/character character=${character}`);
   const chars = {
-    grimreaper:       { z1: 55, fog: true,  fogDur: 6000 },
-    headlesshorseman: { z1: 60, fog: true,  fogDur: 8000 },
-    pumpkinking:      { z1: 50, fog: false, fogDur: 0    },
+    grimreaper:       { z1: 55, fog: true,  fogDur: 6000, light: 'deepred', bri: 80  },
+    headlesshorseman: { z1: 60, fog: true,  fogDur: 8000, light: 'orange',  bri: 100 },
+    pumpkinking:      { z1: 50, fog: false, fogDur: 0,    light: 'purple',  bri: 70  },
   };
   const c = chars[character?.toLowerCase().replace(/\s/g, '')];
   if (!c) return res.status(400).json({ error: 'unknown character' });
   broadcastLog(`Character trigger: ${character}`);
   try {
-    await sendISCP(`${ZONE_CMD.z1}${volToHex(clampVol('z1', c.z1))}`);
+    const lc = GOVEE_COLORS[c.light] || GOVEE_COLORS.orange;
+    await Promise.allSettled([
+      sendISCP(`${ZONE_CMD.z1}${volToHex(clampVol('z1', c.z1))}`),
+      goveeSetColor(lc.r, lc.g, lc.b),
+      goveeSetBrightness(c.bri),
+    ]);
     if (c.fog) {
       await fogOn();
       if (state.fogTimer) clearTimeout(state.fogTimer);
@@ -419,8 +571,16 @@ app.post('/api/storm/strike', async (req, res) => {
   broadcastLog('Manual lightning strike!');
   try {
     const v = clampVol('z1', 65);
-    await sendISCP(`${ZONE_CMD.z1}${volToHex(v)}`);
+    await Promise.allSettled([
+      sendISCP(`${ZONE_CMD.z1}${volToHex(v)}`),
+      goveeSetColor(255, 255, 255),   // white flash
+      goveeSetBrightness(100),
+    ]);
     state.volumes.z1 = v;
+    // Restore to orange after flash
+    setTimeout(() => {
+      goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b);
+    }, 300);
     broadcastState();
     res.json({ ok: true });
   } catch (e) {
@@ -461,6 +621,135 @@ app.post('/api/config', (req, res) => {
   broadcastLog('Config updated');
   wss.clients.forEach((c) => { if (c.readyState === 1) c.send(JSON.stringify({ type: 'config', data: config })); });
   res.json({ ok: true, config });
+});
+
+// ─── Govee Routes ─────────────────────────────────────────────────────────────
+
+// Discover devices on LAN
+app.post('/api/govee/discover', (req, res) => {
+  console.log('[API] /api/govee/discover');
+  broadcastLog('Govee: scanning LAN…');
+  const scan = Buffer.from(JSON.stringify({
+    msg: { cmd: 'scan', data: { account_topic: 'reserve' } }
+  }));
+  // Send to multicast and broadcast
+  goveeSocket.send(scan, 0, scan.length, GOVEE_SCAN_PORT, GOVEE_MULTICAST, () => {});
+  goveeSocket.setBroadcast(true);
+  goveeSocket.send(scan, 0, scan.length, GOVEE_SCAN_PORT, '255.255.255.255', () => {
+    goveeSocket.setBroadcast(false);
+  });
+  res.json({ ok: true, message: 'Scan sent — check back in ~3s' });
+});
+
+// Manually add a device by IP (for devices that don't respond to scan)
+app.post('/api/govee/add', (req, res) => {
+  const { ip, name, model } = req.body;
+  if (!ip) return res.status(400).json({ error: 'ip required' });
+  if (goveeDevices.length >= 8) return res.status(400).json({ error: 'max 8 devices' });
+  if (goveeDevices.find(d => d.ip === ip)) return res.status(400).json({ error: 'already exists' });
+  const dev = {
+    id: `govee-${Date.now()}`,
+    name: name || `Light ${goveeDevices.length + 1}`,
+    ip,
+    model: model || 'Manual',
+    on: true,
+    color: { r: 255, g: 98, b: 0 },
+    brightness: 100,
+  };
+  goveeDevices.push(dev);
+  console.log(`[API] /api/govee/add ip=${ip} name=${dev.name}`);
+  broadcastLog(`Govee: added ${dev.name} @ ${ip}`);
+  broadcastGovee();
+  res.json({ ok: true, device: dev });
+});
+
+// Remove a device
+app.post('/api/govee/remove', (req, res) => {
+  const { id } = req.body;
+  goveeDevices = goveeDevices.filter(d => d.id !== id);
+  console.log(`[API] /api/govee/remove id=${id}`);
+  broadcastGovee();
+  res.json({ ok: true });
+});
+
+// Set color — rgb or named preset; optionally target specific device ids
+app.post('/api/govee/color', async (req, res) => {
+  let { r, g, b, preset, ids } = req.body;
+  if (preset) {
+    const c = GOVEE_COLORS[preset.toLowerCase()];
+    if (!c) return res.status(400).json({ error: `unknown preset. options: ${Object.keys(GOVEE_COLORS).join(', ')}` });
+    ({ r, g, b } = c);
+  }
+  if (r === undefined || g === undefined || b === undefined)
+    return res.status(400).json({ error: 'r/g/b or preset required' });
+  r = Math.max(0, Math.min(255, parseInt(r)));
+  g = Math.max(0, Math.min(255, parseInt(g)));
+  b = Math.max(0, Math.min(255, parseInt(b)));
+  console.log(`[API] /api/govee/color r=${r} g=${g} b=${b} ids=${ids||'all'}`);
+  broadcastLog(`Govee: color rgb(${r},${g},${b})${preset ? ` [${preset}]` : ''}`);
+  await goveeSetColor(r, g, b, ids);
+  res.json({ ok: true, r, g, b });
+});
+
+// Set brightness 0–100
+app.post('/api/govee/brightness', async (req, res) => {
+  const { value, ids } = req.body;
+  if (value === undefined) return res.status(400).json({ error: 'value required (0-100)' });
+  console.log(`[API] /api/govee/brightness value=${value}`);
+  broadcastLog(`Govee: brightness ${value}%`);
+  await goveeSetBrightness(parseInt(value), ids);
+  res.json({ ok: true, value });
+});
+
+// Power on/off
+app.post('/api/govee/power', async (req, res) => {
+  const { on, ids } = req.body;
+  if (on === undefined) return res.status(400).json({ error: 'on (bool) required' });
+  console.log(`[API] /api/govee/power on=${on}`);
+  broadcastLog(`Govee: power ${on ? 'ON' : 'OFF'}`);
+  await goveeSetPower(!!on, ids);
+  res.json({ ok: true, on });
+});
+
+// Lightning flash — white burst then restore previous colors
+app.post('/api/govee/lightning', async (req, res) => {
+  const { duration = 400, ids } = req.body;
+  console.log(`[API] /api/govee/lightning duration=${duration}ms`);
+  broadcastLog('Govee: LIGHTNING FLASH');
+  // Snapshot current colors
+  const snapshot = goveeDevices.map(d => ({ id: d.id, color: { ...d.color }, brightness: d.brightness }));
+  try {
+    await goveeSetColor(255, 255, 255, ids);
+    await goveeSetBrightness(100, ids);
+    setTimeout(async () => {
+      // Restore per-device
+      for (const snap of snapshot) {
+        const dev = goveeDevices.find(d => d.id === snap.id);
+        if (!dev) continue;
+        await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } });
+        await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } });
+        dev.color = snap.color;
+        dev.brightness = snap.brightness;
+      }
+      broadcastGovee();
+    }, Math.min(duration, 2000));
+    res.json({ ok: true });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// Rename a device
+app.post('/api/govee/rename', (req, res) => {
+  const { id, name } = req.body;
+  const dev = goveeDevices.find(d => d.id === id);
+  if (!dev) return res.status(404).json({ error: 'device not found' });
+  dev.name = name;
+  broadcastGovee();
+  res.json({ ok: true });
+});
+
+// Get current state
+app.get('/api/govee/devices', (req, res) => {
+  res.json({ ok: true, devices: goveeDevices });
 });
 
 // Config connect test
