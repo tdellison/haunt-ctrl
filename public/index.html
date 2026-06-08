@@ -4,172 +4,633 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>HAUNT CTRL v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Oswald:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
-  :root{
-    --bg:#0a0a0a;--panel:#111;--border:#2a1500;--accent:#ff6a00;
-    --accent2:#ff9900;--danger:#cc0000;--success:#228b22;
-    --text:#e8e8e8;--dim:#888;--fog:#4fc3f7;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',monospace;min-height:100vh}
-  header{background:#0d0000;border-bottom:2px solid var(--accent);padding:10px 20px;
-         display:flex;align-items:center;justify-content:space-between}
-  .logo{font-size:1.6em;font-weight:900;letter-spacing:3px;color:var(--accent);
-        text-shadow:0 0 20px var(--accent)}
-  .status-bar{display:flex;gap:16px;align-items:center;font-size:.85em}
-  .dot{width:10px;height:10px;border-radius:50%;background:#333;display:inline-block}
-  .dot.on{background:var(--success);box-shadow:0 0 8px var(--success)}
-  .dot.warn{background:var(--danger);box-shadow:0 0 8px var(--danger)}
-  .dot.fog{background:var(--fog);box-shadow:0 0 8px var(--fog)}
+/* ═══════════════════════════════════════ VARIABLES ══ */
+:root {
+  --bg:        #060608;
+  --bg2:       #0c0c10;
+  --panel:     #0f0f14;
+  --panel2:    #14141a;
+  --border:    #1e0e00;
+  --border2:   #2a1800;
+  --accent:    #ff6a00;
+  --accent2:   #ffaa00;
+  --accent3:   #ff3300;
+  --danger:    #cc0000;
+  --danger2:   #ff2020;
+  --success:   #00bb44;
+  --fog:       #56d4f5;
+  --lightning: #ffe066;
+  --purple:    #9b30d0;
+  --text:      #e8ddd0;
+  --dim:       #6a5f54;
+  --dim2:      #8a7a6a;
+  --glow-o:    rgba(255,106,0,.35);
+  --glow-r:    rgba(204,0,0,.4);
+  --glow-g:    rgba(0,187,68,.4);
+  --glow-y:    rgba(255,224,102,.4);
+  --glow-b:    rgba(86,212,245,.4);
+}
 
-  /* Global controls */
-  .global-bar{background:#1a0500;padding:10px 20px;display:flex;gap:10px;flex-wrap:wrap;
-              border-bottom:1px solid var(--border);align-items:center}
-  .btn{padding:10px 18px;border:none;border-radius:6px;cursor:pointer;font-size:.9em;
-       font-weight:700;letter-spacing:1px;transition:all .15s;text-transform:uppercase}
-  .btn:active{transform:scale(.96)}
-  .btn-danger{background:#8b0000;color:#fff;border:2px solid var(--danger)}
-  .btn-danger:hover{background:var(--danger)}
-  .btn-warn{background:#5a4000;color:#ffd700;border:2px solid #ffd700}
-  .btn-warn:hover{background:#8b6500}
-  .btn-orange{background:#6b2d00;color:var(--accent2);border:2px solid var(--accent)}
-  .btn-orange:hover{background:#8b3d00}
-  .btn-green{background:#003300;color:#00ff88;border:2px solid var(--success)}
-  .btn-green:hover{background:#004400}
-  .btn-fog{background:#003344;color:var(--fog);border:2px solid var(--fog)}
-  .btn-fog:hover{background:#004455}
-  .btn-sm{padding:6px 12px;font-size:.8em}
-  .btn-lg{padding:16px 30px;font-size:1.1em}
-  .btn.active{box-shadow:0 0 15px currentColor}
+/* ═══════════════════════════════════════ RESET ══ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Tabs */
-  .tabs{display:flex;background:#0d0000;border-bottom:2px solid var(--border);
-        overflow-x:auto}
-  .tab{padding:12px 22px;cursor:pointer;font-size:.9em;font-weight:700;
-       letter-spacing:2px;text-transform:uppercase;color:var(--dim);white-space:nowrap;
-       border-bottom:3px solid transparent;transition:all .15s}
-  .tab:hover{color:var(--accent2)}
-  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Oswald', 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  /* subtle cobweb texture via radial gradients */
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(80,20,0,.18) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(40,0,60,.18) 0%, transparent 60%);
+}
 
-  .content{padding:20px;max-width:1100px;margin:0 auto}
-  .pane{display:none}
-  .pane.active{display:block}
+/* ═══════════════════════════════════════ SCROLLBAR ══ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #3a1800; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-  /* Panels */
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;
-         padding:16px;margin-bottom:16px}
-  .panel-title{font-size:.75em;letter-spacing:3px;text-transform:uppercase;
-               color:var(--accent);margin-bottom:12px;border-bottom:1px solid var(--border);
-               padding-bottom:8px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+/* ═══════════════════════════════════════ HEADER ══ */
+header {
+  background: linear-gradient(180deg, #100500 0%, #080300 100%);
+  border-bottom: 2px solid var(--accent);
+  box-shadow: 0 2px 30px rgba(255,80,0,.25), 0 0 60px rgba(255,80,0,.08);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
 
-  /* Scene buttons */
-  .scene-btn{background:#1a0a00;border:1px solid var(--border);border-radius:8px;
-             padding:14px;cursor:pointer;text-align:center;transition:all .2s;color:var(--text)}
-  .scene-btn:hover{border-color:var(--accent);background:#2a1200;color:var(--accent2)}
-  .scene-btn .icon{font-size:1.8em;display:block;margin-bottom:6px}
-  .scene-btn .label{font-size:.8em;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.logo {
+  font-family: 'Creepster', cursive;
+  font-size: 2em;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-shadow:
+    0 0 10px var(--accent),
+    0 0 30px rgba(255,106,0,.6),
+    0 0 60px rgba(255,80,0,.3);
+  line-height: 1;
+}
+.logo span { color: var(--accent2); }
 
-  /* Volume */
-  .vol-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-  .vol-label{width:70px;font-size:.85em;font-weight:700;color:var(--accent2)}
-  .vol-slider{flex:1;-webkit-appearance:none;height:6px;border-radius:3px;
-              background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--pct,0%),#333 var(--pct,0%),#333 100%);
-              cursor:pointer;outline:none}
-  .vol-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;
-    border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px var(--accent)}
-  .vol-val{width:36px;text-align:right;font-size:.85em;color:var(--dim)}
-  .vol-cap{font-size:.7em;color:var(--danger);width:50px}
-  .mute-btn{padding:5px 10px;font-size:.75em;background:#222;border:1px solid #444;
-            color:#888;border-radius:4px;cursor:pointer}
-  .mute-btn.muted{background:#5a0000;color:#ff6666;border-color:var(--danger)}
+.status-bar {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  font-size: .78em;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dim2);
+}
+.dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  flex-shrink: 0;
+  transition: all .4s;
+}
+.dot.on  { background: var(--success); border-color: var(--success); box-shadow: 0 0 8px var(--glow-g), 0 0 16px var(--glow-g); }
+.dot.warn{ background: var(--danger);  border-color: var(--danger);  box-shadow: 0 0 8px var(--glow-r), 0 0 16px var(--glow-r); }
+.dot.fog { background: var(--fog);     border-color: var(--fog);     box-shadow: 0 0 8px var(--glow-b), 0 0 16px var(--glow-b); }
+.dot.storm{background:var(--lightning);border-color:var(--lightning);box-shadow: 0 0 8px var(--glow-y), 0 0 16px var(--glow-y); }
 
-  /* Character cards */
-  .char-card{background:#0d0800;border:1px solid var(--border);border-radius:8px;
-             padding:16px;cursor:pointer;transition:all .2s;text-align:center}
-  .char-card:hover{border-color:var(--accent);box-shadow:0 0 20px rgba(255,106,0,.3)}
-  .char-card .cicon{font-size:3em;margin-bottom:8px;display:block}
-  .char-card h3{font-size:.9em;letter-spacing:2px;text-transform:uppercase;
-                color:var(--accent2);margin-bottom:6px}
-  .char-card p{font-size:.75em;color:var(--dim)}
+.mode-badge {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: .75em;
+  font-weight: 700;
+  letter-spacing: 2px;
+  display: none;
+  animation: pulse-badge 1.5s ease-in-out infinite;
+}
+.mode-badge.kid    { background: #002a10; color: #00ff77; border: 1px solid #00aa44; display: inline-block; }
+.mode-badge.battle { background: #2a0000; color: #ff4444; border: 1px solid #aa0000; display: inline-block; }
+@keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:.6} }
 
-  /* Storm */
-  .strike-btn{width:100%;padding:30px;font-size:1.3em;background:#1a1400;
-              border:2px solid #ffd700;color:#ffd700;border-radius:8px;cursor:pointer;
-              letter-spacing:3px;transition:all .2s;text-transform:uppercase;font-weight:900}
-  .strike-btn:hover{background:#2a2000;box-shadow:0 0 30px #ffd700}
-  .strike-btn:active{transform:scale(.97);box-shadow:0 0 60px #ffd700}
-  .storm-preset{padding:12px 16px;border:1px solid var(--border);background:#111;
-                border-radius:6px;cursor:pointer;font-size:.85em;font-weight:700;
-                letter-spacing:1px;text-transform:uppercase;color:var(--dim);transition:all .2s}
-  .storm-preset:hover{border-color:var(--accent)}
-  .storm-preset.selected{border-color:#ffd700;color:#ffd700;background:#1a1400}
+#pause-indicator {
+  color: var(--lightning);
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px var(--glow-y);
+  display: none;
+  animation: pulse-badge 1s ease-in-out infinite;
+}
 
-  /* Log */
-  #log-box{background:#050505;border:1px solid #1a1a1a;border-radius:6px;
-           padding:10px;height:180px;overflow-y:auto;font-family:monospace;font-size:.8em}
-  #log-box .entry{color:#666;padding:1px 0}
-  #log-box .entry.new{color:#aaa}
-  #log-box .entry.warn{color:#cc4400}
+/* ═══════════════════════════════════════ GLOBAL BAR ══ */
+.global-bar {
+  background: linear-gradient(180deg, #180800 0%, #100500 100%);
+  border-bottom: 1px solid var(--border2);
+  padding: 12px 24px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
 
-  /* Setup */
-  .field-row{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
-  .field-row label{font-size:.8em;color:var(--dim);width:120px}
-  .field-row input{background:#1a1a1a;border:1px solid #333;color:var(--text);
-                   padding:8px 12px;border-radius:4px;font-size:.9em;flex:1;min-width:150px}
-  .field-row input:focus{outline:none;border-color:var(--accent)}
+/* ═══════════════════════════════════════ BUTTONS ══ */
+.btn {
+  font-family: 'Oswald', sans-serif;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: .88em;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: all .15s ease;
+  position: relative;
+  overflow: hidden;
+}
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,.07);
+  opacity: 0;
+  transition: opacity .15s;
+}
+.btn:hover::after { opacity: 1; }
+.btn:active { transform: scale(.95); }
 
-  /* Kid/Battle indicator */
-  .mode-badge{padding:4px 10px;border-radius:4px;font-size:.75em;font-weight:700;
-              letter-spacing:1px;display:none}
-  .mode-badge.kid{background:#004400;color:#00ff88;display:inline-block}
-  .mode-badge.battle{background:#4a0000;color:#ff4444;display:inline-block}
+.btn-danger {
+  background: linear-gradient(180deg, #7a0000 0%, #4a0000 100%);
+  color: #ffaaaa;
+  border: 1px solid #aa0000;
+  box-shadow: 0 2px 8px rgba(150,0,0,.4), inset 0 1px 0 rgba(255,100,100,.1);
+}
+.btn-danger:hover {
+  background: linear-gradient(180deg, #aa0000 0%, #7a0000 100%);
+  box-shadow: 0 4px 20px var(--glow-r), inset 0 1px 0 rgba(255,100,100,.15);
+  color: #fff;
+}
 
-  @media(max-width:600px){
-    .grid2,.grid3,.grid4{grid-template-columns:1fr 1fr}
-    .btn-lg{padding:12px 20px;font-size:1em}
-  }
+.btn-warn {
+  background: linear-gradient(180deg, #3a2800 0%, #241800 100%);
+  color: var(--lightning);
+  border: 1px solid #6a4a00;
+  box-shadow: 0 2px 8px rgba(100,70,0,.4), inset 0 1px 0 rgba(255,200,50,.1);
+}
+.btn-warn:hover {
+  background: linear-gradient(180deg, #5a4000 0%, #3a2800 100%);
+  box-shadow: 0 4px 20px var(--glow-y);
+}
+
+.btn-orange {
+  background: linear-gradient(180deg, #4a1e00 0%, #2e1200 100%);
+  color: var(--accent2);
+  border: 1px solid var(--accent);
+  box-shadow: 0 2px 8px var(--glow-o), inset 0 1px 0 rgba(255,150,50,.1);
+}
+.btn-orange:hover {
+  background: linear-gradient(180deg, #6a2e00 0%, #4a1e00 100%);
+  box-shadow: 0 4px 20px var(--glow-o), 0 0 30px rgba(255,106,0,.2);
+}
+
+.btn-green {
+  background: linear-gradient(180deg, #002a10 0%, #001808 100%);
+  color: #00ee77;
+  border: 1px solid #006622;
+  box-shadow: 0 2px 8px var(--glow-g);
+}
+.btn-green:hover {
+  background: linear-gradient(180deg, #004420 0%, #002a10 100%);
+  box-shadow: 0 4px 20px var(--glow-g);
+}
+.btn-green.active {
+  background: linear-gradient(180deg, #006630 0%, #004420 100%);
+  box-shadow: 0 0 20px var(--glow-g), 0 0 40px rgba(0,187,68,.3);
+  color: #00ff88;
+}
+
+.btn-fog {
+  background: linear-gradient(180deg, #002030 0%, #001020 100%);
+  color: var(--fog);
+  border: 1px solid #004466;
+  box-shadow: 0 2px 8px var(--glow-b);
+}
+.btn-fog:hover {
+  background: linear-gradient(180deg, #003050 0%, #002030 100%);
+  box-shadow: 0 4px 20px var(--glow-b);
+}
+
+.btn-purple {
+  background: linear-gradient(180deg, #2a0a40 0%, #180628 100%);
+  color: #d080ff;
+  border: 1px solid #6020a0;
+  box-shadow: 0 2px 8px rgba(120,40,180,.4);
+}
+.btn-purple:hover {
+  background: linear-gradient(180deg, #3a1460 0%, #2a0a40 100%);
+  box-shadow: 0 4px 20px rgba(120,40,180,.5);
+}
+
+.btn-sm  { padding: 6px 14px; font-size: .8em; }
+.btn-lg  { padding: 15px 30px; font-size: 1em; letter-spacing: 3px; }
+.btn-xl  { padding: 22px 40px; font-size: 1.15em; letter-spacing: 4px; }
+
+/* ═══════════════════════════════════════ TABS ══ */
+.tabs {
+  display: flex;
+  background: #080404;
+  border-bottom: 1px solid var(--border2);
+  overflow-x: auto;
+  gap: 0;
+}
+.tab {
+  padding: 13px 26px;
+  cursor: pointer;
+  font-family: 'Oswald', sans-serif;
+  font-size: .82em;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+  transition: all .2s;
+  position: relative;
+}
+.tab:hover { color: var(--accent2); background: rgba(255,106,0,.05); }
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(255,106,0,.08);
+  text-shadow: 0 0 10px rgba(255,106,0,.5);
+}
+
+/* ═══════════════════════════════════════ LAYOUT ══ */
+.content { padding: 20px 24px; max-width: 1120px; margin: 0 auto; }
+.pane { display: none; }
+.pane.active { display: block; }
+
+.panel {
+  background: linear-gradient(180deg, var(--panel2) 0%, var(--panel) 100%);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.03);
+}
+.panel-title {
+  font-family: 'Oswald', sans-serif;
+  font-size: .72em;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border2);
+  text-shadow: 0 0 10px rgba(255,106,0,.4);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-title::before {
+  content: '▸';
+  color: var(--accent3);
+  font-size: 1.2em;
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+
+/* ═══════════════════════════════════════ SCENE BUTTONS ══ */
+.scenes-grid {
+  display: grid;
+  grid-template-columns: repeat(5,1fr);
+  gap: 12px;
+}
+.scene-btn {
+  background: linear-gradient(180deg, #160a00 0%, #0c0500 100%);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 18px 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: all .2s;
+  color: var(--dim2);
+  position: relative;
+  overflow: hidden;
+}
+.scene-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255,106,0,.12) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity .2s;
+}
+.scene-btn:hover { border-color: var(--accent); color: var(--accent2); box-shadow: 0 0 20px var(--glow-o); }
+.scene-btn:hover::before { opacity: 1; }
+.scene-btn:active { transform: scale(.96); }
+.scene-btn .icon { font-size: 2em; display: block; margin-bottom: 8px; filter: drop-shadow(0 0 6px rgba(255,106,0,.4)); }
+.scene-btn .label { font-family: 'Oswald', sans-serif; font-size: .75em; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; }
+
+/* ═══════════════════════════════════════ VOLUME ══ */
+.vol-section { padding: 6px 0; }
+.vol-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.vol-label {
+  width: 68px;
+  font-family: 'Oswald', sans-serif;
+  font-size: .82em;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--accent2);
+}
+.vol-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent2) var(--pct,0%),
+    #1e1e1e var(--pct,0%),
+    #1e1e1e 100%
+  );
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 0 6px rgba(255,106,0,.2);
+}
+.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffb060 0%, var(--accent) 60%, #c04000 100%);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(255,106,0,.4);
+  border: 1px solid rgba(255,255,255,.2);
+}
+.vol-val {
+  font-family: 'Share Tech Mono', monospace;
+  width: 32px;
+  text-align: right;
+  font-size: .9em;
+  color: var(--accent2);
+}
+.vol-cap { font-size: .72em; color: var(--danger); width: 44px; letter-spacing: 1px; }
+.mute-btn {
+  font-family: 'Oswald', sans-serif;
+  padding: 5px 12px;
+  font-size: .72em;
+  letter-spacing: 2px;
+  background: #181818;
+  border: 1px solid #333;
+  color: #555;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.mute-btn:hover { border-color: #666; color: #888; }
+.mute-btn.muted {
+  background: #3a0000;
+  color: #ff6666;
+  border-color: #880000;
+  box-shadow: 0 0 8px rgba(180,0,0,.4);
+}
+
+/* ═══════════════════════════════════════ CHARACTER CARDS ══ */
+.char-card {
+  background: linear-gradient(180deg, #110800 0%, #080400 100%);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 24px 16px;
+  cursor: pointer;
+  transition: all .25s;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.char-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 100%, rgba(255,106,0,.15) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity .25s;
+}
+.char-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 30px var(--glow-o), inset 0 0 20px rgba(255,80,0,.05);
+  transform: translateY(-2px);
+}
+.char-card:hover::after { opacity: 1; }
+.char-card:active { transform: scale(.97); }
+.char-card .cicon {
+  font-size: 3.2em;
+  display: block;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 10px rgba(255,80,0,.5));
+}
+.char-card h3 {
+  font-family: 'Creepster', cursive;
+  font-size: 1.15em;
+  letter-spacing: 2px;
+  color: var(--accent2);
+  margin-bottom: 6px;
+  text-shadow: 0 0 8px rgba(255,150,0,.4);
+}
+.char-card p { font-size: .75em; color: var(--dim2); letter-spacing: 1px; }
+
+/* ═══════════════════════════════════════ STORM ══ */
+.strike-btn {
+  width: 100%;
+  padding: 36px;
+  font-family: 'Creepster', cursive;
+  font-size: 1.8em;
+  letter-spacing: 5px;
+  background: linear-gradient(180deg, #1e1800 0%, #100e00 100%);
+  border: 2px solid var(--lightning);
+  color: var(--lightning);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .2s;
+  text-shadow: 0 0 15px var(--glow-y);
+  box-shadow: 0 0 20px rgba(255,200,50,.15), inset 0 0 30px rgba(255,200,50,.04);
+}
+.strike-btn:hover {
+  background: linear-gradient(180deg, #2e2400 0%, #1e1800 100%);
+  box-shadow: 0 0 40px var(--glow-y), 0 0 80px rgba(255,200,50,.2);
+  text-shadow: 0 0 25px var(--glow-y), 0 0 50px rgba(255,200,50,.5);
+}
+.strike-btn:active {
+  transform: scale(.98);
+  box-shadow: 0 0 80px var(--glow-y), 0 0 160px rgba(255,200,50,.4);
+}
+
+.storm-preset {
+  font-family: 'Oswald', sans-serif;
+  padding: 13px 16px;
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: .82em;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim2);
+  transition: all .2s;
+}
+.storm-preset:hover { border-color: var(--accent2); color: var(--accent2); }
+.storm-preset.selected {
+  border-color: var(--lightning);
+  color: var(--lightning);
+  background: linear-gradient(180deg, #1c1600 0%, #100e00 100%);
+  box-shadow: 0 0 12px rgba(255,200,50,.2), inset 0 0 10px rgba(255,200,50,.05);
+  text-shadow: 0 0 8px rgba(255,200,50,.4);
+}
+
+/* ═══════════════════════════════════════ LOG ══ */
+#log-box {
+  background: #040406;
+  border: 1px solid #111118;
+  border-radius: 4px;
+  padding: 10px 12px;
+  height: 200px;
+  overflow-y: auto;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: .78em;
+}
+#log-box .entry { color: #3a3a4a; padding: 2px 0; border-bottom: 1px solid #0a0a10; }
+#log-box .entry.new { color: #7a7a8a; }
+#log-box .entry.new:first-child { color: #aaa09a; }
+#log-box .entry.warn { color: #aa3300; }
+
+/* ═══════════════════════════════════════ RAW CMD ══ */
+.raw-cmd-input {
+  background: #0a0a0e;
+  border: 1px solid #2a1a00;
+  color: var(--accent2);
+  padding: 9px 12px;
+  border-radius: 4px;
+  flex: 1;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: .9em;
+  outline: none;
+  transition: border-color .15s;
+}
+.raw-cmd-input:focus { border-color: var(--accent); box-shadow: 0 0 8px var(--glow-o); }
+.raw-cmd-input::placeholder { color: #3a2a18; }
+
+/* ═══════════════════════════════════════ SETUP FIELDS ══ */
+.field-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.field-row label {
+  font-family: 'Oswald', sans-serif;
+  font-size: .78em;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim2);
+  width: 130px;
+}
+.field-row input {
+  background: #0a0a0e;
+  border: 1px solid #2a1a00;
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: .88em;
+  flex: 1;
+  min-width: 140px;
+  outline: none;
+  transition: border-color .15s;
+}
+.field-row input:focus { border-color: var(--accent); box-shadow: 0 0 8px var(--glow-o); }
+#connect-status {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: .82em;
+  align-self: center;
+  color: var(--dim2);
+  letter-spacing: 1px;
+}
+
+/* ═══════════════════════════════════════ FOG BUTTONS AREA ══ */
+.fog-grid { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* ═══════════════════════════════════════ DIVIDER ══ */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border2);
+  margin: 16px 0;
+}
+
+/* ═══════════════════════════════════════ RESPONSIVE ══ */
+@media (max-width: 700px) {
+  .grid2, .grid3 { grid-template-columns: 1fr 1fr; }
+  .scenes-grid { grid-template-columns: repeat(3,1fr); }
+  .btn-xl { padding: 16px 24px; font-size: 1em; }
+  .logo { font-size: 1.5em; }
+  .status-bar { gap: 10px; font-size: .72em; }
+  .strike-btn { font-size: 1.3em; padding: 24px; }
+}
+@media (max-width: 480px) {
+  .scenes-grid { grid-template-columns: 1fr 1fr; }
+  .grid3 { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 
+<!-- ═══════════════════════ HEADER ══ -->
 <header>
-  <span class="logo">🎃 HAUNT CTRL v3</span>
+  <span class="logo">🎃 Haunt <span>Ctrl</span> <span style="font-size:.6em;letter-spacing:2px;color:var(--dim2)">v3</span></span>
   <div class="status-bar">
-    <span id="mode-badge-kid" class="mode-badge kid">KID MODE</span>
-    <span id="mode-badge-battle" class="mode-badge battle">BATTLE MODE</span>
-    <span><span id="dot-rx" class="dot"></span> Receiver</span>
-    <span><span id="dot-fog" class="dot"></span> Fog</span>
-    <span><span id="dot-storm" class="dot"></span> Storm</span>
-    <span id="pause-indicator" style="color:#ffd700;display:none">⏸ PAUSED</span>
+    <span id="mode-badge-kid"    class="mode-badge kid">🧸 Kid Mode</span>
+    <span id="mode-badge-battle" class="mode-badge battle">💀 Battle</span>
+    <span id="pause-indicator">⏸ PAUSED</span>
+    <span class="status-item"><span id="dot-rx"    class="dot"></span>Receiver</span>
+    <span class="status-item"><span id="dot-fog"   class="dot"></span>Fog</span>
+    <span class="status-item"><span id="dot-storm" class="dot"></span>Storm</span>
   </div>
 </header>
 
+<!-- ═══════════════════════ GLOBAL BAR ══ -->
 <div class="global-bar">
-  <button class="btn btn-danger btn-lg" onclick="api('/api/allstop')">⛔ ALL STOP</button>
-  <button class="btn btn-warn btn-lg" id="pause-btn" onclick="api('/api/pause')">⏸ PAUSE</button>
-  <button class="btn btn-green" id="kid-btn" onclick="api('/api/kidmode')">🧸 Kid Mode</button>
-  <button class="btn btn-danger" onclick="api('/api/battlemode')">💀 Neighbor Battle</button>
+  <button class="btn btn-danger btn-xl" onclick="api('/api/allstop')">⛔&nbsp; ALL STOP</button>
+  <button class="btn btn-warn btn-lg"   id="pause-btn" onclick="api('/api/pause')">⏸&nbsp; PAUSE</button>
+  <button class="btn btn-green btn-lg"  id="kid-btn"   onclick="api('/api/kidmode')">🧸&nbsp; Kid Mode</button>
+  <button class="btn btn-danger btn-lg"                onclick="api('/api/battlemode')">💀&nbsp; Neighbor Battle</button>
 </div>
 
+<!-- ═══════════════════════ TABS ══ -->
 <div class="tabs">
-  <div class="tab active" data-pane="cmd">Command</div>
-  <div class="tab" data-pane="graveyard">Graveyard</div>
-  <div class="tab" data-pane="jamboree">Jamboree</div>
-  <div class="tab" data-pane="storm">Storm</div>
-  <div class="tab" data-pane="audio">Audio</div>
-  <div class="tab" data-pane="setup">Setup</div>
+  <div class="tab active" data-pane="cmd">⚡ Command</div>
+  <div class="tab" data-pane="graveyard">☠️ Graveyard</div>
+  <div class="tab" data-pane="jamboree">🎃 Jamboree</div>
+  <div class="tab" data-pane="storm">🌩️ Storm</div>
+  <div class="tab" data-pane="audio">🔊 Audio</div>
+  <div class="tab" data-pane="setup">⚙️ Setup</div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ COMMAND ════ -->
+<!-- ═══════════════════════ CONTENT ══ -->
 <div class="content">
+
+<!-- ══════════════════════════════════ COMMAND ══ -->
 <div class="pane active" id="pane-cmd">
 
   <div class="panel">
     <div class="panel-title">Scene Presets</div>
-    <div class="grid4" style="grid-template-columns:repeat(5,1fr)">
+    <div class="scenes-grid">
       <div class="scene-btn" onclick="setScene('ambient')">
         <span class="icon">🌙</span><span class="label">Ambient</span>
       </div>
@@ -183,7 +644,7 @@
         <span class="icon">🕯️</span><span class="label">Quiet</span>
       </div>
       <div class="scene-btn" onclick="setScene('battle')">
-        <span class="icon">🔥</span><span class="label">Battle Mode</span>
+        <span class="icon">🔥</span><span class="label">Battle</span>
       </div>
     </div>
   </div>
@@ -191,19 +652,18 @@
   <div class="grid2">
     <div class="panel">
       <div class="panel-title">Fog Machine</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fog-grid">
         <button class="btn btn-fog" onclick="fireFog(5000)">💨 5s Burst</button>
         <button class="btn btn-fog" onclick="fireFog(10000)">💨 10s Blast</button>
         <button class="btn btn-fog" onclick="fireFog(20000)">💨 20s Max</button>
-        <button class="btn btn-danger btn-sm" onclick="api('/api/fog/stop')">■ Stop Fog</button>
+        <button class="btn btn-danger btn-sm" onclick="api('/api/fog/stop')">■ Stop</button>
       </div>
     </div>
     <div class="panel">
       <div class="panel-title">Raw ISCP Command</div>
       <div style="display:flex;gap:8px">
-        <input id="raw-cmd" placeholder="e.g. PWRQSTN" style="background:#1a1a1a;border:1px solid #333;
-          color:var(--text);padding:8px;border-radius:4px;flex:1;font-family:monospace"/>
-        <button class="btn btn-orange btn-sm" onclick="sendRaw()">SEND</button>
+        <input id="raw-cmd" class="raw-cmd-input" placeholder="e.g. PWRQSTN"/>
+        <button class="btn btn-orange" onclick="sendRaw()">Send</button>
       </div>
     </div>
   </div>
@@ -214,7 +674,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ GRAVEYARD ════ -->
+<!-- ══════════════════════════════════ GRAVEYARD ══ -->
 <div class="pane" id="pane-graveyard">
 
   <div class="panel">
@@ -240,7 +700,7 @@
 
   <div class="grid2">
     <div class="panel">
-      <div class="panel-title">Graveyard Ambient (Z2)</div>
+      <div class="panel-title">Graveyard Ambient — Zone 2</div>
       <div class="vol-row">
         <span class="vol-label">Zone 2</span>
         <input type="range" class="vol-slider" id="vol-grave-z2" min="0" max="60"
@@ -254,31 +714,25 @@
     </div>
     <div class="panel">
       <div class="panel-title">Witch Auto-Fire</div>
-      <p style="font-size:.8em;color:var(--dim);margin-bottom:10px">
-        Every 2–3 min — briefly boosts Zone 2 for witch cackle
+      <p style="font-size:.8em;color:var(--dim2);margin-bottom:14px;letter-spacing:.5px">
+        Every 2–3 min — briefly boosts Zone 2 for the witch cackle
       </p>
-      <button class="btn btn-orange" id="witch-btn" onclick="toggleWitch()">🧙 Start Witch Timer</button>
+      <button class="btn btn-purple" id="witch-btn" onclick="toggleWitch()">🧙 Start Witch Timer</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ JAMBOREE ════ -->
+<!-- ══════════════════════════════════ JAMBOREE ══ -->
 <div class="pane" id="pane-jamboree">
-
   <div class="panel">
-    <div class="panel-title">Jack-o-Lantern Jamboree Projector</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-      <button class="btn btn-orange" onclick="api('/api/onkyo/command',{command:'PWR01'})">
-        🔌 Power On
-      </button>
-      <button class="btn btn-warn" onclick="api('/api/onkyo/command',{command:'PWR00'})">
-        🔌 Power Off
-      </button>
-      <button class="btn btn-orange" onclick="api('/api/onkyo/command',{command:'SLI01'})">
-        📺 Input 1
-      </button>
+    <div class="panel-title">Jack-o-Lantern Jamboree — Projector</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+      <button class="btn btn-orange" onclick="api('/api/onkyo/command',{command:'PWR01'})">🔌 Power On</button>
+      <button class="btn btn-warn"   onclick="api('/api/onkyo/command',{command:'PWR00'})">🔌 Power Off</button>
+      <button class="btn btn-orange" onclick="api('/api/onkyo/command',{command:'SLI01'})">📺 Input 1</button>
     </div>
-    <div class="panel-title">Zone 1 Volume (Jamboree)</div>
+    <hr class="divider"/>
+    <div class="panel-title" style="margin-top:4px">Zone 1 Volume</div>
     <div class="vol-row">
       <span class="vol-label">Zone 1</span>
       <input type="range" class="vol-slider" id="vol-jam-z1" min="0" max="65"
@@ -287,86 +741,88 @@
       <span class="vol-cap">/ 65</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-orange btn-sm" onclick="setVol('z1',30);setSlider('vol-jam-z1',30)">30 Ambient</button>
-      <button class="btn btn-orange btn-sm" onclick="setVol('z1',45);setSlider('vol-jam-z1',45)">45 Active</button>
-      <button class="btn btn-orange btn-sm" onclick="setVol('z1',55);setSlider('vol-jam-z1',55)">55 Party</button>
+      <button class="btn btn-orange btn-sm" onclick="setVol('z1',30);setSlider('vol-jam-z1',30)">30 — Ambient</button>
+      <button class="btn btn-orange btn-sm" onclick="setVol('z1',45);setSlider('vol-jam-z1',45)">45 — Active</button>
+      <button class="btn btn-orange btn-sm" onclick="setVol('z1',55);setSlider('vol-jam-z1',55)">55 — Party</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ STORM ════ -->
+<!-- ══════════════════════════════════ STORM ══ -->
 <div class="pane" id="pane-storm">
 
   <div class="panel">
     <button class="strike-btn" onclick="api('/api/storm/strike')">
-      ⚡ MANUAL LIGHTNING STRIKE ⚡
+      ⚡ &nbsp;MANUAL LIGHTNING STRIKE&nbsp; ⚡
     </button>
   </div>
 
   <div class="grid2">
     <div class="panel">
-      <div class="panel-title">Auto Storm Presets</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="storm-preset selected" id="preset-distant"
-             onclick="selectPreset('distant')">
-          🌩️ Distant — every 3–5 min, low rumble
+      <div class="panel-title">Storm Intensity</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="storm-preset selected" id="preset-distant"  onclick="selectPreset('distant')">
+          🌩️ &nbsp;Distant &mdash; every 3–5 min, low rumble
         </div>
-        <div class="storm-preset" id="preset-movingin"
-             onclick="selectPreset('movingin')">
-          🌧️ Moving In — every 2–3 min, building
+        <div class="storm-preset" id="preset-movingin" onclick="selectPreset('movingin')">
+          🌧️ &nbsp;Moving In &mdash; every 2–3 min, building
         </div>
-        <div class="storm-preset" id="preset-ontop"
-             onclick="selectPreset('ontop')">
-          ⚡ Right On Top — every 30–90 sec, full crack + fog
+        <div class="storm-preset" id="preset-ontop" onclick="selectPreset('ontop')">
+          ⚡ &nbsp;Right On Top &mdash; every 30–90 sec, full crack + fog
         </div>
       </div>
     </div>
     <div class="panel">
-      <div class="panel-title">Storm Control</div>
+      <div class="panel-title">Auto Storm</div>
       <button class="btn btn-warn btn-lg" id="storm-toggle-btn"
-              onclick="toggleStorm()" style="width:100%;margin-bottom:12px">
-        ▶ Start Auto Storm
+              onclick="toggleStorm()" style="width:100%;margin-bottom:14px">
+        ▶ &nbsp;Start Auto Storm
       </button>
-      <div id="storm-status" style="font-size:.8em;color:var(--dim)">Storm inactive</div>
+      <div id="storm-status" style="font-family:'Share Tech Mono',monospace;font-size:.78em;color:var(--dim2);">
+        Storm inactive
+      </div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ AUDIO ════ -->
+<!-- ══════════════════════════════════ AUDIO ══ -->
 <div class="pane" id="pane-audio">
   <div class="panel">
-    <div class="panel-title">Zone Volumes — Safety Caps Enforced</div>
+    <div class="panel-title">Zone Volumes — Safety Caps Enforced Server-Side</div>
+    <div class="vol-section">
 
-    <div class="vol-row">
-      <span class="vol-label">Zone 1</span>
-      <input type="range" class="vol-slider" id="vol-z1" min="0" max="65"
-        oninput="updateSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
-      <span class="vol-val" id="val-z1">30</span>
-      <span class="vol-cap">/ <span id="cap-z1">65</span></span>
-      <button class="mute-btn" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
-    </div>
+      <div class="vol-row">
+        <span class="vol-label">Zone 1</span>
+        <input type="range" class="vol-slider" id="vol-z1" min="0" max="65"
+          oninput="updateSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
+        <span class="vol-val" id="val-z1">30</span>
+        <span class="vol-cap">/ <span id="cap-z1">65</span></span>
+        <button class="mute-btn" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
+      </div>
 
-    <div class="vol-row">
-      <span class="vol-label">Zone 2</span>
-      <input type="range" class="vol-slider" id="vol-z2" min="0" max="60"
-        oninput="updateSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
-      <span class="vol-val" id="val-z2">25</span>
-      <span class="vol-cap">/ <span id="cap-z2">60</span></span>
-      <button class="mute-btn" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
-    </div>
+      <div class="vol-row">
+        <span class="vol-label">Zone 2</span>
+        <input type="range" class="vol-slider" id="vol-z2" min="0" max="60"
+          oninput="updateSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
+        <span class="vol-val" id="val-z2">25</span>
+        <span class="vol-cap">/ <span id="cap-z2">60</span></span>
+        <button class="mute-btn" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
+      </div>
 
-    <div class="vol-row">
-      <span class="vol-label">Zone 3</span>
-      <input type="range" class="vol-slider" id="vol-z3" min="0" max="55"
-        oninput="updateSlider(this,'z3')" onchange="setVol('z3',this.value)"/>
-      <span class="vol-val" id="val-z3">20</span>
-      <span class="vol-cap">/ <span id="cap-z3">55</span></span>
-      <button class="mute-btn" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
+      <div class="vol-row">
+        <span class="vol-label">Zone 3</span>
+        <input type="range" class="vol-slider" id="vol-z3" min="0" max="55"
+          oninput="updateSlider(this,'z3')" onchange="setVol('z3',this.value)"/>
+        <span class="vol-val" id="val-z3">20</span>
+        <span class="vol-cap">/ <span id="cap-z3">55</span></span>
+        <button class="mute-btn" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
+      </div>
+
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ SETUP ════ -->
+<!-- ══════════════════════════════════ SETUP ══ -->
 <div class="pane" id="pane-setup">
   <div class="panel">
     <div class="panel-title">Receiver Connection</div>
@@ -376,18 +832,16 @@
     </div>
     <div class="field-row">
       <label>Port</label>
-      <input id="cfg-port" value="60128" style="max-width:100px"/>
+      <input id="cfg-port" value="60128" style="max-width:120px"/>
     </div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      <button class="btn btn-orange" onclick="saveConfig()">💾 Save &amp; Connect</button>
-      <span id="connect-status" style="font-size:.85em;align-self:center;color:var(--dim)">
-        Not tested
-      </span>
+    <div style="display:flex;gap:12px;margin-top:8px;align-items:center">
+      <button class="btn btn-orange" onclick="saveConfig()">💾 &nbsp;Save &amp; Connect</button>
+      <span id="connect-status">Not tested</span>
     </div>
   </div>
 
   <div class="panel">
-    <div class="panel-title">Max Volume Caps (Onkyo 0–80 scale)</div>
+    <div class="panel-title">Max Volume Safety Caps — Onkyo 0–80 Scale</div>
     <div class="field-row">
       <label>Zone 1 Max</label>
       <input id="cfg-z1" type="number" min="0" max="80" value="65" style="max-width:80px"/>
@@ -400,9 +854,10 @@
       <label>Zone 3 Max</label>
       <input id="cfg-z3" type="number" min="0" max="80" value="55" style="max-width:80px"/>
     </div>
-    <button class="btn btn-orange btn-sm" onclick="saveCaps()">💾 Save Caps</button>
+    <button class="btn btn-orange btn-sm" onclick="saveCaps()">💾 &nbsp;Save Caps</button>
   </div>
 </div>
+
 </div><!-- /.content -->
 
 <script>
@@ -428,20 +883,18 @@ connectWS();
 function applyState(s) {
   document.getElementById('dot-rx').className = 'dot ' + (s.connected ? 'on' : 'warn');
   document.getElementById('dot-fog').className = 'dot ' + (s.fogActive ? 'fog' : '');
-  document.getElementById('dot-storm').className = 'dot ' + (s.stormActive ? 'warn' : '');
+  document.getElementById('dot-storm').className = 'dot ' + (s.stormActive ? 'storm' : '');
   document.getElementById('pause-indicator').style.display = s.paused ? '' : 'none';
-  document.getElementById('pause-btn').textContent = s.paused ? '▶ Resume' : '⏸ Pause';
-  document.getElementById('kid-btn').className = 'btn btn-green' + (s.kidMode ? ' active' : '');
+  document.getElementById('pause-btn').textContent = s.paused ? '▶  Resume' : '⏸  Pause';
+  document.getElementById('kid-btn').className = 'btn btn-green btn-lg' + (s.kidMode ? ' active' : '');
   document.getElementById('mode-badge-kid').style.display = s.kidMode ? '' : 'none';
 
-  // Storm button
   const stBtn = document.getElementById('storm-toggle-btn');
-  stBtn.textContent = s.stormActive ? '■ Stop Storm' : '▶ Start Auto Storm';
+  stBtn.textContent = s.stormActive ? '■  Stop Storm' : '▶  Start Auto Storm';
   stBtn.className = s.stormActive ? 'btn btn-danger btn-lg' : 'btn btn-warn btn-lg';
   document.getElementById('storm-status').textContent = s.stormActive
     ? `Storm active [${s.stormPreset}]` : 'Storm inactive';
 
-  // Volumes
   ['z1','z2','z3'].forEach(z => {
     const v = s.volumes[z] ?? 0;
     syncSliders(z, v);
@@ -456,7 +909,6 @@ function applyConfig(c) {
   document.getElementById('cfg-z1').value = c.maxVol.z1;
   document.getElementById('cfg-z2').value = c.maxVol.z2;
   document.getElementById('cfg-z3').value = c.maxVol.z3;
-  // Update slider max attrs and cap displays
   document.getElementById('cap-z1').textContent = c.maxVol.z1;
   document.getElementById('cap-z2').textContent = c.maxVol.z2;
   document.getElementById('cap-z3').textContent = c.maxVol.z3;
@@ -550,7 +1002,7 @@ function toggleWitch() {
     clearTimeout(witchTimer);
     witchActive = false;
     btn.textContent = '🧙 Start Witch Timer';
-    btn.className = 'btn btn-orange';
+    btn.className = 'btn btn-purple';
   } else {
     witchActive = true;
     btn.textContent = '🧙 Stop Witch Timer';
@@ -561,7 +1013,7 @@ function toggleWitch() {
 
 function scheduleWitch() {
   if (!witchActive) return;
-  const delay = 120000 + Math.random() * 60000; // 2–3 min
+  const delay = 120000 + Math.random() * 60000;
   witchTimer = setTimeout(() => {
     api('/api/graveyard/witch');
     scheduleWitch();
@@ -592,9 +1044,8 @@ function appendLog(msg, cls) {
   const ts = new Date().toLocaleTimeString();
   const d = document.createElement('div');
   d.className = 'entry new' + (cls ? ` ${cls}` : '');
-  d.textContent = `[${ts}] ${msg}`;
+  d.textContent = `[${ts}]  ${msg}`;
   box.prepend(d);
-  // Keep last 200 entries
   while (box.children.length > 200) box.removeChild(box.lastChild);
 }
 
