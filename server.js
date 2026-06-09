@@ -435,7 +435,7 @@ async function fireCharacter(character) {
 
   // If auto-duck Jamboree is on, lower z1 during character clip
   const origZ1 = state.volumes.z1;
-  const duckedZ1 = settings.autoDuckJamboree ? clampVol('z1', Math.max(0, origZ1 - 15)) : origZ1;
+  const duckedZ1 = settings.autoDuckJamboree ? clampVol('z1', Math.max(0, origZ1 - 8)) : origZ1;
 
   try {
     // Flash then hold color
