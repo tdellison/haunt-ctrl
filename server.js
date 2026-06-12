@@ -4,6 +4,7 @@ const http = require('http');
 const net = require('net');
 const dgram = require('dgram');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const app = express();
 app.use(express.json());
@@ -14,7 +15,7 @@ const wss = new WebSocketServer({ server });
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 let config = {
-  receiverIp:   '192.168.1.90',
+  receiverIp:   '192.168.1.190',
   receiverPort: 60128,
   // Onkyo 0-80 scale hard caps
   maxVol: { z1: 60, z2: 48, z3: 44, sub: 52 },
@@ -381,13 +382,14 @@ function scheduleNextWitch() {
 
 async function fireWitch(clip) {
   broadcastLog(`Witch: ${clip}`, 'WITCH');
+  playWitchClip(clip);
   try {
     const currentZ3 = state.volumes.z3;
     const boost = clampVol('z3', currentZ3 + 8);
     await sendISCP(`${ZONE_CMD.z3}${volToHex(boost)}`);
     setTimeout(async () => {
       try { await sendISCP(`${ZONE_CMD.z3}${volToHex(currentZ3)}`); } catch (_) {}
-    }, 5000);
+    }, 30000);
   } catch (e) {
     broadcastLog(`Witch error: ${e.message}`, 'SYSTEM');
   }
@@ -425,10 +427,211 @@ const CHAR_CONFIG = {
   },
 };
 
-async function fireCharacter(character) {
+// ─── VLC Playback ─────────────────────────────────────────────────────────────
+const VLC_PATH  = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
+const MEDIA_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\LEGENDS ATMOS';
+
+const CLIP_MAP = {
+  grimreaper: {
+    'Fear the Reaper':       'Grim Reaper_Fear the Reaper_Holl_H.mp4',
+    'Out of Time':           'Grim Reaper_Out of Time_Holl_H.mp4',
+    'The Ferryman':          'Grim Reaper_The Ferryman_Holl_H.mp4',
+    'Deep Sleeper':          'Grim Reaper_Deep Sleeper_Holl_H.mp4',
+    'Dreadful Apparition':   'Grim Reaper_Dreadful Apparition_Holl_H.mp4',
+    'Grave Warning':         'Grim Reaper_Grave Warning_Holl_H.mp4',
+    'Startle Scare 1':       'Grim Reaper_Startle Scare1_Holl_H.mp4',
+    'Startle Scare 2':       'Grim Reaper_Startle Scare2_Holl_H.mp4',
+    'Startle Scare 3':       'Grim Reaper_Startle Scare3_Holl_H.mp4',
+  },
+  headlesshorseman: {
+    'Headless Hessian':      'Horseman_Headless Hessian_Holl_H.mp4',
+    'Ride of the Horseman':  'Horseman_Ride of the Horseman_Holl_H.mp4',
+    'Sleepy Hollow Steed':   'Horseman_Sleepy Hollow Steed_Holl_H.mp4',
+    'Stormy Hollow':         'Horseman_Stormy Hollow_Holl_H.mp4',
+    'Startle Scare 1':       'Horseman_Startle Scare 1_Holl_H.mp4',
+    'Startle Scare 2':       'Horseman_Startle Scare 2_Holl_H.mp4',
+    'Startle Scare 3':       'Horseman_Startle Scare 3_Holl_H.mp4',
+  },
+  pumpkinking: {
+    'Hail to the King':      'Pumpkin King_Hail to the King_Holl_H.mp4',
+    'Hungry Goblin':         'Pumpkin King_Hungry Goblin_Holl_H.mp4',
+    'Lord of the Patch':     'Pumpkin King_Lord of the Patch_Holl_H.mp4',
+    'The Scarecrow':         'Pumpkin King_The Scarecrow_Holl_H.mp4',
+    'Startle Scare 1':       'Pumpkin King_Startle Scare1_Holl_H.mp4',
+    'Startle Scare 2':       'Pumpkin King_Startle Scare2_Holl_H.mp4',
+    'Startle Scare 3':       'Pumpkin King_Startle Scare3_Holl_H.mp4',
+  },
+};
+
+let vlcProcess = null;
+
+// ─── Jamboree Playback (separate VLC instance) ────────────────────────────────
+const JAMBOREE_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\JACKOLANTERN';
+
+const JAMBOREE_MAP = {
+  'Addams Family':        'JOLJ3_Addams Family_Trio_Pumpkin.mp4',
+  'Ghostbusters':         'JOLJ3_Ghostbusters_Trio_Pumpkin.mp4',
+  'Monster Mash':         'JOLJ3_Monster Mash_Trio_Pumpkin.mp4',
+  'The Pumpkin Song':     'JOLJ_The Pumpkin Song_Trio_Pumpkin.mp4',
+  'Three Children Bold':  'JOLJ_Three Children Bold_Trio_Pumpkin.mp4',
+  'Twas The Night':       'JOLJ_Twas The Night_Trio_Pumpkin.mp4',
+  'Hall of Pumpkin King': 'JOLJ_Hall of Pumpkin King_Trio_Pumpkin.mp4',
+  'Jokes 1':              'JOLJ_Jokes 1_Trio_Pumpkin.mp4',
+  'Jokes 2':              'JOLJ_Jokes 2_Trio_Pumpkin.mp4',
+  'Jokes 3':              'JOLJ_Jokes 3_Trio_Pumpkin.mp4',
+  'Funny Faces':          'JOLJ_Funny Faces_Trio_Pumpkin.mp4',
+  'Heckling Hijinks':     'JOL2_Heckling Hijinks_Trio_Pumpkin_H.mp4',
+  'Lord of the Gourds':   'JOL2_Lord of the Gourds_Trio_Pumpkin_H.mp4',
+  'The Raven':            'JOL2_The Raven_Trio_Pumpkin_H.mp4',
+  'Treater Greeters':     'JOL2_Treater Greeters_Trio_Pumpkin_H.mp4',
+};
+
+let jamboreeProcess = null;
+
+// ─── Witch Playback (separate VLC instance) ───────────────────────────────────
+const WITCH_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
+
+const WITCH_MAP = {
+  witchinghour: 'WH_Song 1_WitchingHour_3DFX_H.mp4',
+  catcrow:      'WH_Song 2_CatCrow_3DFX_H.mp4',
+  spellbound:   'WH_Spell 1_WH_Spellbound_3DFX_H.mp4',
+  seance:       'WH_Spell 3_Seance_3DFX_H.mp4',
+};
+
+let witchProcess = null;
+
+// ─── Graveyard Ambient Loop (separate VLC instance, audio only) ───────────────
+const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
+
+let ambientProcess = null;
+let ambientActive  = false;
+
+function startAmbient() {
+  if (ambientProcess) return;
+  broadcastLog('Graveyard ambient loop started', 'AUDIO');
+  ambientProcess = spawn(VLC_PATH, [
+    AMBIENT_DIR,
+    '--loop',
+    '--random',
+    '--no-video',
+    '--gain', '0.6',
+    '--qt-start-minimized',
+  ], { detached: true, stdio: 'ignore' });
+  ambientProcess.unref();
+  ambientActive = true;
+  ambientProcess.on('exit', () => { ambientProcess = null; ambientActive = false; });
+}
+
+function stopAmbient() {
+  if (ambientProcess) {
+    try { ambientProcess.kill(); } catch (_) {}
+    ambientProcess = null;
+    broadcastLog('Graveyard ambient loop stopped', 'AUDIO');
+  }
+  ambientActive = false;
+}
+
+function playWitchClip(clip) {
+  // Random pick for timer auto-fires or unknown clip names
+  const keys = Object.keys(WITCH_MAP);
+  const key  = WITCH_MAP[clip] ? clip : keys[Math.floor(Math.random() * keys.length)];
+  const filepath = path.join(WITCH_DIR, WITCH_MAP[key]);
+
+  if (witchProcess) {
+    try { witchProcess.kill(); } catch (_) {}
+    witchProcess = null;
+  }
+
+  broadcastLog(`Witch clip: ${key}`, 'WITCH');
+  witchProcess = spawn(VLC_PATH, [
+    filepath,
+    '--play-and-exit',
+    '--no-video-title-show',
+    '--qt-start-minimized',
+  ], { detached: true, stdio: 'ignore' });
+  witchProcess.unref();
+  witchProcess.on('exit', () => { witchProcess = null; });
+}
+
+function stopWitch() {
+  if (witchProcess) {
+    try { witchProcess.kill(); } catch (_) {}
+    witchProcess = null;
+    broadcastLog('Witch stopped', 'WITCH');
+  }
+}
+
+function playJamboree(title) {
+  const filename = JAMBOREE_MAP[title];
+  if (!filename) return false;
+  const filepath = path.join(JAMBOREE_DIR, filename);
+
+  if (jamboreeProcess) {
+    try { jamboreeProcess.kill(); } catch (_) {}
+    jamboreeProcess = null;
+  }
+
+  broadcastLog(`Jamboree: ${title}`, 'VIDEO');
+  jamboreeProcess = spawn(VLC_PATH, [
+    filepath,
+    '--play-and-exit',
+    '--fullscreen',
+    '--no-video-title-show',
+    '--qt-start-minimized',
+  ], { detached: true, stdio: 'ignore' });
+  jamboreeProcess.unref();
+  jamboreeProcess.on('exit', () => { jamboreeProcess = null; });
+  return true;
+}
+
+function stopJamboree() {
+  if (jamboreeProcess) {
+    try { jamboreeProcess.kill(); } catch (_) {}
+    jamboreeProcess = null;
+    broadcastLog('Jamboree stopped', 'VIDEO');
+  }
+}
+
+function playClip(character, title) {
+  const clips = CLIP_MAP[character];
+  if (!clips) return;
+  // If no title given, pick a random clip for this character
+  const clipTitle = title || Object.keys(clips)[Math.floor(Math.random() * Object.keys(clips).length)];
+  const filename  = clips[clipTitle];
+  if (!filename) return;
+  const filepath = path.join(MEDIA_DIR, filename);
+
+  // Kill any running VLC instance first
+  if (vlcProcess) {
+    try { vlcProcess.kill(); } catch (_) {}
+    vlcProcess = null;
+  }
+
+  broadcastLog(`Playing: ${clipTitle}`, 'VIDEO');
+  vlcProcess = spawn(VLC_PATH, [
+    filepath,
+    '--play-and-exit',
+    '--fullscreen',
+    '--no-video-title-show',
+    '--qt-start-minimized',
+  ], { detached: true, stdio: 'ignore' });
+  vlcProcess.unref();
+  vlcProcess.on('exit', () => { vlcProcess = null; });
+}
+
+function stopVLC() {
+  if (vlcProcess) {
+    try { vlcProcess.kill(); } catch (_) {}
+    vlcProcess = null;
+    broadcastLog('VLC stopped', 'VIDEO');
+  }
+}
+
+async function fireCharacter(character, clip) {
   const c = CHAR_CONFIG[character];
   if (!c) return;
   broadcastLog(`Character: ${c.label}`, 'VIDEO');
+  playClip(character, clip);
 
   const ambientZ2 = state.volumes.z2;
   const boostedZ2 = clampVol('z2', ambientZ2 + c.z2Boost);
@@ -571,6 +774,10 @@ app.post('/api/allstop', async (req, res) => {
   if (state.autoScare.timer) { clearTimeout(state.autoScare.timer); state.autoScare.timer = null; }
   state.witchTimer.active = false;
   if (state.witchTimer.timer) { clearTimeout(state.witchTimer.timer); state.witchTimer.timer = null; }
+  stopVLC();
+  stopJamboree();
+  stopWitch();
+  stopAmbient();
 
   try {
     await Promise.allSettled([
@@ -590,6 +797,10 @@ app.post('/api/allstop', async (req, res) => {
 
 app.post('/api/shutdown', async (req, res) => {
   broadcastLog('Shutdown sequence initiated', 'SYSTEM');
+  stopVLC();
+  stopJamboree();
+  stopWitch();
+  stopAmbient();
   try {
     await Promise.allSettled([
       fogOff(),
@@ -649,11 +860,35 @@ app.post('/api/scene', async (req, res) => {
 });
 
 app.post('/api/character', async (req, res) => {
-  const { character } = req.body;
+  const { character, clip } = req.body;
   const key = character?.toLowerCase().replace(/\s/g, '');
   if (!CHAR_CONFIG[key]) return res.status(400).json({ error: 'unknown character' });
-  await fireCharacter(key);
+  await fireCharacter(key, clip);
   res.json({ ok: true, character: key });
+});
+
+app.post('/api/vlc/stop', (req, res) => {
+  stopVLC();
+  res.json({ ok: true });
+});
+
+app.post('/api/jamboree/play', (req, res) => {
+  const { title } = req.body;
+  if (!title) return res.status(400).json({ error: 'title required' });
+  const ok = playJamboree(title);
+  if (!ok) return res.status(404).json({ error: 'unknown title' });
+  res.json({ ok: true, title });
+});
+
+app.post('/api/jamboree/stop', (req, res) => {
+  stopJamboree();
+  res.json({ ok: true });
+});
+
+app.post('/api/ambient/toggle', (req, res) => {
+  if (ambientActive) stopAmbient();
+  else startAmbient();
+  res.json({ ok: true, active: ambientActive });
 });
 
 app.post('/api/storm/toggle', (req, res) => {

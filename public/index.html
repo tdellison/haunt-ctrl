@@ -753,11 +753,21 @@ body.demo-mode #demo-badge { display: inline-block; }
       </div>
       <button class="btn btn-purple btn-full btn-lg" id="witch-toggle-btn" onclick="toggleWitch()">▶ Start Witch Timer</button>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'spell'})">🔮 SPELL</button>
-        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'brew'})">🧪 BREW</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'witchinghour'})">🌙 WITCHING HOUR</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'catcrow'})">🐈‍⬛ CAT &amp; CROW</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'spellbound'})">🔮 SPELLBOUND</button>
         <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'seance'})">🕯 SÉANCE</button>
       </div>
     </div>
+  </div>
+
+  <!-- Ambient loop -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌫</span>Graveyard Ambient Loop</div>
+    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
+      Continuous shuffled background atmosphere — runs underneath, audio only.
+    </p>
+    <button class="btn btn-green btn-full btn-lg" id="ambient-btn" onclick="toggleAmbient()">▶ Start Ambient Loop</button>
   </div>
 
   <!-- Graveyard display controls -->
@@ -1468,6 +1478,19 @@ function toggleWitch() {
   api('/api/witch/toggle');
 }
 
+// ── Ambient loop ──────────────────────────────────────────────────────────────
+async function toggleAmbient() {
+  const r = await api('/api/ambient/toggle');
+  const btn = document.getElementById('ambient-btn');
+  if (r?.active) {
+    btn.textContent = '■ Stop Ambient Loop';
+    btn.className = 'btn btn-red btn-full btn-lg';
+  } else {
+    btn.textContent = '▶ Start Ambient Loop';
+    btn.className = 'btn btn-green btn-full btn-lg';
+  }
+}
+
 // ── FX soundboard ─────────────────────────────────────────────────────────────
 function playFX(fx) {
   api('/api/fx/play', { fx });
@@ -1480,14 +1503,19 @@ function playFX(fx) {
 // ── Clip library ──────────────────────────────────────────────────────────────
 function loadClip(char, title) {
   document.getElementById('p2-nowplaying').textContent = `▶ ${title}`;
-  fireChar(char);
+  api('/api/character', { character: char, clip: title });
   demoLog(`Clip: ${title}`, 'VIDEO');
 }
 function loadP1(title) {
   document.getElementById('p1-nowplaying').textContent = `▶ ${title}`;
+  api('/api/jamboree/play', { title });
   demoLog(`P1: ${title}`, 'VIDEO');
 }
-function p1Control(cmd) { demoLog(`P1 ${cmd}`, 'VIDEO'); api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : cmd === 'stop' ? 'NTCSTOP' : 'NTCSKIPF' }); }
+function p1Control(cmd) {
+  demoLog(`P1 ${cmd}`, 'VIDEO');
+  if (cmd === 'stop') { api('/api/jamboree/stop'); return; }
+  api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : 'NTCSKIPF' });
+}
 function p2Control(cmd) { demoLog(`P2 ${cmd}`, 'VIDEO'); api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : cmd === 'stop' ? 'NTCSTOP' : 'NTCSKIPF' }); }
 
 // ── Lights ────────────────────────────────────────────────────────────────────
