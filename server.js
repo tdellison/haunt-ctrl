@@ -294,6 +294,7 @@ const STORM_PRESETS = {
 async function fireStrikeSequence(preset) {
   const p = STORM_PRESETS[preset] || STORM_PRESETS.distant;
   broadcastLog('Storm: STRIKE!', 'AUDIO');
+  playStormClip();
   try {
     // Thunder FIRST
     const v = clampVol('z1', p.z1Vol);
@@ -428,8 +429,31 @@ const CHAR_CONFIG = {
 };
 
 // ─── VLC Playback ─────────────────────────────────────────────────────────────
-const VLC_PATH  = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
-const MEDIA_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\LEGENDS ATMOS';
+const VLC_PATH   = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
+const MEDIA_DIR  = 'C:\\Users\\tdell\\OneDrive\\Desktop\\LEGENDS ATMOS';
+const STORM_DIR  = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
+
+const STORM_FILES = [
+  'bijan6207-thunderstorm-409071.mp3',
+  'freesound_community-lightning-storm-6077.mp3',
+  'freesound_community-lightning-strike-29683.mp3',
+  'soundsforyou-natural-thunder-113219.mp3',
+  'u_39xav15uou-lightning-237994.mp3',
+];
+
+let stormProcess = null;
+
+function playStormClip() {
+  const file = STORM_FILES[Math.floor(Math.random() * STORM_FILES.length)];
+  const filepath = path.join(STORM_DIR, file);
+  if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
+  broadcastLog(`Storm clip: ${file}`, 'AUDIO');
+  stormProcess = spawn(VLC_PATH, [
+    filepath, '--play-and-exit', '--no-video', '--qt-start-minimized',
+  ], { detached: true, stdio: 'ignore' });
+  stormProcess.unref();
+  stormProcess.on('exit', () => { stormProcess = null; });
+}
 
 const CLIP_MAP = {
   grimreaper: {
@@ -959,8 +983,8 @@ app.post('/api/witch/fire', async (req, res) => {
 app.post('/api/fx/play', (req, res) => {
   const { fx } = req.body;
   broadcastLog(`FX: ${fx}`, 'AUDIO');
-  // Thunder also triggers lightning
   if (fx === 'thunder') {
+    playStormClip();
     goveeSetColor(255, 255, 255).then(() => {
       setTimeout(() => goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b), 250);
     });
