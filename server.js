@@ -288,7 +288,7 @@ function fogBurst(ms) {
 const STORM_PRESETS = {
   distant:    { minMs: 300000, maxMs: 360000, z1Vol: 28, fog: false, flash: 'single'  },
   approaching:{ minMs: 240000, maxMs: 300000, z1Vol: 42, fog: false, flash: 'double'  },
-  overhead:   { minMs: 180000, maxMs: 300000, z1Vol: 55, fog: true,  flash: 'storm'   },
+  overhead:   { minMs: 180000, maxMs: 300000, z1Vol: 60, fog: true,  flash: 'storm'   },
 };
 
 async function fireStrikeSequence(preset) {
