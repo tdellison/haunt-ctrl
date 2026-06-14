@@ -527,14 +527,25 @@ let witchProcess = null;
 // ─── Graveyard Ambient Loop (separate VLC instance, audio only) ───────────────
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
 
+const AMBIENT_FILES = [
+  'SS_Corpse Crowd_Wall_Spotlight_H.mp4',
+  'SS_Grave Digger_Wall_Candle_H.mp4',
+  'SS_Grave Risers_Wall_Spotlight_H.mp4',
+  'SS_Grave Riser_Wall_Spotlight_H.mp4',
+  'SS_Wicked Watchers_Wall_Flashlight_H.mp4',
+  'SS_Zombie Hands_Wall_Spotlight_H.mp4',
+  'SS_Zombie Hand_Wall_Spotlight_H.mp4',
+];
+
 let ambientProcess = null;
 let ambientActive  = false;
 
 function startAmbient() {
   if (ambientProcess) return;
   broadcastLog('Graveyard ambient loop started', 'AUDIO');
+  const files = AMBIENT_FILES.map(f => path.join(AMBIENT_DIR, f));
   ambientProcess = spawn(VLC_PATH, [
-    AMBIENT_DIR,
+    ...files,
     '--loop',
     '--random',
     '--no-video',
