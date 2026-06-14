@@ -1000,6 +1000,16 @@ app.post('/api/witch/fire', async (req, res) => {
   res.json({ ok: true });
 });
 
+const FX_FILES = {
+  scream: '850479__wavewire__jumpscare_fscream.wav',
+  laugh:  '587951__noahbangs__demon-laugh-1.wav',
+  chains: '798148__kvv-audio__chainhndl_chain-metal-rattle-02_kvv-audio_free.wav',
+  crows:  '813115__qubodup__crow-caw.flac',
+  gallop: '784606__sheilaruiz6666__horse-galloping-and-neighing.mp3',
+  scythe: '165260__ramas26__scythe-sharpening-2.wav',
+  cackle: '831699__thevoicejournals__witch-cackle.wav',
+};
+
 app.post('/api/fx/play', (req, res) => {
   const { fx } = req.body;
   broadcastLog(`FX: ${fx}`, 'AUDIO');
@@ -1009,12 +1019,9 @@ app.post('/api/fx/play', (req, res) => {
       setTimeout(() => goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b), 250);
     });
   }
-  if (fx === 'scream' || fx === 'laugh') {
-    const file = fx === 'scream'
-      ? '850479__wavewire__jumpscare_fscream.wav'
-      : '587951__noahbangs__demon-laugh-1.wav';
+  if (FX_FILES[fx]) {
     const proc = spawn(VLC_PATH, [
-      path.join(AMBIENT_DIR, file), '--play-and-exit', '--no-video', '--qt-start-minimized',
+      path.join(AMBIENT_DIR, FX_FILES[fx]), '--play-and-exit', '--no-video', '--qt-start-minimized',
     ], { detached: true, stdio: 'ignore' });
     proc.unref();
   }
