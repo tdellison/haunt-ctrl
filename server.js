@@ -528,13 +528,22 @@ let witchProcess = null;
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
 
 const AMBIENT_FILES = [
+  '587944__noahbangs__ambience-haunted-cave.mp3',
   'SS_Corpse Crowd_Wall_Spotlight_H.mp4',
+  '587941__noahbangs__ghost-moans-5-different-ones.mp3',
   'SS_Grave Digger_Wall_Candle_H.mp4',
-  'SS_Grave Risers_Wall_Spotlight_H.mp4',
-  'SS_Grave Riser_Wall_Spotlight_H.mp4',
-  'SS_Wicked Watchers_Wall_Flashlight_H.mp4',
+  '587942__noahbangs__ghost-activity-2.mp3',
   'SS_Zombie Hands_Wall_Spotlight_H.mp4',
+  '706896__noahbangs__re-creation-hells-bells-tolling-12-o-clock-processed.flac',
+  'SS_Wicked Watchers_Wall_Flashlight_H.mp4',
+  '587946__noahbangs__monster-moan-droning.mp3',
+  'SS_Grave Risers_Wall_Spotlight_H.mp4',
+  '587943__noahbangs__ghost-activity-1.mp3',
+  'SS_Grave Riser_Wall_Spotlight_H.mp4',
+  '587945__noahbangs__zombie-moan-raspy.mp3',
   'SS_Zombie Hand_Wall_Spotlight_H.mp4',
+  '636089__noahbangs__rattling-bones.wav',
+  '706897__noahbangs__re-creation-hells-bells-tolling-12-o-clock-unfiltered.flac',
 ];
 
 let ambientProcess = null;
@@ -999,6 +1008,15 @@ app.post('/api/fx/play', (req, res) => {
     goveeSetColor(255, 255, 255).then(() => {
       setTimeout(() => goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b), 250);
     });
+  }
+  if (fx === 'scream' || fx === 'laugh') {
+    const file = fx === 'scream'
+      ? '850479__wavewire__jumpscare_fscream.wav'
+      : '587951__noahbangs__demon-laugh-1.wav';
+    const proc = spawn(VLC_PATH, [
+      path.join(AMBIENT_DIR, file), '--play-and-exit', '--no-video', '--qt-start-minimized',
+    ], { detached: true, stdio: 'ignore' });
+    proc.unref();
   }
   res.json({ ok: true, fx });
 });
