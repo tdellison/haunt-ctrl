@@ -730,6 +730,8 @@ body.demo-mode #demo-badge { display: inline-block; }
   .shutdown-box { padding: 20px 16px; }
   .shutdown-actions { flex-direction: column; }
 }
+
+html, body { touch-action: manipulation; }
 </style>
 </head>
 <body>
@@ -1890,14 +1892,17 @@ function appendLog(msg, category = 'SYSTEM') {
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(tab =>
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(`pane-${tab.dataset.pane}`)?.classList.add('active');
-  })
-);
+document.querySelectorAll('.tab').forEach(tab => {
+  ['touchstart','click'].forEach(evt =>
+    tab.addEventListener(evt, (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
+      document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`pane-${tab.dataset.pane}`)?.classList.add('active');
+    }, { passive: false })
+  );
+});
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function updateClock() {
