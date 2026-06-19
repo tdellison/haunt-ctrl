@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#080810"/>
 <title>HAUNT CTRL v3</title>
 <style>
 :root {
@@ -40,6 +43,7 @@ body {
   font-family: 'Courier New', Courier, monospace;
   min-height: 100vh;
   position: relative;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 body::before {
   content: '';
@@ -110,6 +114,9 @@ header {
   border-bottom: 1px solid var(--orange);
   box-shadow: 0 2px 30px rgba(255,100,0,.15), 0 6px 60px rgba(60,0,0,.4);
   padding: 10px 20px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-left: calc(20px + env(safe-area-inset-left));
+  padding-right: calc(20px + env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -126,6 +133,7 @@ header {
   white-space: nowrap;
 }
 .logo .v3 { font-size: .5em; color: var(--dim2); letter-spacing: 2px; margin-left: 8px; }
+.logo .subtitle { font-size: .35em; color: var(--dim); letter-spacing: 2px; display: block; margin-top: 2px; }
 
 .hdr-right {
   display: flex;
@@ -186,6 +194,8 @@ body.demo-mode #demo-badge { display: inline-block; }
   background: #0a0610;
   border-bottom: 1px solid #18102a;
   padding: 10px 20px;
+  padding-left: calc(20px + env(safe-area-inset-left));
+  padding-right: calc(20px + env(safe-area-inset-right));
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -207,6 +217,9 @@ body.demo-mode #demo-badge { display: inline-block; }
   position: relative;
   overflow: hidden;
   white-space: nowrap;
+  min-height: 38px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .btn::after {
   content:'';
@@ -234,7 +247,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .btn-amber:hover  { background:linear-gradient(180deg,#3c2000,#281400); box-shadow:0 4px 18px var(--gy); border-color:var(--amber2); }
 .btn-amber.active { background:linear-gradient(180deg,#5a2e00,#3c1e00); box-shadow:0 0 18px var(--gy); border-color:var(--amber2); color:#ffd080; animation:pulse 2s infinite; }
 
-.btn-sm  { padding:5px 10px; font-size:.72em; }
+.btn-sm  { padding:5px 10px; font-size:.72em; min-height:34px; }
 .btn-lg  { padding:12px 24px; font-size:.85em; letter-spacing:3px; }
 .btn-xl  { padding:14px 30px; font-size:.95em; letter-spacing:4px; font-weight:900; }
 .btn-full{ width:100%; }
@@ -246,6 +259,9 @@ body.demo-mode #demo-badge { display: inline-block; }
   border-bottom: 1px solid #18102a;
   overflow-x: auto;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 .tabs::-webkit-scrollbar{display:none}
 .tab {
@@ -260,12 +276,21 @@ body.demo-mode #demo-badge { display: inline-block; }
   white-space: nowrap;
   border-bottom: 2px solid transparent;
   transition: all .2s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .tab:hover { color: var(--orange); background: rgba(255,179,71,.04); }
 .tab.active { color: var(--orange); border-bottom-color: var(--orange); background: rgba(255,179,71,.06); text-shadow: 0 0 10px var(--go); }
 
 /* ── Layout ── */
-.content { padding: 16px 20px; max-width: 1140px; margin: 0 auto; }
+.content {
+  padding: 16px 20px;
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+  max-width: 1140px;
+  margin: 0 auto;
+}
 .pane    { display: none; }
 .pane.active { display: block; animation: slide-in .15s ease; }
 
@@ -334,6 +359,7 @@ body.demo-mode #demo-badge { display: inline-block; }
   border-radius: 3px;
   cursor: pointer;
   outline: none;
+  min-width: 0;
 }
 .vol-slider.green-fill  { background: linear-gradient(to right, var(--green)  0%, var(--green)  var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
 .vol-slider.orange-fill { background: linear-gradient(to right, var(--orange2) 0%, var(--orange2) var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
@@ -342,7 +368,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .vol-slider.blue-fill   { background: linear-gradient(to right, var(--blue)   0%, var(--blue)   var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
 .vol-slider::-webkit-slider-thumb {
   -webkit-appearance:none;
-  width:16px; height:16px;
+  width:22px; height:22px;
   border-radius:50%;
   background:radial-gradient(circle at 38% 32%, #ffcc80, var(--orange) 55%, #6a2000 100%);
   cursor:pointer;
@@ -356,10 +382,11 @@ body.demo-mode #demo-badge { display: inline-block; }
   font-size: .9em;
   color: var(--orange);
   transition: color .2s;
+  flex-shrink: 0;
 }
 .vol-val.warn { color: var(--amber2); }
 .vol-val.danger { color: var(--red2); }
-.vol-cap { font-size:.68em; color:var(--dim2); width:36px; letter-spacing:1px; }
+.vol-cap { font-size:.68em; color:var(--dim2); width:36px; letter-spacing:1px; flex-shrink:0; }
 .vol-warn-line { font-size:.66em; color:var(--amber); letter-spacing:1px; }
 
 /* ── Char cards ── */
@@ -373,6 +400,8 @@ body.demo-mode #demo-badge { display: inline-block; }
   transition: all .2s;
   position: relative;
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .char-card:hover { border-color: var(--orange); box-shadow: 0 0 24px var(--go); transform: translateY(-2px); }
 .char-card:active { transform: scale(.95); }
@@ -391,6 +420,8 @@ body.demo-mode #demo-badge { display: inline-block; }
   cursor: pointer;
   text-align: center;
   transition: all .2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .scene-btn:hover { border-color:var(--orange); box-shadow:0 0 16px var(--go); transform:translateY(-1px); }
 .scene-btn.active { border-color:var(--orange); background:linear-gradient(180deg,#1c1000,#0e0800); box-shadow:0 0 20px var(--go); }
@@ -406,23 +437,35 @@ body.demo-mode #demo-badge { display: inline-block; }
   letter-spacing:5px; text-transform:uppercase; cursor:pointer;
   animation:strike-ready 2.5s ease-in-out infinite;
   text-shadow:0 0 14px var(--gy); transition:all .15s;
+  touch-action: manipulation;
 }
 .strike-btn:hover { background:linear-gradient(180deg,#281800,#181000); box-shadow:0 0 50px var(--gy); }
 .strike-btn:active { transform:scale(.98); }
 
-.storm-preset {
-  font-family:'Courier New',monospace;
-  padding:10px 14px 10px 32px;
-  border:1px solid var(--border);
-  background:rgba(0,0,0,.35);
-  border-radius:2px; cursor:pointer;
-  font-size:.74em; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-  color:var(--dim2); transition:all .2s; margin-bottom:8px; position:relative;
+#storm-strike-info {
+  background: rgba(0,0,0,.4);
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  font-family: 'Courier New', monospace;
 }
-.storm-preset::before { content:'○'; position:absolute; left:10px; color:var(--dim); }
-.storm-preset:hover { border-color:var(--amber2); color:var(--amber2); }
-.storm-preset.selected { border-color:var(--amber2); color:var(--amber2); background:rgba(230,126,34,.04); text-shadow:0 0 6px var(--gy); }
-.storm-preset.selected::before { content:'◉'; color:var(--amber2); }
+#storm-strike-label {
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--amber2);
+  text-shadow: 0 0 8px var(--gy);
+  display: block;
+  margin-bottom: 4px;
+}
+#storm-strike-num {
+  font-size: .72em;
+  color: var(--dim2);
+  letter-spacing: 2px;
+  display: block;
+}
 
 #storm-countdown {
   font-family:'Courier New',monospace; font-size:.8em; letter-spacing:3px;
@@ -432,9 +475,43 @@ body.demo-mode #demo-badge { display: inline-block; }
 
 /* ── FX Soundboard ── */
 .fx-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+/* ── Fog auto-timer ── */
+.fog-timer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fog-warmup-badge {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: rgba(79,195,247,.08);
+  border: 1px solid var(--blue);
+  border-radius: 2px;
+  padding: 7px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: .74em;
+  letter-spacing: 2px;
+  color: var(--blue);
+  animation: pulse 2s infinite;
+}
+.fog-warmup-badge.show { display: flex; }
+.fog-dur-row {
   display: flex;
   gap: 8px;
+  align-items: center;
   flex-wrap: wrap;
+}
+.fog-dur-row span {
+  font-size: .7em;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim2);
 }
 
 /* ── Clip library ── */
@@ -445,9 +522,12 @@ body.demo-mode #demo-badge { display: inline-block; }
   background:rgba(0,0,0,.3); border-radius:2px; cursor:pointer;
   font-family:'Courier New',monospace; font-size:.74em; letter-spacing:1px;
   color:var(--dim2); transition:all .15s;
+  min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .clip-item:hover { border-color:var(--orange); color:var(--orange); background:rgba(255,179,71,.03); }
-.clip-item .clip-icon { font-size:1.1em; }
+.clip-item .clip-icon { font-size:1.1em; flex-shrink:0; }
 
 /* ── Log box ── */
 #log-box {
@@ -455,6 +535,7 @@ body.demo-mode #demo-badge { display: inline-block; }
   padding:9px 11px; height:180px; overflow-y:auto;
   font-family:'Courier New',monospace; font-size:.72em;
   box-shadow:inset 0 0 20px rgba(0,0,0,.8);
+  -webkit-overflow-scrolling: touch;
 }
 .log-entry { padding:2px 0; line-height:1.5; transition:color .2s; }
 .log-entry.new { color:#5a5a6a; animation:slide-in .15s ease; }
@@ -513,7 +594,7 @@ body.demo-mode #demo-badge { display: inline-block; }
   font-size:.83em; outline:none; transition:all .15s;
 }
 .field-row input { flex:1; min-width:120px; }
-.raw-input { flex:1; }
+.raw-input { flex:1; width:100%; }
 .field-row input:focus, .raw-input:focus { border-color:var(--orange); box-shadow:0 0 8px var(--go); color:var(--orange); }
 .field-row input::placeholder, .raw-input::placeholder { color:#2a1a08; }
 
@@ -525,7 +606,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .toggle-row:last-child { border-bottom:none; }
 .toggle-label { color:var(--dim2); font-family:'Courier New',monospace; letter-spacing:2px; text-transform:uppercase; }
 .toggle {
-  position:relative; width:44px; height:22px; cursor:pointer;
+  position:relative; width:44px; height:22px; cursor:pointer; flex-shrink:0;
 }
 .toggle input { opacity:0; width:0; height:0; }
 .toggle-track {
@@ -558,6 +639,8 @@ body.demo-mode #demo-badge { display: inline-block; }
 .swatch {
   width:44px; height:44px; border-radius:3px; border:2px solid rgba(0,0,0,.4);
   cursor:pointer; transition:all .15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .swatch:hover { transform:scale(1.15); border-color:rgba(255,255,255,.4); }
 .swatch:active { transform:scale(.92); }
@@ -567,6 +650,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .govee-ip-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .govee-ip-row { display:flex; flex-direction:column; gap:4px; }
 .govee-ip-row label { font-family:'Courier New',monospace; font-size:.68em; letter-spacing:2px; text-transform:uppercase; color:var(--dim2); }
+.govee-ip-row label.storm-label { color: var(--blue); }
 
 /* ── Keyboard shortcuts table ── */
 .kbd-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:.76em; }
@@ -590,6 +674,62 @@ body.demo-mode #demo-badge { display: inline-block; }
   .govee-ip-grid { grid-template-columns:1fr; }
   .btn-xl { padding:12px 20px; font-size:.88em; }
 }
+
+/* ── Mobile — phone-specific (480px and under) ── */
+@media(max-width:480px) {
+  .logo { font-size: 1.1em; letter-spacing: 2px; }
+  .logo .v3 { display: none; }
+  .logo .subtitle { display: none; }
+  #live-clock { font-size: .9em; letter-spacing: 2px; }
+  .si .si-label { display: none; }
+  header { padding: 8px 14px; padding-top: calc(8px + env(safe-area-inset-top)); }
+
+  .global-bar { padding: 8px 12px; gap: 8px; }
+  .global-bar .btn-xl { padding: 12px 14px; font-size: .78em; letter-spacing: 1px; }
+  .global-bar .btn-lg { padding: 10px 12px; font-size: .76em; letter-spacing: 1px; }
+
+  .tab { padding: 10px 14px; font-size: .68em; letter-spacing: 1px; }
+
+  .content { padding: 10px 12px; }
+  .panel { padding: 12px 14px; }
+
+  .btn { min-height: 46px; padding: 10px 14px; font-size: .78em; }
+  .btn-sm { min-height: 40px; padding: 8px 12px; font-size: .72em; }
+  .btn-lg { min-height: 46px; padding: 12px 16px; }
+  .btn-xl { min-height: 50px; padding: 12px 16px; font-size: .84em; }
+
+  .scene-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid2,.grid3 { grid-template-columns: 1fr; }
+
+  .fx-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .vol-row { padding: 8px 10px; gap: 8px; flex-wrap: nowrap; }
+  .vol-label { width: 60px; font-size: .68em; }
+  .vol-slider { min-height: 44px; }
+  .vol-cap { display: none; }
+  .vol-val { width: 26px; font-size: .85em; }
+
+  .char-card { padding: 16px 8px 12px; }
+  .char-card .cicon { font-size: 2.2em; }
+  .char-card h3 { font-size: .74em; }
+  .char-card p { display: none; }
+
+  .swatch-grid { gap: 8px; }
+  .swatch { width: 48px; height: 48px; }
+
+  .govee-ip-grid { grid-template-columns: 1fr; }
+
+  .strike-btn { padding: 20px; font-size: 1em; letter-spacing: 3px; }
+
+  .kbd-grid { font-size: .7em; }
+  .info-row { flex-wrap: wrap; }
+  .info-key { width: 90px; font-size: .7em; }
+
+  #log-box { height: 140px; }
+
+  .shutdown-box { padding: 20px 16px; }
+  .shutdown-actions { flex-direction: column; }
+}
 </style>
 </head>
 <body>
@@ -602,9 +742,9 @@ body.demo-mode #demo-badge { display: inline-block; }
   <div class="hdr-right">
     <div id="live-clock">--:--:--</div>
     <div class="status-dot-row">
-      <span class="si"><span id="dot-rx" class="dot"></span>RX</span>
-      <span class="si"><span id="dot-fog" class="dot"></span>FOG</span>
-      <span class="si"><span id="dot-storm" class="dot"></span>STORM</span>
+      <span class="si"><span id="dot-rx" class="dot"></span><span class="si-label">RX</span></span>
+      <span class="si"><span id="dot-fog" class="dot"></span><span class="si-label">FOG</span></span>
+      <span class="si"><span id="dot-storm" class="dot"></span><span class="si-label">STORM</span></span>
     </div>
     <span id="demo-badge">DEMO</span>
   </div>
@@ -680,14 +820,36 @@ body.demo-mode #demo-badge { display: inline-block; }
     <div class="panel-title"><span class="pt-icon">⛈</span>Storm Mode</div>
     <div class="grid2">
       <div>
-        <div class="storm-preset selected" id="sp-distant"     onclick="selectPreset('distant')"    >🌧 DISTANT — soft rumble, every 5–6 min</div>
-        <div class="storm-preset"          id="sp-approaching" onclick="selectPreset('approaching')" >⛈ APPROACHING — medium, double flash, ~5 min</div>
-        <div class="storm-preset"          id="sp-overhead"    onclick="selectPreset('overhead')"   >🌩 OVERHEAD — loud crack, storm flash, 3–5 min</div>
-        <div id="storm-countdown" style="margin-top:8px">Storm inactive</div>
+        <div id="storm-strike-info">
+          <span id="storm-strike-label">Storm Inactive</span>
+          <span id="storm-strike-num" style="color:var(--dim2)">5-stage progressive cycle · 2 min intervals</span>
+        </div>
+        <div id="storm-countdown">Storm inactive</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <button class="btn btn-amber btn-lg btn-full" id="storm-toggle-btn" onclick="toggleStorm()">▶ Start Auto Storm</button>
-        <button class="strike-btn" onclick="api('/api/storm/strike')">⚡ FIRE STORM NOW ⚡</button>
+        <button class="strike-btn" onclick="fireStrikeNow()">⚡ FIRE NOW ⚡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fog Auto-Timer -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌫</span>Fog Auto-Timer</div>
+    <div class="fog-timer-card">
+      <div class="fog-warmup-badge" id="fog-warmup-badge">⏳ Warming up — 4 min until ready</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="countdown-badge" id="fog-auto-badge" style="flex:1">
+          <span class="cd-dot"></span><span id="fog-auto-status">Inactive</span>
+        </div>
+        <button class="btn btn-red btn-sm" onclick="killFog()">⛔ KILL FOG</button>
+      </div>
+      <button class="btn btn-blue btn-full btn-lg" id="fog-auto-btn" onclick="toggleFogAuto()">▶ Start Fog Auto-Timer</button>
+      <div class="fog-dur-row">
+        <span>Burst:</span>
+        <button class="btn btn-blue btn-sm active" id="fog-dur-5"  onclick="setFogDuration(5)">5s</button>
+        <button class="btn btn-blue btn-sm"         id="fog-dur-10" onclick="setFogDuration(10)">10s</button>
+        <button class="btn btn-blue btn-sm"         id="fog-dur-15" onclick="setFogDuration(15)">15s</button>
       </div>
     </div>
   </div>
@@ -704,6 +866,9 @@ body.demo-mode #demo-badge { display: inline-block; }
       <button class="btn btn-orange btn-sm" onclick="playFX('gallop')">🐴 GALLOP</button>
       <button class="btn btn-red    btn-sm" onclick="playFX('scythe')">☠️ SCYTHE</button>
       <button class="btn btn-purple btn-sm" onclick="playFX('cackle')">🧙 CACKLE</button>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-red btn-full btn-sm" onclick="stopFX()">■ STOP FX</button>
     </div>
   </div>
 
@@ -979,7 +1144,7 @@ body.demo-mode #demo-badge { display: inline-block; }
     <div class="info-row"><span class="info-key">SL / SR</span><span class="info-val">Graveyard atmosphere wrap</span></div>
     <div class="info-row"><span class="info-key">SUB</span><span class="info-val">Shared rumble — hard cap 65%</span></div>
     <div class="info-row"><span class="info-key">ZONE 2</span><span class="info-val">Graveyard display speakers</span></div>
-    <div class="info-row"><span class="info-key">HIDDEN</span><span class="info-val">Witch animatronic speakers (Z3)</span></div>
+    <div class="info-row" style="border-bottom:none"><span class="info-key">HIDDEN</span><span class="info-val">Witch animatronic speakers (Z3)</span></div>
   </div>
 
 </div><!-- /pane-audio -->
@@ -1051,20 +1216,20 @@ body.demo-mode #demo-badge { display: inline-block; }
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🖌</span>Custom Color</div>
     <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
-      <div>
+      <div style="flex:1;min-width:100px">
         <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--red2);margin-bottom:6px">R</div>
         <input type="range" class="vol-slider red-fill" id="cr" min="0" max="255" value="255"
-          oninput="updateCustomColor()" style="--pct:100%;width:120px"/>
+          oninput="updateCustomColor()" style="--pct:100%;width:100%"/>
       </div>
-      <div>
+      <div style="flex:1;min-width:100px">
         <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:6px">G</div>
         <input type="range" class="vol-slider green-fill" id="cg" min="0" max="255" value="98"
-          oninput="updateCustomColor()" style="--pct:38%;width:120px"/>
+          oninput="updateCustomColor()" style="--pct:38%;width:100%"/>
       </div>
-      <div>
+      <div style="flex:1;min-width:100px">
         <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:6px">B</div>
         <input type="range" class="vol-slider blue-fill" id="cb" min="0" max="255" value="0"
-          oninput="updateCustomColor()" style="--pct:0%;width:120px"/>
+          oninput="updateCustomColor()" style="--pct:0%;width:100%"/>
       </div>
       <div id="color-preview" style="width:52px;height:52px;border-radius:3px;border:1px solid var(--border2);background:rgb(255,98,0);flex-shrink:0"></div>
       <button class="btn btn-orange" onclick="applyCustomColor()">Apply All</button>
@@ -1106,8 +1271,16 @@ body.demo-mode #demo-badge { display: inline-block; }
         <label>Witch Area Light 2</label>
         <input class="raw-input" id="gip-w2" placeholder="192.168.1.x"/>
       </div>
+      <div class="govee-ip-row">
+        <label class="storm-label">⚡ Storm Light 1</label>
+        <input class="raw-input" id="gip-s1" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label class="storm-label">⚡ Storm Light 2</label>
+        <input class="raw-input" id="gip-s2" placeholder="192.168.1.x"/>
+      </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:14px">
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
       <button class="btn btn-orange btn-sm" onclick="saveGoveeIPs()">💾 Save</button>
       <button class="btn btn-blue   btn-sm" onclick="api('/api/govee/discover')">🔍 Scan LAN</button>
       <button class="btn btn-green  btn-sm" onclick="testAllGovee()">✓ Test All</button>
@@ -1124,7 +1297,7 @@ body.demo-mode #demo-badge { display: inline-block; }
     <div class="panel-title"><span class="pt-icon">📻</span>TX-NR838 Receiver</div>
     <div class="field-row">
       <label>Receiver IP</label>
-      <input id="cfg-ip" value="192.168.1.90"/>
+      <input id="cfg-ip" value="192.168.1.190"/>
     </div>
     <div class="field-row">
       <label>Port</label>
@@ -1156,7 +1329,7 @@ body.demo-mode #demo-badge { display: inline-block; }
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🌐</span>Network Info</div>
     <div class="info-row"><span class="info-key">Server</span><span class="info-val">http://localhost:8080</span></div>
-    <div class="info-row"><span class="info-key">Receiver</span><span class="info-val">192.168.1.90 : 60128</span></div>
+    <div class="info-row"><span class="info-key">Receiver</span><span class="info-val">192.168.1.190 : 60128</span></div>
     <div class="info-row"><span class="info-key">Govee UDP</span><span class="info-val">Port 4003 send / 4002 listen</span></div>
     <div class="info-row" style="border-bottom:none"><span class="info-key">Protocol</span><span class="info-val">ISCP over TCP</span></div>
   </div>
@@ -1242,14 +1415,16 @@ if (DEMO) document.body.classList.add('demo-mode');
 // ── State ─────────────────────────────────────────────────────────────────────
 let appState = {
   connected: false, fogActive: false, stormActive: false,
-  stormPreset: 'distant', stormNextAt: null,
+  stormNextAt: null, stormStrikeIndex: 0, stormStrikeName: '',
   kidMode: false, paused: false, sceneMode: 'normal',
   volumes: { z1:30, z2:25, z3:20, sub:30 },
   mute: { z1:false, z2:false, z3:false },
   autoScare: { active:false, intervalMin:2, chars:{grimreaper:true,headlesshorseman:true,pumpkinking:true}, nextAt:null },
   witchTimer: { active:false, nextAt:null },
+  fogAutoActive: false, fogAutoNextAt: null, fogWarmup: false,
 };
 let flashStyle = 'single';
+let fogDuration = 5;
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let ws, wsRetry = 1000;
@@ -1324,6 +1499,9 @@ function applyState(s) {
   stBtn.className   = s.stormActive ? 'btn btn-red btn-lg btn-full' : 'btn btn-amber btn-lg btn-full';
   updateStormCountdown(s);
 
+  // Fog auto-timer
+  if (s.fogAutoActive !== undefined) updateFogAutoUI(s);
+
   // Volumes
   ['z1','z2','z3'].forEach(z => {
     syncSlider(z, s.volumes[z] ?? 0);
@@ -1374,7 +1552,7 @@ function applySettings(s) {
 }
 
 function applyGovee(devices) {
-  // Govee state sync (no dedicated UI panel in this build beyond IP config)
+  // reserved for future Govee state display
 }
 
 // ── Sliders ───────────────────────────────────────────────────────────────────
@@ -1414,27 +1592,45 @@ function fireChar(c) {
 }
 
 // ── Storm ─────────────────────────────────────────────────────────────────────
-let currentPreset = 'distant';
-function selectPreset(p) {
-  currentPreset = p;
-  ['distant','approaching','overhead'].forEach(x =>
-    document.getElementById(`sp-${x}`)?.classList.toggle('selected', x === p)
-  );
-}
 function toggleStorm() {
-  api('/api/storm/toggle', { preset: currentPreset });
-  if (DEMO) { appState.stormActive = !appState.stormActive; updateStormCountdown(appState); }
+  api('/api/storm/toggle');
+  if (DEMO) {
+    appState.stormActive = !appState.stormActive;
+    if (appState.stormActive) {
+      appState.stormStrikeIndex = 0;
+      appState.stormStrikeName = '🌧 Distant';
+      appState.stormNextAt = Date.now() + 120000;
+    }
+    updateStormCountdown(appState);
+  }
+}
+function fireStrikeNow() {
+  api('/api/storm/strike');
+  demoLog('Manual strike fired', 'AUDIO');
 }
 function updateStormCountdown(s) {
   const el  = document.getElementById('storm-countdown');
-  const stBtn = document.getElementById('storm-toggle-btn');
+  const lbl = document.getElementById('storm-strike-label');
+  const num = document.getElementById('storm-strike-num');
   if (!el) return;
-  if (s.stormActive && s.stormNextAt) {
-    el.textContent = `⚡ Next strike in ${countdown(s.stormNextAt)}`;
-    el.classList.add('ticking');
-  } else if (s.stormActive) {
-    el.textContent = '⚡ Storm active — scheduling…';
+  if (s.stormActive) {
+    if (s.stormStrikeName) {
+      lbl.textContent = s.stormStrikeName;
+      lbl.style.color = 'var(--amber2)';
+    }
+    if (s.stormStrikeIndex !== undefined) {
+      num.textContent = `Strike ${s.stormStrikeIndex + 1} of 5 — auto-cycle active`;
+    }
+    if (s.stormNextAt) {
+      el.textContent = `⚡ Next strike in ${countdown(s.stormNextAt)}`;
+      el.classList.add('ticking');
+    } else {
+      el.textContent = '⚡ Storm active — scheduling…';
+    }
   } else {
+    lbl.textContent = 'Storm Inactive';
+    lbl.style.color = 'var(--dim2)';
+    num.textContent = '5-stage progressive cycle · 2 min intervals';
     el.textContent = 'Storm inactive';
     el.classList.remove('ticking');
   }
@@ -1443,6 +1639,49 @@ function countdown(targetMs) {
   const sec = Math.max(0, Math.round((targetMs - Date.now()) / 1000));
   const m = Math.floor(sec / 60), s = sec % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// ── Fog auto-timer ────────────────────────────────────────────────────────────
+function toggleFogAuto() {
+  api('/api/fog/auto/toggle');
+  if (DEMO) {
+    appState.fogAutoActive = !appState.fogAutoActive;
+    appState.fogAutoNextAt = appState.fogAutoActive ? Date.now() + 600000 : null;
+    appState.fogWarmup = appState.fogAutoActive;
+    updateFogAutoUI(appState);
+  }
+}
+function killFog() {
+  api('/api/fog/kill');
+  demoLog('Fog killed', 'FOG');
+  if (DEMO) {
+    appState.fogAutoActive = false;
+    appState.fogAutoNextAt = null;
+    appState.fogWarmup = false;
+    updateFogAutoUI(appState);
+  }
+}
+function setFogDuration(sec) {
+  fogDuration = sec;
+  [5,10,15].forEach(s => {
+    const btn = document.getElementById(`fog-dur-${s}`);
+    if (btn) btn.classList.toggle('active', s === sec);
+  });
+  api('/api/fog/auto/config', { burstDuration: sec });
+}
+function updateFogAutoUI(s) {
+  const badge  = document.getElementById('fog-auto-badge');
+  const status = document.getElementById('fog-auto-status');
+  const btn    = document.getElementById('fog-auto-btn');
+  const warmup = document.getElementById('fog-warmup-badge');
+
+  badge.classList.toggle('active', !!s.fogAutoActive);
+  status.textContent = s.fogAutoActive
+    ? (s.fogAutoNextAt ? `Next in ${countdown(s.fogAutoNextAt)}` : 'Active')
+    : 'Inactive';
+  btn.textContent = s.fogAutoActive ? '■ Stop Fog Auto-Timer' : '▶ Start Fog Auto-Timer';
+  btn.className   = s.fogAutoActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-blue btn-full btn-lg';
+  warmup.classList.toggle('show', !!s.fogWarmup);
 }
 
 // ── Auto scare ────────────────────────────────────────────────────────────────
@@ -1498,6 +1737,10 @@ function playFX(fx) {
   if (fx === 'thunder' && document.getElementById('auto-flash-toggle')?.checked) {
     api('/api/govee/lightning', { duration: 400, style: flashStyle });
   }
+}
+function stopFX() {
+  api('/api/fx/stop');
+  demoLog('FX stopped', 'AUDIO');
 }
 
 // ── Clip library ──────────────────────────────────────────────────────────────
@@ -1556,6 +1799,10 @@ function saveGoveeIPs() {
     const ip = document.getElementById(`gip-${k}`)?.value?.trim();
     if (ip) api('/api/govee/add', { ip, name: `Witch Light ${i+1}`, slot: `witch${i+1}` });
   });
+  ['s1','s2'].forEach((k,i) => {
+    const ip = document.getElementById(`gip-${k}`)?.value?.trim();
+    if (ip) api('/api/govee/add', { ip, name: `Storm Light ${i+1}`, slot: `storm${i+1}` });
+  });
   appendLog('Govee IPs saved', 'LIGHT');
 }
 function testAllGovee() {
@@ -1580,7 +1827,6 @@ function saveSetting(key, val) {
 // ── Shutdown sequence ─────────────────────────────────────────────────────────
 let shutdownRunning = false;
 function openShutdown() {
-  // Reset UI
   for (let i = 1; i <= 5; i++) {
     document.getElementById(`step-${i}-status`).textContent = '';
     document.getElementById(`step-${i}-status`).className   = 'step-status';
@@ -1614,7 +1860,7 @@ async function runShutdown() {
     await api('/api/onkyo/volume', { zone:'z3', value:0 });
   });
   await step(2, 'Timers stopped', async () => {
-    // Timers stopped server-side by /api/shutdown
+    // timers stopped server-side by /api/shutdown
   });
   await step(3, 'Projectors stopped', async () => {
     await api('/api/onkyo/command', { command: 'NTCSTOP' });
@@ -1671,6 +1917,10 @@ setInterval(() => {
   if (appState.witchTimer?.active && appState.witchTimer.nextAt) {
     document.getElementById('witch-status').textContent =
       `Next in ${countdown(appState.witchTimer.nextAt)}`;
+  }
+  if (appState.fogAutoActive && appState.fogAutoNextAt) {
+    document.getElementById('fog-auto-status').textContent =
+      `Next in ${countdown(appState.fogAutoNextAt)}`;
   }
 }, 1000);
 
