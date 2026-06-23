@@ -30,9 +30,10 @@ let settings = {
 // ─── Govee Devices ────────────────────────────────────────────────────────────
 let goveeDevices = [];
 const GOVEE_IPS = {
-  graveyard1: '', graveyard2: '', graveyard3: '', graveyard4: '',
-  witch1: '', witch2: '',
-  storm1: '', storm2: '',
+  graveyard: '',
+  witch: '',
+  jamboree: '',
+  tree: '',
 };
 const GOVEE_SLOT_IDS = {};
 
@@ -145,28 +146,19 @@ async function flashLights(style, allLights) {
   const snapshot = goveeDevices.map(d => ({ id: d.id, color: {...d.color}, brightness: d.brightness }));
   const bri = style === 'dim' ? 25 : style === 'medium' ? 60 : 100;
   const holdMs = style === 'all-blast' ? 600 : style === 'all-medium' ? 400 : 250;
-  const ids = allLights ? null : getSlotIds('storm1', 'storm2');
-
-  if (!allLights && ids.length === 0) return; // No storm lights configured
-
-  await goveeSetColor(255, 255, 255, ids || undefined);
-  await goveeSetBrightness(bri, ids || undefined);
+  await goveeSetColor(255, 255, 255);
+  await goveeSetBrightness(bri);
 
   setTimeout(async () => {
-    if (allLights) {
-      for (const snap of snapshot) {
-        const dev = goveeDevices.find(d => d.id === snap.id);
-        if (!dev) continue;
-        await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } });
-        await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } });
-        dev.color = snap.color;
-        dev.brightness = snap.brightness;
-      }
-      broadcastGovee();
-    } else {
-      const stormIds = getSlotIds('storm1', 'storm2');
-      if (stormIds.length > 0) await goveeSetColor(0, 0, 0, stormIds);
+    for (const snap of snapshot) {
+      const dev = goveeDevices.find(d => d.id === snap.id);
+      if (!dev) continue;
+      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } });
+      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } });
+      dev.color = snap.color;
+      dev.brightness = snap.brightness;
     }
+    broadcastGovee();
   }, holdMs);
 }
 
@@ -280,6 +272,8 @@ function stateSnapshot() {
       active: state.witchTimer.active,
       nextAt: state.witchTimer.nextAt,
     },
+    graveyardCycle: { active: graveyardCycle.active },
+    jamboreeLoop:   { active: jamboreeLoop.active },
   };
 }
 
@@ -519,44 +513,30 @@ let witchProcess    = null;
 let ambientProcess  = null;
 let ambientActive   = false;
 let fxProcess       = null;
+let graveyardCycle  = { active: false, index: 0, timer: null };
+let jamboreeLoop    = { active: false, index: 0, timer: null };
 
 function playStormClip() {
   const file = STORM_FILES[Math.floor(Math.random() * STORM_FILES.length)];
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
   stormProcess = spawn(VLC_PATH, [
-    path.join(STORM_DIR, file), '--play-and-exit', '--no-video', '--qt-start-minimized',
-  ], { detached: true, stdio: 'ignore' });
+    path.join(STORM_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-video',
+  ], { detached: true, stdio: ['ignore','ignore','pipe'] });
   stormProcess.unref();
-  stormProcess.on('exit', () => { stormProcess = null; });
+  stormProcess.stderr?.on('data', d => console.error('[VLC-STORM]', d.toString().trim()));
+  stormProcess.on('error', e => console.error('[VLC-STORM ERROR]', e.message));
+  stormProcess.on('exit', (code) => { console.log('[VLC-STORM exit]', code); stormProcess = null; });
 }
 
-const AMBIENT_FILES = [
-  '587944__noahbangs__ambience-haunted-cave.mp3',
-  'SS_Corpse Crowd_Wall_Spotlight_H.mp4',
-  '587941__noahbangs__ghost-moans-5-different-ones.mp3',
-  'SS_Grave Digger_Wall_Candle_H.mp4',
-  '587942__noahbangs__ghost-activity-2.mp3',
-  'SS_Zombie Hands_Wall_Spotlight_H.mp4',
-  '706896__noahbangs__re-creation-hells-bells-tolling-12-o-clock-processed.flac',
-  'SS_Wicked Watchers_Wall_Flashlight_H.mp4',
-  '587946__noahbangs__monster-moan-droning.mp3',
-  'SS_Grave Risers_Wall_Spotlight_H.mp4',
-  '587943__noahbangs__ghost-activity-1.mp3',
-  'SS_Grave Riser_Wall_Spotlight_H.mp4',
-  '587945__noahbangs__zombie-moan-raspy.mp3',
-  'SS_Zombie Hand_Wall_Spotlight_H.mp4',
-  '636089__noahbangs__rattling-bones.wav',
-  '706897__noahbangs__re-creation-hells-bells-tolling-12-o-clock-unfiltered.flac',
-];
+const AMBIENT_FILE = 'graveyardam.mp3';
 
 function startAmbient() {
   if (ambientProcess) return;
   broadcastLog('Graveyard ambient loop started', 'AUDIO');
-  const files = AMBIENT_FILES.map(f => path.join(AMBIENT_DIR, f));
-  // BUG FIX: no detached/unref so .kill() works reliably on Windows
   ambientProcess = spawn(VLC_PATH, [
-    ...files, '--loop', '--random', '--no-video', '--gain', '0.6', '--qt-start-minimized',
+    path.join(AMBIENT_DIR, AMBIENT_FILE),
+    '--intf', 'dummy', '--loop', '--no-video',
   ], { stdio: 'ignore' });
   ambientActive = true;
   ambientProcess.on('exit', () => { ambientProcess = null; ambientActive = false; });
@@ -564,7 +544,10 @@ function startAmbient() {
 
 function stopAmbient() {
   if (ambientProcess) {
-    try { ambientProcess.kill('SIGKILL'); } catch (_) {}
+    try {
+      // Windows-safe kill: taskkill terminates VLC and any child processes
+      spawn('taskkill', ['/pid', ambientProcess.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
+    } catch (_) {}
     ambientProcess = null;
     broadcastLog('Graveyard ambient loop stopped', 'AUDIO');
   }
@@ -578,7 +561,7 @@ function playWitchClip(clip) {
   broadcastLog(`Witch clip: ${key}`, 'WITCH');
   witchProcess = spawn(VLC_PATH, [
     path.join(WITCH_DIR, WITCH_MAP[key]),
-    '--play-and-exit', '--no-video-title-show', '--qt-start-minimized',
+    '--intf', 'dummy', '--play-and-exit', '--no-video',
   ], { detached: true, stdio: 'ignore' });
   witchProcess.unref();
   witchProcess.on('exit', () => { witchProcess = null; });
@@ -1061,7 +1044,7 @@ app.post('/api/fx/play', (req, res) => {
     // BUG FIX: kill previous FX before spawning new one
     if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
     fxProcess = spawn(VLC_PATH, [
-      path.join(AMBIENT_DIR, FX_FILES[fx]), '--play-and-exit', '--no-video', '--qt-start-minimized',
+      path.join(AMBIENT_DIR, FX_FILES[fx]), '--intf', 'dummy', '--play-and-exit', '--no-video',
     ], { detached: true, stdio: 'ignore' });
     fxProcess.unref();
     fxProcess.on('exit', () => { fxProcess = null; });
@@ -1251,8 +1234,75 @@ app.get('/api/govee/devices', (req, res) => {
   res.json({ ok: true, devices: goveeDevices });
 });
 
+// ─── Graveyard Auto Cycle ─────────────────────────────────────────────────────
+const GRAVEYARD_FILES = Array.from({length:23}, (_,i) => `clip${String(i+1).padStart(2,'0')}.mp3`);
+
+function scheduleGraveyardCycle() {
+  if (!graveyardCycle.active) return;
+  graveyardCycle.timer = setTimeout(() => {
+    if (!graveyardCycle.active) return;
+    const file = GRAVEYARD_FILES[graveyardCycle.index % GRAVEYARD_FILES.length];
+    graveyardCycle.index++;
+    broadcastLog(`Graveyard cycle: ${file}`, 'AUDIO');
+    if (ambientProcess) { try { ambientProcess.kill(); } catch (_) {} ambientProcess = null; }
+    ambientProcess = spawn(VLC_PATH, [
+      path.join(AMBIENT_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-video',
+    ], { stdio: 'ignore' });
+    ambientProcess.on('exit', () => {
+      ambientProcess = null;
+      if (graveyardCycle.active) scheduleGraveyardCycle();
+    });
+  }, 120000); // 2 min gap
+}
+
+app.post('/api/graveyard/cycle/toggle', (req, res) => {
+  graveyardCycle.active = !graveyardCycle.active;
+  broadcastLog(`Graveyard cycle ${graveyardCycle.active ? 'ON' : 'OFF'}`, 'AUDIO');
+  if (graveyardCycle.active) {
+    graveyardCycle.index = 0;
+    scheduleGraveyardCycle();
+  } else {
+    if (graveyardCycle.timer) { clearTimeout(graveyardCycle.timer); graveyardCycle.timer = null; }
+  }
+  broadcast({ type: 'state', data: stateSnapshot() });
+  res.json({ ok: true, active: graveyardCycle.active });
+});
+
+// ─── Jamboree Auto Loop ───────────────────────────────────────────────────────
+const JAMBOREE_TITLES = Object.keys(JAMBOREE_MAP); // populated after JAMBOREE_MAP
+function scheduleJamboreeLoop() {
+  if (!jamboreeLoop.active) return;
+  const title = JAMBOREE_TITLES[jamboreeLoop.index % JAMBOREE_TITLES.length];
+  jamboreeLoop.index++;
+  broadcastLog(`Jamboree loop: ${title}`, 'VIDEO');
+  playJamboree(title);
+  if (jamboreeProcess) {
+    jamboreeProcess.on('exit', () => {
+      if (jamboreeLoop.active) {
+        jamboreeLoop.timer = setTimeout(scheduleJamboreeLoop, 1000);
+      }
+    });
+  } else {
+    if (jamboreeLoop.active) jamboreeLoop.timer = setTimeout(scheduleJamboreeLoop, 5000);
+  }
+}
+
+app.post('/api/jamboree/loop/toggle', (req, res) => {
+  jamboreeLoop.active = !jamboreeLoop.active;
+  broadcastLog(`Jamboree loop ${jamboreeLoop.active ? 'ON' : 'OFF'}`, 'VIDEO');
+  if (jamboreeLoop.active) {
+    jamboreeLoop.index = 0;
+    scheduleJamboreeLoop();
+  } else {
+    if (jamboreeLoop.timer) { clearTimeout(jamboreeLoop.timer); jamboreeLoop.timer = null; }
+    stopJamboree();
+  }
+  broadcast({ type: 'state', data: stateSnapshot() });
+  res.json({ ok: true, active: jamboreeLoop.active });
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
-const PORT = 8080;
+const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`[HAUNT] HAUNT CTRL v3 on http://localhost:${PORT}`);
   testConnection();

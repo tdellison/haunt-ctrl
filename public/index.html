@@ -928,6 +928,20 @@ html, body { touch-action: manipulation; }
     </div>
   </div>
 
+  <!-- Graveyard Auto Cycle -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎞</span>Graveyard Auto Cycle</div>
+    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
+      Cycles through all 23 clips in random order — 2 min gap between each clip.
+    </p>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="countdown-badge" id="cycle-badge" style="flex:1">
+        <span class="cd-dot"></span><span id="cycle-status">Inactive</span>
+      </div>
+    </div>
+    <button class="btn btn-green btn-full btn-lg" id="cycle-btn" onclick="toggleGraveyardCycle()">▶ Start Auto Cycle</button>
+  </div>
+
   <!-- Ambient loop -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🌫</span>Graveyard Ambient Loop</div>
@@ -1036,6 +1050,15 @@ html, body { touch-action: manipulation; }
       <button class="btn btn-red    btn-sm" onclick="p1Control('stop')">■ STOP</button>
       <button class="btn btn-orange btn-sm" onclick="p1Control('next')">⏭ NEXT</button>
     </div>
+  </div>
+
+  <!-- Jamboree Loop -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🔁</span>Jamboree Auto Loop</div>
+    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
+      Plays all 15 Jamboree clips continuously in sequence — 1s gap between each.
+    </p>
+    <button class="btn btn-orange btn-full btn-lg" id="jloop-btn" onclick="toggleJamboreeLoop()">▶ Start Jamboree Loop</button>
   </div>
 
   <div class="grid2">
@@ -1247,39 +1270,24 @@ html, body { touch-action: manipulation; }
 
   <!-- Govee IP config -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">💡</span>Govee Light IPs</div>
+    <div class="panel-title"><span class="pt-icon">💡</span>Govee Light Pairs</div>
+    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">Each pair is 2 daisy-chained lights on one controller IP.</p>
     <div class="govee-ip-grid">
       <div class="govee-ip-row">
-        <label>Graveyard Light 1</label>
-        <input class="raw-input" id="gip-1" placeholder="192.168.1.x"/>
+        <label>🪦 Graveyard Pair</label>
+        <input class="raw-input" id="gip-graveyard" placeholder="192.168.1.x"/>
       </div>
       <div class="govee-ip-row">
-        <label>Graveyard Light 2</label>
-        <input class="raw-input" id="gip-2" placeholder="192.168.1.x"/>
+        <label>🧙 Witch Pair</label>
+        <input class="raw-input" id="gip-witch" placeholder="192.168.1.x"/>
       </div>
       <div class="govee-ip-row">
-        <label>Graveyard Light 3</label>
-        <input class="raw-input" id="gip-3" placeholder="192.168.1.x"/>
+        <label>🎃 Jamboree Pair</label>
+        <input class="raw-input" id="gip-jamboree" placeholder="192.168.1.x"/>
       </div>
       <div class="govee-ip-row">
-        <label>Graveyard Light 4</label>
-        <input class="raw-input" id="gip-4" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label>Witch Area Light 1</label>
-        <input class="raw-input" id="gip-w1" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label>Witch Area Light 2</label>
-        <input class="raw-input" id="gip-w2" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label class="storm-label">⚡ Storm Light 1</label>
-        <input class="raw-input" id="gip-s1" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label class="storm-label">⚡ Storm Light 2</label>
-        <input class="raw-input" id="gip-s2" placeholder="192.168.1.x"/>
+        <label>🌲 Tree Pair</label>
+        <input class="raw-input" id="gip-tree" placeholder="192.168.1.x"/>
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
@@ -1330,7 +1338,7 @@ html, body { touch-action: manipulation; }
   <!-- Network info -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🌐</span>Network Info</div>
-    <div class="info-row"><span class="info-key">Server</span><span class="info-val">http://localhost:8080</span></div>
+    <div class="info-row"><span class="info-key">Server</span><span class="info-val">http://localhost:3000</span></div>
     <div class="info-row"><span class="info-key">Receiver</span><span class="info-val">192.168.1.190 : 60128</span></div>
     <div class="info-row"><span class="info-key">Govee UDP</span><span class="info-val">Port 4003 send / 4002 listen</span></div>
     <div class="info-row" style="border-bottom:none"><span class="info-key">Protocol</span><span class="info-val">ISCP over TCP</span></div>
@@ -1424,6 +1432,8 @@ let appState = {
   autoScare: { active:false, intervalMin:2, chars:{grimreaper:true,headlesshorseman:true,pumpkinking:true}, nextAt:null },
   witchTimer: { active:false, nextAt:null },
   fogAutoActive: false, fogAutoNextAt: null, fogWarmup: false,
+  graveyardCycle: { active: false, nextAt: null },
+  jamboreeLoop: { active: false },
 };
 let flashStyle = 'single';
 let fogDuration = 5;
@@ -1521,6 +1531,26 @@ function applyState(s) {
     : 'Inactive';
   aBtn.textContent = s.autoScare?.active ? '■ Stop Auto Scare' : '▶ Start Auto Scare';
   aBtn.className   = s.autoScare?.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
+
+  // Graveyard auto cycle
+  if (s.graveyardCycle !== undefined) {
+    const cb   = document.getElementById('cycle-badge');
+    const cs   = document.getElementById('cycle-status');
+    const cBtn = document.getElementById('cycle-btn');
+    cb.classList.toggle('active', !!s.graveyardCycle.active);
+    cs.textContent = s.graveyardCycle.active
+      ? (s.graveyardCycle.nextAt ? `Next in ${countdown(s.graveyardCycle.nextAt)}` : 'Playing…')
+      : 'Inactive';
+    cBtn.textContent = s.graveyardCycle.active ? '■ Stop Auto Cycle' : '▶ Start Auto Cycle';
+    cBtn.className   = s.graveyardCycle.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
+  }
+
+  // Jamboree loop
+  if (s.jamboreeLoop !== undefined) {
+    const jBtn = document.getElementById('jloop-btn');
+    jBtn.textContent = s.jamboreeLoop.active ? '■ Stop Jamboree Loop' : '▶ Start Jamboree Loop';
+    jBtn.className   = s.jamboreeLoop.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-orange btn-full btn-lg';
+  }
 
   // Witch timer
   const wb   = document.getElementById('witch-badge');
@@ -1714,6 +1744,16 @@ function updateScareChars() {
   });
 }
 
+// ── Graveyard auto cycle ──────────────────────────────────────────────────────
+function toggleGraveyardCycle() {
+  api('/api/graveyard/cycle/toggle');
+}
+
+// ── Jamboree loop ─────────────────────────────────────────────────────────────
+function toggleJamboreeLoop() {
+  api('/api/jamboree/loop/toggle');
+}
+
 // ── Witch timer ───────────────────────────────────────────────────────────────
 function toggleWitch() {
   api('/api/witch/toggle');
@@ -1793,17 +1833,14 @@ function applyCustomColor() {
 
 // ── Govee IPs ─────────────────────────────────────────────────────────────────
 function saveGoveeIPs() {
-  ['1','2','3','4'].forEach(n => {
-    const ip = document.getElementById(`gip-${n}`)?.value?.trim();
-    if (ip) api('/api/govee/add', { ip, name: `Graveyard Light ${n}`, slot: `graveyard${n}` });
-  });
-  ['w1','w2'].forEach((k,i) => {
-    const ip = document.getElementById(`gip-${k}`)?.value?.trim();
-    if (ip) api('/api/govee/add', { ip, name: `Witch Light ${i+1}`, slot: `witch${i+1}` });
-  });
-  ['s1','s2'].forEach((k,i) => {
-    const ip = document.getElementById(`gip-${k}`)?.value?.trim();
-    if (ip) api('/api/govee/add', { ip, name: `Storm Light ${i+1}`, slot: `storm${i+1}` });
+  [
+    { key: 'graveyard', name: 'Graveyard Pair', slot: 'graveyard' },
+    { key: 'witch',     name: 'Witch Pair',     slot: 'witch'     },
+    { key: 'jamboree',  name: 'Jamboree Pair',  slot: 'jamboree'  },
+    { key: 'tree',      name: 'Tree Pair',       slot: 'tree'      },
+  ].forEach(({ key, name, slot }) => {
+    const ip = document.getElementById(`gip-${key}`)?.value?.trim();
+    if (ip) api('/api/govee/add', { ip, name, slot });
   });
   appendLog('Govee IPs saved', 'LIGHT');
 }
@@ -1893,15 +1930,12 @@ function appendLog(msg, category = 'SYSTEM') {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
-  ['touchstart','click'].forEach(evt =>
-    tab.addEventListener(evt, (e) => {
-      e.preventDefault();
-      document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
-      document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(`pane-${tab.dataset.pane}`)?.classList.add('active');
-    }, { passive: false })
-  );
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`pane-${tab.dataset.pane}`)?.classList.add('active');
+  });
 });
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
@@ -1926,6 +1960,10 @@ setInterval(() => {
   if (appState.fogAutoActive && appState.fogAutoNextAt) {
     document.getElementById('fog-auto-status').textContent =
       `Next in ${countdown(appState.fogAutoNextAt)}`;
+  }
+  if (appState.graveyardCycle?.active && appState.graveyardCycle.nextAt) {
+    document.getElementById('cycle-status').textContent =
+      `Next in ${countdown(appState.graveyardCycle.nextAt)}`;
   }
 }, 1000);
 
