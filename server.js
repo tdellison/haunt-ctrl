@@ -521,7 +521,7 @@ function playStormClip() {
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
   stormProcess = spawn(VLC_PATH, [
-    path.join(STORM_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-video',
+    path.join(STORM_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
   ], { detached: true, stdio: ['ignore','ignore','pipe'] });
   stormProcess.unref();
   stormProcess.stderr?.on('data', d => console.error('[VLC-STORM]', d.toString().trim()));
