@@ -732,9 +732,82 @@ body.demo-mode #demo-badge { display: inline-block; }
 }
 
 html, body { touch-action: manipulation; }
+
+/* ── Character card color themes ── */
+.char-card-reaper { background:linear-gradient(180deg,#060c18,#020810); border-color:#0e2a42; }
+.char-card-reaper:hover { border-color:var(--blue); box-shadow:0 0 24px var(--gb); transform:translateY(-2px); }
+.char-card-reaper h3 { color:var(--blue); }
+.char-card-reaper .cicon { filter:drop-shadow(0 0 8px rgba(79,195,247,.6)); }
+.char-card-horseman { background:linear-gradient(180deg,#180606,#0e0202); border-color:#3a1010; }
+.char-card-horseman:hover { border-color:var(--red); box-shadow:0 0 24px var(--gr); transform:translateY(-2px); }
+.char-card-horseman h3 { color:var(--red2); }
+.char-card-horseman .cicon { filter:drop-shadow(0 0 8px rgba(192,57,43,.6)); }
+.char-card-pumpkin { background:linear-gradient(180deg,#061806,#020e02); border-color:#1a4a1a; }
+.char-card-pumpkin:hover { border-color:var(--green); box-shadow:0 0 24px var(--gg); transform:translateY(-2px); }
+.char-card-pumpkin h3 { color:var(--green); }
+.char-card-pumpkin .cicon { filter:drop-shadow(0 0 8px rgba(102,187,106,.6)); }
+@keyframes pulse-blue  { 0%,100%{box-shadow:0 0 20px var(--gb)} 50%{box-shadow:0 0 40px var(--gb),0 0 60px rgba(79,195,247,.3)} }
+@keyframes pulse-red   { 0%,100%{box-shadow:0 0 20px var(--gr)} 50%{box-shadow:0 0 40px var(--gr),0 0 60px rgba(192,57,43,.4)} }
+@keyframes pulse-green { 0%,100%{box-shadow:0 0 20px var(--gg)} 50%{box-shadow:0 0 40px var(--gg),0 0 60px rgba(102,187,106,.3)} }
+.char-card-reaper.playing   { border-color:var(--blue);  animation:pulse-blue  1.2s infinite; }
+.char-card-horseman.playing { border-color:var(--red);   animation:pulse-red   1.2s infinite; }
+.char-card-pumpkin.playing  { border-color:var(--green); animation:pulse-green 1.2s infinite; }
+
+/* ── Screen flash overlay ── */
+#screen-flash { position:fixed; inset:0; pointer-events:none; z-index:9997; opacity:0; }
+@keyframes sflash { 0%{opacity:.35} 100%{opacity:0} }
+#screen-flash.flashing { animation:sflash .6s ease-out forwards; }
+
+/* ── Tab theme colors ── */
+.tab[data-pane="graveyard"].active { color:var(--green); border-bottom-color:var(--green); background:rgba(102,187,106,.06); text-shadow:0 0 10px var(--gg); }
+.tab[data-pane="lights"].active    { color:var(--blue);  border-bottom-color:var(--blue);  background:rgba(79,195,247,.06);  text-shadow:0 0 10px var(--gb); }
+
+/* ── Graveyard pane green corner accents ── */
+#pane-graveyard .panel::before,#pane-graveyard .panel::after { border-color:var(--green); }
+
+/* ── Storm panel blue theme ── */
+.panel-storm { border-color:rgba(79,195,247,.3) !important; }
+.panel-storm .panel-title { color:var(--blue); text-shadow:0 0 8px var(--gb); }
+.panel-storm .panel::before,.panel-storm .panel::after { border-color:var(--blue); }
+.panel-storm #storm-strike-label { color:var(--blue); text-shadow:0 0 8px var(--gb); }
+
+/* ── Witch panel purple theme ── */
+.panel-witch { border-color:rgba(206,147,216,.25) !important; }
+.panel-witch .panel-title { color:var(--purple); text-shadow:0 0 8px var(--gp); }
+.panel-witch .panel::before,.panel-witch .panel::after { border-color:var(--purple); }
+
+/* ── Ambient dot ── */
+.ambient-dot { display:none; width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--gg); animation:dot-pulse 1s infinite; margin-left:8px; vertical-align:middle; }
+.ambient-dot.show { display:inline-block; }
+
+/* ── Storm bolt scale by intensity ── */
+.storm-bolt { display:inline-block; transition:all .5s ease; }
+.storm-bolt.s0 { font-size:.8em; opacity:.4; color:var(--dim2); }
+.storm-bolt.s1 { font-size:.9em; opacity:.6; }
+.storm-bolt.s2 { font-size:1.1em; opacity:.75; }
+.storm-bolt.s3 { font-size:1.5em; opacity:.9; color:var(--amber2); text-shadow:0 0 8px var(--gy); }
+.storm-bolt.s4 { font-size:1.9em; color:var(--blue); text-shadow:0 0 14px var(--gb); }
+.storm-bolt.s5 { font-size:2.4em; color:#fff; text-shadow:0 0 20px var(--gb),0 0 40px rgba(79,195,247,.5); }
+
+/* ── All Stop flash ── */
+@keyframes allstop-flash { 0%,100%{background:linear-gradient(180deg,#5c0a0a,#2e0000)} 50%{background:linear-gradient(180deg,#cc0000,#880000);box-shadow:0 0 50px rgba(255,0,0,.8);} }
+.btn-allstop-flash { animation:allstop-flash .25s ease 3 !important; }
+
+/* ── Jamboree now-playing bar ── */
+#jamboree-nowplaying-bar { background:rgba(255,127,23,.06); border:1px solid rgba(255,127,23,.25); border-radius:2px; padding:6px 12px; margin-bottom:10px; font-family:'Courier New',monospace; font-size:.74em; letter-spacing:2px; color:var(--orange2); display:none; align-items:center; gap:8px; }
+#jamboree-nowplaying-bar.show { display:flex; }
+.jp-dot { width:7px;height:7px;border-radius:50%;background:var(--orange2);animation:dot-pulse 1s infinite;flex-shrink:0; }
+
+/* ── Scrolling scanlines ── */
+@keyframes scanlines { from{background-position:0 0} to{background-position:0 100px} }
+body::before { animation:scanlines 10s linear infinite; }
+
+/* ── Enhanced press ── */
+.btn:active { transform:scale(.92) translateY(2px) !important; box-shadow:none !important; }
 </style>
 </head>
 <body>
+<div id="screen-flash"></div>
 
 <div id="demo-banner">⚠ DEMO MODE — No Server Required — All Controls Functional</div>
 
@@ -754,7 +827,7 @@ html, body { touch-action: manipulation; }
 
 <!-- ══ GLOBAL BAR ══ -->
 <div class="global-bar">
-  <button class="btn btn-red btn-xl" onclick="openShutdown()">⛔ ALL STOP</button>
+  <button class="btn btn-red btn-xl" id="allstop-btn" onclick="openShutdown()">⛔ ALL STOP</button>
   <button class="btn btn-amber btn-lg" id="pause-btn" onclick="api('/api/pause')">⏸ PAUSE</button>
 <button class="btn btn-blue  btn-lg" onclick="api('/api/fog/fire',{duration:5000})">🌫 FOG BURST</button>
 </div>
@@ -798,17 +871,17 @@ html, body { touch-action: manipulation; }
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🎬</span>Character Quick Fire</div>
     <div class="grid3">
-      <div class="char-card" onclick="fireChar('grimreaper')">
+      <div class="char-card char-card-reaper" id="charcard-cmd-reaper" onclick="fireChar('grimreaper')">
         <span class="cicon">☠️</span>
         <h3>Reaper</h3>
         <p>7s fog · cold blue · boost</p>
       </div>
-      <div class="char-card" onclick="fireChar('headlesshorseman')">
+      <div class="char-card char-card-horseman" id="charcard-cmd-horseman" onclick="fireChar('headlesshorseman')">
         <span class="cicon">🐴</span>
         <h3>Horseman</h3>
         <p>3s fog · blood red · boost</p>
       </div>
-      <div class="char-card" onclick="fireChar('pumpkinking')">
+      <div class="char-card char-card-pumpkin" id="charcard-cmd-pumpkin" onclick="fireChar('pumpkinking')">
         <span class="cicon">👑</span>
         <h3>Pmp King</h3>
         <p>12s fog · witch green · boost</p>
@@ -817,7 +890,7 @@ html, body { touch-action: manipulation; }
   </div>
 
   <!-- Storm mode -->
-  <div class="panel">
+  <div class="panel panel-storm">
     <div class="panel-title"><span class="pt-icon">⛈</span>Storm Mode</div>
     <div class="grid2">
       <div>
@@ -825,7 +898,7 @@ html, body { touch-action: manipulation; }
           <span id="storm-strike-label">Storm Inactive</span>
           <span id="storm-strike-num" style="color:var(--dim2)">5-stage progressive cycle · 2 min intervals</span>
         </div>
-        <div id="storm-countdown">Storm inactive</div>
+        <div id="storm-countdown"><span class="storm-bolt s0" id="storm-bolt">⚡</span> Storm inactive</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <button class="btn btn-amber btn-lg btn-full" id="storm-toggle-btn" onclick="toggleStorm()">▶ Start Auto Storm</button>
@@ -859,14 +932,14 @@ html, body { touch-action: manipulation; }
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🎵</span>FX Soundboard</div>
     <div class="fx-grid">
-      <button class="btn btn-red    btn-sm" onclick="playFX('scream')">😱 SCREAM</button>
-      <button class="btn btn-amber  btn-sm" onclick="playFX('thunder')">⛈ THUNDER</button>
-      <button class="btn btn-purple btn-sm" onclick="playFX('laugh')">😈 LAUGH</button>
-      <button class="btn btn-orange btn-sm" onclick="playFX('chains')">⛓ CHAINS</button>
-      <button class="btn btn-orange btn-sm" onclick="playFX('crows')">🐦‍⬛ CROWS</button>
-      <button class="btn btn-orange btn-sm" onclick="playFX('gallop')">🐴 GALLOP</button>
-      <button class="btn btn-red    btn-sm" onclick="playFX('scythe')">☠️ SCYTHE</button>
-      <button class="btn btn-purple btn-sm" onclick="playFX('cackle')">🧙 CACKLE</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('scream')">😱 SCREAM</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('thunder')">⛈ THUNDER</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('laugh')">😈 LAUGH</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('chains')">⛓ CHAINS</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('crows')">🐦‍⬛ CROWS</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('gallop')">🐴 GALLOP</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('scythe')">☠️ SCYTHE</button>
+      <button class="btn btn-amber btn-sm" onclick="playFX('cackle')">🧙 CACKLE</button>
     </div>
     <div style="margin-top:10px">
       <button class="btn btn-red btn-full btn-sm" onclick="stopFX()">■ STOP FX</button>
@@ -912,7 +985,7 @@ html, body { touch-action: manipulation; }
         </div>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel panel-witch">
       <div class="panel-title"><span class="pt-icon">🧙</span>Witch Audio Timer</div>
       <div class="countdown-badge" id="witch-badge" style="margin-bottom:12px">
         <span class="cd-dot"></span><span id="witch-status">Inactive</span>
@@ -943,7 +1016,7 @@ html, body { touch-action: manipulation; }
 
   <!-- Ambient loop -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🌫</span>Graveyard Ambient Loop</div>
+    <div class="panel-title"><span class="pt-icon">🌫</span>Graveyard Ambient Loop<span class="ambient-dot" id="ambient-dot"></span></div>
     <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
       Continuous shuffled background atmosphere — runs underneath, audio only.
     </p>
@@ -973,13 +1046,13 @@ html, body { touch-action: manipulation; }
       Graveyard ambient runs continuously underneath — character triggers boost audio above ambient, fire fog + lights, then restore.
     </p>
     <div class="grid3">
-      <div class="char-card" onclick="fireChar('grimreaper')">
+      <div class="char-card char-card-reaper" id="charcard-grave-reaper" onclick="fireChar('grimreaper')">
         <span class="cicon">☠️</span><h3>Grim Reaper</h3><p>Boost · 7s fog · cold blue</p>
       </div>
-      <div class="char-card" onclick="fireChar('headlesshorseman')">
+      <div class="char-card char-card-horseman" id="charcard-grave-horseman" onclick="fireChar('headlesshorseman')">
         <span class="cicon">🐴</span><h3>Headless Horseman</h3><p>Boost · 3s fog · blood red</p>
       </div>
-      <div class="char-card" onclick="fireChar('pumpkinking')">
+      <div class="char-card char-card-pumpkin" id="charcard-grave-pumpkin" onclick="fireChar('pumpkinking')">
         <span class="cicon">👑</span><h3>Pumpkin King</h3><p>Boost · 12s fog · witch green</p>
       </div>
     </div>
@@ -1034,6 +1107,7 @@ html, body { touch-action: manipulation; }
 
 <!-- ─── JAMBOREE ─── -->
 <div class="pane" id="pane-jamboree">
+<div id="jamboree-nowplaying-bar"><span class="jp-dot"></span><span id="jamboree-nowplaying-text">No clip playing</span></div>
 
   <!-- Display controls -->
   <div class="panel">
@@ -1617,9 +1691,32 @@ function setScene(s) {
     document.getElementById(`scene-${sc}`)?.classList.toggle('active', sc === s)
   );
 }
+function screenFlash(color) {
+  const el = document.getElementById('screen-flash');
+  if (!el) return;
+  el.style.background = color;
+  el.classList.remove('flashing');
+  void el.offsetWidth;
+  el.classList.add('flashing');
+  el.addEventListener('animationend', () => el.classList.remove('flashing'), { once: true });
+}
+
 function fireChar(c) {
   api('/api/character', { character: c });
   demoLog(`Character trigger: ${c}`, 'SCARE');
+  const flashColors = { grimreaper: 'rgba(79,195,247,.22)', headlesshorseman: 'rgba(192,57,43,.28)', pumpkinking: 'rgba(102,187,106,.2)' };
+  const cardKeys    = { grimreaper: 'reaper', headlesshorseman: 'horseman', pumpkinking: 'pumpkin' };
+  screenFlash(flashColors[c] || 'rgba(255,179,71,.15)');
+  const key = cardKeys[c];
+  if (key) {
+    ['cmd','grave'].forEach(loc => {
+      const card = document.getElementById(`charcard-${loc}-${key}`);
+      if (card) {
+        card.classList.add('playing');
+        setTimeout(() => card.classList.remove('playing'), 20000);
+      }
+    });
+  }
 }
 
 // ── Storm ─────────────────────────────────────────────────────────────────────
@@ -1644,25 +1741,27 @@ function updateStormCountdown(s) {
   const lbl = document.getElementById('storm-strike-label');
   const num = document.getElementById('storm-strike-num');
   if (!el) return;
+  const bolt = document.getElementById('storm-bolt');
   if (s.stormActive) {
     if (s.stormStrikeName) {
       lbl.textContent = s.stormStrikeName;
-      lbl.style.color = 'var(--amber2)';
+      lbl.style.color = 'var(--blue)';
     }
     if (s.stormStrikeIndex !== undefined) {
       num.textContent = `Strike ${s.stormStrikeIndex + 1} of 5 — auto-cycle active`;
+      if (bolt) bolt.className = `storm-bolt s${s.stormStrikeIndex + 1}`;
     }
     if (s.stormNextAt) {
-      el.textContent = `⚡ Next strike in ${countdown(s.stormNextAt)}`;
+      el.innerHTML = `<span class="storm-bolt ${bolt ? bolt.className.split(' ')[1] : 's1'}" id="storm-bolt">⚡</span> Next strike in ${countdown(s.stormNextAt)}`;
       el.classList.add('ticking');
     } else {
-      el.textContent = '⚡ Storm active — scheduling…';
+      el.innerHTML = `<span class="storm-bolt s1" id="storm-bolt">⚡</span> Storm active — scheduling…`;
     }
   } else {
     lbl.textContent = 'Storm Inactive';
     lbl.style.color = 'var(--dim2)';
     num.textContent = '5-stage progressive cycle · 2 min intervals';
-    el.textContent = 'Storm inactive';
+    el.innerHTML = `<span class="storm-bolt s0" id="storm-bolt">⚡</span> Storm inactive`;
     el.classList.remove('ticking');
   }
 }
@@ -1762,12 +1861,15 @@ function toggleWitch() {
 async function toggleAmbient() {
   const r = await api('/api/ambient/toggle');
   const btn = document.getElementById('ambient-btn');
+  const dot = document.getElementById('ambient-dot');
   if (r?.active) {
     btn.textContent = '■ Stop Ambient Loop';
     btn.className = 'btn btn-red btn-full btn-lg';
+    if (dot) dot.classList.add('show');
   } else {
     btn.textContent = '▶ Start Ambient Loop';
     btn.className = 'btn btn-green btn-full btn-lg';
+    if (dot) dot.classList.remove('show');
   }
 }
 
@@ -1792,6 +1894,9 @@ function loadClip(char, title) {
 }
 function loadP1(title) {
   document.getElementById('p1-nowplaying').textContent = `▶ ${title}`;
+  const bar = document.getElementById('jamboree-nowplaying-bar');
+  const txt = document.getElementById('jamboree-nowplaying-text');
+  if (bar && txt) { txt.textContent = title; bar.classList.add('show'); }
   api('/api/jamboree/play', { title });
   demoLog(`P1: ${title}`, 'VIDEO');
 }
@@ -1865,6 +1970,9 @@ function saveSetting(key, val) {
 // ── Shutdown sequence ─────────────────────────────────────────────────────────
 let shutdownRunning = false;
 function openShutdown() {
+  const ab = document.getElementById('allstop-btn');
+  if (ab) { ab.classList.add('btn-allstop-flash'); setTimeout(() => ab.classList.remove('btn-allstop-flash'), 900); }
+  screenFlash('rgba(192,57,43,.3)');
   for (let i = 1; i <= 5; i++) {
     document.getElementById(`step-${i}-status`).textContent = '';
     document.getElementById(`step-${i}-status`).className   = 'step-status';
