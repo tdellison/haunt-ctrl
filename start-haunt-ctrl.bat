@@ -7,9 +7,6 @@ echo  ============================================
 git fetch origin master
 git reset --hard origin/master
 echo.
-echo  Installing dependencies...
-npm install --omit=dev
-echo.
 echo  ============================================
 echo   HAUNT CTRL v3 — SERVER STARTING...
 echo   Open on iPhone: http://192.168.1.11:3000
