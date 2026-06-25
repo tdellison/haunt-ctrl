@@ -5,6 +5,7 @@ const net = require('net');
 const dgram = require('dgram');
 const path = require('path');
 const { spawn } = require('child_process');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json());
@@ -223,6 +224,34 @@ function sendISCP(command) {
   });
 }
 
+// ─── ISCP Command Queue ───────────────────────────────────────────────────────
+const iscpQueue = [];
+let iscpRunning = false;
+function queueISCP(command) {
+  return new Promise((resolve, reject) => {
+    iscpQueue.push({ command, resolve, reject });
+    if (!iscpRunning) drainISCP();
+  });
+}
+async function drainISCP() {
+  if (iscpRunning || iscpQueue.length === 0) return;
+  iscpRunning = true;
+  const { command, resolve, reject } = iscpQueue.shift();
+  try { resolve(await sendISCP(command)); } catch (e) { reject(e); }
+  iscpRunning = false;
+  if (iscpQueue.length > 0) setImmediate(drainISCP);
+}
+
+// ─── Debounce helper ──────────────────────────────────────────────────────────
+const debounceMap = {};
+function debounceRoute(key, ms, fn) {
+  if (debounceMap[key]) return false;
+  debounceMap[key] = true;
+  setTimeout(() => { delete debounceMap[key]; }, ms);
+  fn();
+  return true;
+}
+
 async function testConnection() {
   try {
     await sendISCP('PWRQSTN');
@@ -234,15 +263,43 @@ async function testConnection() {
   broadcastState();
 }
 
+// ─── State persistence ────────────────────────────────────────────────────────
+const STATE_FILE = path.join(__dirname, 'show-state.json');
+function saveShowState() {
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify({
+      volumes: state.volumes,
+      sceneMode: state.sceneMode,
+      kidMode: state.kidMode,
+      maxVol: config.maxVol,
+    }), 'utf8');
+  } catch(_) {}
+}
+function loadShowState() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    if (saved.volumes) state.volumes = { ...state.volumes, ...saved.volumes };
+    if (saved.sceneMode) state.sceneMode = saved.sceneMode;
+    if (saved.kidMode !== undefined) state.kidMode = saved.kidMode;
+    if (saved.maxVol) config.maxVol = { ...config.maxVol, ...saved.maxVol };
+    console.log('[HAUNT] Show state restored from disk');
+  } catch(_) {}
+}
+
 // ─── Broadcast ────────────────────────────────────────────────────────────────
 function broadcast(obj) {
   const payload = JSON.stringify(obj);
   wss.clients.forEach(c => { if (c.readyState === 1) c.send(payload); });
 }
 function broadcastState() { broadcast({ type: 'state', data: stateSnapshot() }); }
+const LOG_FILE = path.join(__dirname, 'show-log.txt');
 function broadcastLog(msg, category = 'SYSTEM') {
   broadcast({ type: 'log', msg, category });
   console.log(`[${category}] ${msg}`);
+  try {
+    const ts = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, `[${ts}] [${category}] ${msg}\n`, 'utf8');
+  } catch(_) {}
 }
 
 function stateSnapshot() {
@@ -276,6 +333,8 @@ function stateSnapshot() {
     jamboreeLoop:   { active: jamboreeLoop.active },
   };
 }
+
+loadShowState();
 
 wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'state',    data: stateSnapshot() }));
@@ -531,18 +590,32 @@ function playStormClip() {
 
 const AMBIENT_FILE = 'graveyardam.mp3';
 
+let ambientShouldRun = false;
 function startAmbient() {
   if (ambientProcess) return;
+  ambientShouldRun = true;
   broadcastLog('Graveyard ambient loop started', 'AUDIO');
   ambientProcess = spawn(VLC_PATH, [
     path.join(AMBIENT_DIR, AMBIENT_FILE),
     '--intf', 'dummy', '--loop', '--no-video',
   ], { stdio: 'ignore' });
   ambientActive = true;
-  ambientProcess.on('exit', () => { ambientProcess = null; ambientActive = false; });
+  ambientProcess.on('exit', (code) => {
+    ambientProcess = null;
+    ambientActive = false;
+    broadcastState();
+    if (ambientShouldRun && code !== 0 && code !== null) {
+      broadcastLog('Ambient VLC crashed — restarting in 3s', 'AUDIO');
+      setTimeout(() => { if (ambientShouldRun) startAmbient(); }, 3000);
+    }
+  });
+  ambientProcess.on('error', (e) => {
+    broadcastLog(`Ambient VLC error: ${e.message}`, 'SYSTEM');
+  });
 }
 
 function stopAmbient() {
+  ambientShouldRun = false;
   if (ambientProcess) {
     try {
       // Windows-safe kill: taskkill terminates VLC and any child processes
@@ -775,6 +848,7 @@ app.post('/api/onkyo/volume', async (req, res) => {
     await sendISCP(`${ZONE_CMD[z]}${volToHex(clamped)}`);
     state.volumes[z] = clamped;
     state.connected = true;
+    saveShowState();
     broadcastState();
     res.json({ ok: true, zone: z, value: clamped });
   } catch (e) {
@@ -923,6 +997,7 @@ app.post('/api/scene', async (req, res) => {
       z3: clampVol('z3', s.z3),
       sub: s.sub,
     };
+    saveShowState();
     broadcastState();
     res.json({ ok: true, scene });
   } catch (e) {
@@ -934,6 +1009,9 @@ app.post('/api/character', async (req, res) => {
   const { character, clip } = req.body;
   const key = character?.toLowerCase().replace(/\s/g, '');
   if (!CHAR_CONFIG[key]) return res.status(400).json({ error: 'unknown character' });
+  if (!debounceRoute(`char-${key}`, 3000, () => {})) {
+    return res.json({ ok: false, debounced: true });
+  }
   await fireCharacter(key, clip);
   res.json({ ok: true, character: key });
 });
@@ -1344,6 +1422,63 @@ app.post('/api/strikedown', async (req, res) => {
     res.status(502).json({ error: e.message });
   }
 });
+
+// ─── Scene Sequencer ──────────────────────────────────────────────────────────
+let sequencer = { active: false, steps: [], stepIndex: 0, timer: null };
+
+function runSequencerStep() {
+  if (!sequencer.active || sequencer.stepIndex >= sequencer.steps.length) {
+    sequencer.active = false;
+    broadcastLog('Sequencer: sequence complete', 'SYSTEM');
+    return;
+  }
+  const step = sequencer.steps[sequencer.stepIndex];
+  broadcastLog(`Sequencer step ${sequencer.stepIndex + 1}: ${step.scene || step.action}`, 'SYSTEM');
+  if (step.scene) {
+    const s = SCENES[step.scene];
+    if (s) {
+      const lc = GOVEE_COLORS[s.light] || GOVEE_COLORS.orange;
+      Promise.allSettled([
+        sendISCP(`${ZONE_CMD.z1}${volToHex(clampVol('z1', s.z1))}`),
+        sendISCP(`${ZONE_CMD.z2}${volToHex(clampVol('z2', s.z2))}`),
+        goveeSetColor(lc.r, lc.g, lc.b),
+        goveeSetBrightness(s.bri),
+      ]).then(() => { state.sceneMode = step.scene; broadcastState(); });
+    }
+  }
+  if (step.fog) fogBurst(step.fog);
+  if (step.character) fireCharacter(step.character).catch(() => {});
+  sequencer.stepIndex++;
+  sequencer.timer = setTimeout(runSequencerStep, step.delayMs || 5000);
+}
+
+app.post('/api/sequencer/start', (req, res) => {
+  const { steps } = req.body;
+  if (!Array.isArray(steps) || !steps.length) return res.status(400).json({ error: 'steps array required' });
+  if (sequencer.timer) clearTimeout(sequencer.timer);
+  sequencer.steps = steps;
+  sequencer.stepIndex = 0;
+  sequencer.active = true;
+  broadcastLog(`Sequencer: starting ${steps.length}-step sequence`, 'SYSTEM');
+  runSequencerStep();
+  res.json({ ok: true, steps: steps.length });
+});
+
+app.post('/api/sequencer/stop', (req, res) => {
+  sequencer.active = false;
+  if (sequencer.timer) { clearTimeout(sequencer.timer); sequencer.timer = null; }
+  broadcastLog('Sequencer: stopped', 'SYSTEM');
+  res.json({ ok: true });
+});
+
+// ─── Health check ─────────────────────────────────────────────────────────────
+setInterval(async () => {
+  const wasConnected = state.connected;
+  await testConnection();
+  if (!wasConnected && state.connected) {
+    broadcastLog('Receiver reconnected', 'SYSTEM');
+  }
+}, 30000);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = 3000;

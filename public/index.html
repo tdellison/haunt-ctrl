@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#080810"/>
 <title>HAUNT CTRL v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg:      #080810;
@@ -637,7 +640,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .swatch-grid { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
 .swatch-item { display:flex; flex-direction:column; align-items:center; gap:5px; }
 .swatch {
-  width:44px; height:44px; border-radius:3px; border:2px solid rgba(0,0,0,.4);
+  width:44px; height:44px; border-radius:50%; border:2px solid rgba(0,0,0,.4);
   cursor:pointer; transition:all .15s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -804,10 +807,69 @@ body::before { animation:scanlines 10s linear infinite; }
 
 /* ── Enhanced press ── */
 .btn:active { transform:scale(.92) translateY(2px) !important; box-shadow:none !important; }
+
+.logo { font-family: 'Cinzel', Georgia, serif !important; }
+.panel-title { font-family: 'Cinzel', Georgia, serif !important; }
+
+.panel {
+  background: rgba(14,14,28,.82) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,179,71,.12) !important;
+}
+
+#pane-cmd       { background: linear-gradient(180deg, rgba(255,130,0,.025) 0%, transparent 300px); }
+#pane-graveyard { background: linear-gradient(180deg, rgba(100,200,100,.03) 0%, transparent 300px); }
+#pane-jamboree  { background: linear-gradient(180deg, rgba(245,127,23,.03) 0%, transparent 300px); }
+#pane-audio     { background: linear-gradient(180deg, rgba(200,134,10,.025) 0%, transparent 300px); }
+#pane-lights    { background: linear-gradient(180deg, rgba(79,195,247,.03) 0%, transparent 300px); }
+#pane-setup     { background: linear-gradient(180deg, rgba(206,147,216,.025) 0%, transparent 300px); }
+
+.btn-red:hover    { box-shadow:0 0 22px rgba(220,50,50,.85),0 0 50px rgba(220,50,50,.35) !important; text-shadow:0 0 8px rgba(255,100,100,.8); }
+.btn-orange:hover { box-shadow:0 0 22px rgba(255,130,0,.85),0 0 50px rgba(255,130,0,.35) !important; text-shadow:0 0 8px rgba(255,179,71,.8); }
+.btn-green:hover  { box-shadow:0 0 22px rgba(100,200,100,.85),0 0 50px rgba(100,200,100,.35) !important; text-shadow:0 0 8px rgba(102,187,106,.8); }
+.btn-blue:hover   { box-shadow:0 0 22px rgba(79,195,247,.85),0 0 50px rgba(79,195,247,.35) !important; text-shadow:0 0 8px rgba(79,195,247,.8); }
+.btn-amber:hover  { box-shadow:0 0 22px rgba(230,126,34,.85),0 0 50px rgba(230,126,34,.35) !important; text-shadow:0 0 8px rgba(230,126,34,.8); }
+.btn-purple:hover { box-shadow:0 0 22px rgba(206,147,216,.85),0 0 50px rgba(206,147,216,.35) !important; text-shadow:0 0 8px rgba(206,147,216,.8); }
+
+@keyframes ripple-out {
+  to { transform:scale(4); opacity:0; }
+}
+.ripple {
+  position:absolute; border-radius:50%;
+  background:rgba(255,255,255,.22);
+  width:40px; height:40px; margin-top:-20px; margin-left:-20px;
+  pointer-events:none;
+  animation:ripple-out .55s ease-out forwards;
+}
+
+@keyframes fog-drift {
+  0%   { transform:translateX(-120%) scaleY(1); opacity:0; }
+  8%   { opacity:.16; }
+  88%  { opacity:.10; }
+  100% { transform:translateX(110vw) scaleY(1.4); opacity:0; }
+}
+.fog-layer { position:fixed; bottom:0; left:0; width:100%; height:90px; pointer-events:none; z-index:9995; overflow:hidden; }
+.fog-puff {
+  position:absolute; bottom:-10px;
+  background:radial-gradient(ellipse at center, rgba(160,190,220,.3) 0%, transparent 68%);
+  border-radius:50%; filter:blur(18px);
+  animation:fog-drift linear infinite;
+}
+.fog-puff:nth-child(1) { width:500px; height:70px; animation-duration:32s; animation-delay:0s;   bottom:0px; }
+.fog-puff:nth-child(2) { width:420px; height:55px; animation-duration:26s; animation-delay:-11s; bottom:5px; }
+.fog-puff:nth-child(3) { width:600px; height:80px; animation-duration:40s; animation-delay:-22s; bottom:-5px; }
+.fog-puff:nth-child(4) { width:350px; height:50px; animation-duration:22s; animation-delay:-6s;  bottom:10px; }
 </style>
 </head>
 <body>
 <div id="screen-flash"></div>
+<div class="fog-layer">
+  <div class="fog-puff"></div>
+  <div class="fog-puff"></div>
+  <div class="fog-puff"></div>
+  <div class="fog-puff"></div>
+</div>
 
 <div id="demo-banner">⚠ DEMO MODE — No Server Required — All Controls Functional</div>
 
@@ -1537,6 +1599,19 @@ function connectWS() {
   } catch(_) {}
 }
 connectWS();
+
+// ── Ripple effect on all buttons ──────────────────────────────────────────────
+document.addEventListener('pointerdown', (e) => {
+  const btn = e.target.closest('.btn');
+  if (!btn) return;
+  const r = document.createElement('span');
+  r.className = 'ripple';
+  const rect = btn.getBoundingClientRect();
+  r.style.left = (e.clientX - rect.left) + 'px';
+  r.style.top  = (e.clientY - rect.top)  + 'px';
+  btn.appendChild(r);
+  r.addEventListener('animationend', () => r.remove(), { once: true });
+});
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function api(url, body) {
