@@ -1301,6 +1301,50 @@ app.post('/api/jamboree/loop/toggle', (req, res) => {
   res.json({ ok: true, active: jamboreeLoop.active });
 });
 
+app.post('/api/strikedown', async (req, res) => {
+  broadcastLog('STRIKE DOWN — lights to white, all else stopping', 'SYSTEM');
+  // Stop all timers
+  state.stormActive = false;
+  strikeIndex = 0;
+  if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
+  state.stormNextAt = null;
+  state.autoScare.active = false;
+  if (state.autoScare.timer) { clearTimeout(state.autoScare.timer); state.autoScare.timer = null; }
+  state.autoScare.nextAt = null;
+  state.witchTimer.active = false;
+  if (state.witchTimer.timer) { clearTimeout(state.witchTimer.timer); state.witchTimer.timer = null; }
+  state.witchTimer.nextAt = null;
+  graveyardCycle.active = false;
+  if (graveyardCycle.timer) { clearTimeout(graveyardCycle.timer); graveyardCycle.timer = null; }
+  jamboreeLoop.active = false;
+  if (jamboreeLoop.timer) { clearTimeout(jamboreeLoop.timer); jamboreeLoop.timer = null; }
+  stopFogAuto();
+  stopVLC();
+  stopJamboree();
+  stopWitch();
+  stopAmbient();
+  if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
+  try {
+    await Promise.allSettled([
+      fogOff(),
+      sendISCP(`${ZONE_CMD.z1}${volToHex(0)}`),
+      sendISCP(`${ZONE_CMD.z2}${volToHex(0)}`),
+      sendISCP(`${ZONE_CMD.z3}${volToHex(0)}`),
+      // Lights stay ON — set to warm white at full brightness for teardown
+      goveeSetPower(true),
+    ]);
+    state.volumes = { z1: 0, z2: 0, z3: 0, sub: 0 };
+    await goveeSetColor(255, 220, 160); // warm white
+    await goveeSetBrightness(100);
+    broadcastLog('STRIKE DOWN complete — lights white, all audio/fog stopped', 'SYSTEM');
+    broadcastState();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = 3000;
 server.listen(PORT, () => {

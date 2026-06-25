@@ -4,7 +4,8 @@ echo.
 echo  ============================================
 echo   HAUNT CTRL v3 — UPDATING...
 echo  ============================================
-git pull origin master
+git fetch origin master
+git reset --hard origin/master
 echo.
 echo  ============================================
 echo   HAUNT CTRL v3 — SERVER STARTING...
