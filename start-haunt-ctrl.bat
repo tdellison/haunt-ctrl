@@ -6,6 +6,7 @@ echo   HAUNT CTRL v3 — UPDATING...
 echo  ============================================
 git fetch origin master
 git reset --hard origin/master
+npm install --omit=dev
 echo.
 echo  ============================================
 echo   HAUNT CTRL v3 — SERVER STARTING...
