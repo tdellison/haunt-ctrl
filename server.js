@@ -437,7 +437,7 @@ let strikeIndex = 0;
 async function fireStrike(idx) {
   const s = STRIKE_SEQUENCE[idx];
   broadcastLog(`Storm ${idx + 1}/5 — ${s.emoji} ${s.name}`, 'AUDIO');
-  playStormClip();
+  playStormClip(s.name === 'Overhead');
 
   try {
     const z2 = clampVol('z2', s.z2Vol);
@@ -564,6 +564,8 @@ const STORM_FILES = [
   'soundsforyou-natural-thunder-113219.mp3',
   'u_39xav15uou-lightning-237994.mp3',
 ];
+// Dedicated clip for the Overhead (closest) strike — never randomized
+const OVERHEAD_FILE = '646912__alexdarek__lightning-strike-2.wav';
 
 let stormProcess    = null;
 let vlcProcess      = null;
@@ -575,8 +577,10 @@ let fxProcess       = null;
 let graveyardCycle  = { active: false, index: 0, timer: null };
 let jamboreeLoop    = { active: false, index: 0, timer: null };
 
-function playStormClip() {
-  const file = STORM_FILES[Math.floor(Math.random() * STORM_FILES.length)];
+function playStormClip(overhead) {
+  const file = overhead
+    ? OVERHEAD_FILE
+    : STORM_FILES[Math.floor(Math.random() * STORM_FILES.length)];
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
   stormProcess = spawn(VLC_PATH, [
