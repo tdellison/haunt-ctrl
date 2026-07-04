@@ -23,7 +23,7 @@ let config = {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 let settings = {
-  autoDuckJamboree: true,
+  autoDuckSkeleton: true,
   fogWithCharacters: true,
   hapticFeedback: true,
 };
@@ -33,7 +33,7 @@ let goveeDevices = [];
 const GOVEE_IPS = {
   graveyard: '',
   witch: '',
-  jamboree: '',
+  skeleton: '',
   tree: '',
 };
 const GOVEE_SLOT_IDS = {};
@@ -330,7 +330,6 @@ function stateSnapshot() {
       nextAt: state.witchTimer.nextAt,
     },
     graveyardCycle: { active: graveyardCycle.active },
-    jamboreeLoop:   { active: jamboreeLoop.active },
   };
 }
 
@@ -564,13 +563,13 @@ async function fireWitch(clip) {
     const currentZ3 = state.volumes.z3;
     const currentZ1 = state.volumes.z1;
     const boost  = clampVol('z3', currentZ3 + 8);
-    // Duck jamboree 8 steps while witch is active — pumpkins are 23 ft away and bleed into her mic
+    // Duck skeleton zone 8 steps while witch is active — skeletons are ~22 ft away and bleed into her mic
     const ducked = clampVol('z1', Math.max(0, currentZ1 - 8));
     await sendISCP(`${ZONE_CMD.z3}${volToHex(boost)}`);
     if (ducked !== currentZ1) {
       await sendISCP(`${ZONE_CMD.z1}${volToHex(ducked)}`);
       state.volumes.z1 = ducked;
-      broadcastLog('Witch active — jamboree ducked -8', 'AUDIO');
+      broadcastLog('Witch active — skeleton zone ducked -8', 'AUDIO');
       broadcastState();
     }
     setTimeout(async () => {
@@ -579,7 +578,7 @@ async function fireWitch(clip) {
         if (ducked !== currentZ1) {
           await sendISCP(`${ZONE_CMD.z1}${volToHex(currentZ1)}`);
           state.volumes.z1 = currentZ1;
-          broadcastLog('Witch done — jamboree restored', 'AUDIO');
+          broadcastLog('Witch done — skeleton zone restored', 'AUDIO');
           broadcastState();
         }
       } catch (_) {}
@@ -613,8 +612,11 @@ const VLC_PATH    = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
 const MEDIA_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\LEGENDS ATMOS';
 const STORM_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
-const JAMBOREE_DIR= 'C:\\Users\\tdell\\OneDrive\\Desktop\\JACKOLANTERN';
+const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
 const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
+
+// Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
+const SKELETON_FILES = { left: 'skeleton-left.mp3', right: 'skeleton-right.mp3' };
 
 const STORM_FILES = [
   'bijan6207-thunderstorm-409071.mp3',
@@ -628,13 +630,12 @@ const OVERHEAD_FILE = '646912__alexdarek__lightning-strike-2.wav';
 
 let stormProcess    = null;
 let vlcProcess      = null;
-let jamboreeProcess = null;
+let skeletonProcess = null;
 let witchProcess    = null;
 let ambientProcess  = null;
 let ambientActive   = false;
 let fxProcess       = null;
 let graveyardCycle  = { active: false, index: 0, timer: null };
-let jamboreeLoop    = { active: false, index: 0, timer: null };
 
 function playStormClip(overhead) {
   const file = overhead
@@ -711,26 +712,39 @@ function stopWitch() {
   }
 }
 
-function playJamboree(title) {
-  const filename = JAMBOREE_MAP[title];
+function fireSkeleton(side) {
+  const filename = SKELETON_FILES[side];
   if (!filename) return false;
-  if (jamboreeProcess) { try { jamboreeProcess.kill(); } catch (_) {} jamboreeProcess = null; }
-  broadcastLog(`Jamboree: ${title}`, 'VIDEO');
-  jamboreeProcess = spawn(VLC_PATH, [
-    path.join(JAMBOREE_DIR, filename),
-    '--play-and-exit', '--fullscreen', '--no-video-title-show', '--qt-start-minimized',
+  if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
+  broadcastLog(`Skeleton ${side} triggered`, 'AUDIO');
+  skeletonProcess = spawn(VLC_PATH, [
+    path.join(SKELETON_DIR, filename),
+    '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
   ], { detached: true, stdio: 'ignore' });
-  jamboreeProcess.unref();
-  jamboreeProcess.on('exit', () => { jamboreeProcess = null; });
-  return true;
-}
+  skeletonProcess.unref();
+  skeletonProcess.on('exit', () => { skeletonProcess = null; });
 
-function stopJamboree() {
-  if (jamboreeProcess) {
-    try { jamboreeProcess.kill(); } catch (_) {}
-    jamboreeProcess = null;
-    broadcastLog('Jamboree stopped', 'VIDEO');
+  // Flash the skeleton Govee slot white, then restore
+  const ids = getSlotIds('skeleton');
+  if (ids.length) {
+    const prev = goveeDevices
+      .filter(d => ids.includes(d.id))
+      .map(d => ({ id: d.id, color: { ...d.color }, brightness: d.brightness }));
+    goveeSetColor(255, 255, 255, ids).catch(() => {});
+    goveeSetBrightness(100, ids).catch(() => {});
+    setTimeout(async () => {
+      for (const snap of prev) {
+        const dev = goveeDevices.find(d => d.id === snap.id);
+        if (!dev) continue;
+        await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }).catch(() => {});
+        await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
+        dev.color = snap.color;
+        dev.brightness = snap.brightness;
+      }
+      broadcastGovee();
+    }, 800);
   }
+  return true;
 }
 
 function playClip(character, title) {
@@ -790,24 +804,6 @@ const CLIP_MAP = {
   },
 };
 
-const JAMBOREE_MAP = {
-  'Addams Family':        'JOLJ3_Addams Family_Trio_Pumpkin.mp4',
-  'Ghostbusters':         'JOLJ3_Ghostbusters_Trio_Pumpkin.mp4',
-  'Monster Mash':         'JOLJ3_Monster Mash_Trio_Pumpkin.mp4',
-  'The Pumpkin Song':     'JOLJ_The Pumpkin Song_Trio_Pumpkin.mp4',
-  'Three Children Bold':  'JOLJ_Three Children Bold_Trio_Pumpkin.mp4',
-  'Twas The Night':       'JOLJ_Twas The Night_Trio_Pumpkin.mp4',
-  'Hall of Pumpkin King': 'JOLJ_Hall of Pumpkin King_Trio_Pumpkin.mp4',
-  'Jokes 1':              'JOLJ_Jokes 1_Trio_Pumpkin.mp4',
-  'Jokes 2':              'JOLJ_Jokes 2_Trio_Pumpkin.mp4',
-  'Jokes 3':              'JOLJ_Jokes 3_Trio_Pumpkin.mp4',
-  'Funny Faces':          'JOLJ_Funny Faces_Trio_Pumpkin.mp4',
-  'Heckling Hijinks':     'JOL2_Heckling Hijinks_Trio_Pumpkin_H.mp4',
-  'Lord of the Gourds':   'JOL2_Lord of the Gourds_Trio_Pumpkin_H.mp4',
-  'The Raven':            'JOL2_The Raven_Trio_Pumpkin_H.mp4',
-  'Treater Greeters':     'JOL2_Treater Greeters_Trio_Pumpkin_H.mp4',
-};
-
 const WITCH_MAP = {
   witchinghour: 'WH_Song 1_WitchingHour_3DFX_H.mp4',
   catcrow:      'WH_Song 2_CatCrow_3DFX_H.mp4',
@@ -835,7 +831,7 @@ async function fireCharacter(character, clip) {
   const ambientZ2 = state.volumes.z2;
   const boostedZ2 = clampVol('z2', ambientZ2 + c.z2Boost);
   const origZ1    = state.volumes.z1;
-  const duckedZ1  = settings.autoDuckJamboree ? clampVol('z1', Math.max(0, origZ1 - 8)) : origZ1;
+  const duckedZ1  = settings.autoDuckSkeleton ? clampVol('z1', Math.max(0, origZ1 - 8)) : origZ1;
 
   try {
     const fc = c.flashColor;
@@ -850,7 +846,7 @@ async function fireCharacter(character, clip) {
     await sendISCP(`${ZONE_CMD.z2}${volToHex(boostedZ2)}`);
     state.volumes.z2 = boostedZ2;
 
-    if (settings.autoDuckJamboree && duckedZ1 !== origZ1) {
+    if (settings.autoDuckSkeleton && duckedZ1 !== origZ1) {
       await sendISCP(`${ZONE_CMD.z1}${volToHex(duckedZ1)}`);
       state.volumes.z1 = duckedZ1;
     }
@@ -862,7 +858,7 @@ async function fireCharacter(character, clip) {
       try {
         await sendISCP(`${ZONE_CMD.z2}${volToHex(ambientZ2)}`);
         state.volumes.z2 = ambientZ2;
-        if (settings.autoDuckJamboree && duckedZ1 !== origZ1) {
+        if (settings.autoDuckSkeleton && duckedZ1 !== origZ1) {
           await sendISCP(`${ZONE_CMD.z1}${volToHex(origZ1)}`);
           state.volumes.z1 = origZ1;
         }
@@ -980,10 +976,10 @@ app.post('/api/allstop', async (req, res) => {
   if (state.witchTimer.timer) { clearTimeout(state.witchTimer.timer); state.witchTimer.timer = null; }
   stopFogAuto();
   stopVLC();
-  stopJamboree();
   stopWitch();
   stopAmbient();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
 
   try {
     await Promise.allSettled([
@@ -1005,10 +1001,10 @@ app.post('/api/shutdown', async (req, res) => {
   broadcastLog('Shutdown sequence initiated', 'SYSTEM');
   stopFogAuto();
   stopVLC();
-  stopJamboree();
   stopWitch();
   stopAmbient();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
   try {
     await Promise.allSettled([
       fogOff(),
@@ -1084,16 +1080,19 @@ app.post('/api/vlc/stop', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/jamboree/play', (req, res) => {
-  const { title } = req.body;
-  if (!title) return res.status(400).json({ error: 'title required' });
-  const ok = playJamboree(title);
-  if (!ok) return res.status(404).json({ error: 'unknown title' });
-  res.json({ ok: true, title });
+app.post('/api/skeleton/fire', (req, res) => {
+  const { side } = req.body;
+  if (side !== 'left' && side !== 'right') return res.status(400).json({ error: 'side left/right required' });
+  fireSkeleton(side);
+  res.json({ ok: true, side });
 });
 
-app.post('/api/jamboree/stop', (req, res) => {
-  stopJamboree();
+app.post('/api/skeleton/stop', (req, res) => {
+  if (skeletonProcess) {
+    try { skeletonProcess.kill(); } catch (_) {}
+    skeletonProcess = null;
+    broadcastLog('Skeleton stopped', 'AUDIO');
+  }
   res.json({ ok: true });
 });
 
@@ -1239,8 +1238,8 @@ app.post('/api/config', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
-  const { autoDuckJamboree, fogWithCharacters, hapticFeedback } = req.body;
-  if (autoDuckJamboree !== undefined) settings.autoDuckJamboree = !!autoDuckJamboree;
+  const { autoDuckSkeleton, fogWithCharacters, hapticFeedback } = req.body;
+  if (autoDuckSkeleton !== undefined) settings.autoDuckSkeleton = !!autoDuckSkeleton;
   if (fogWithCharacters !== undefined) settings.fogWithCharacters = !!fogWithCharacters;
   if (hapticFeedback !== undefined) settings.hapticFeedback = !!hapticFeedback;
   broadcast({ type: 'settings', data: settings });
@@ -1409,39 +1408,6 @@ app.post('/api/graveyard/cycle/toggle', (req, res) => {
   res.json({ ok: true, active: graveyardCycle.active });
 });
 
-// ─── Jamboree Auto Loop ───────────────────────────────────────────────────────
-const JAMBOREE_TITLES = Object.keys(JAMBOREE_MAP); // populated after JAMBOREE_MAP
-function scheduleJamboreeLoop() {
-  if (!jamboreeLoop.active) return;
-  const title = JAMBOREE_TITLES[jamboreeLoop.index % JAMBOREE_TITLES.length];
-  jamboreeLoop.index++;
-  broadcastLog(`Jamboree loop: ${title}`, 'VIDEO');
-  playJamboree(title);
-  if (jamboreeProcess) {
-    jamboreeProcess.on('exit', () => {
-      if (jamboreeLoop.active) {
-        jamboreeLoop.timer = setTimeout(scheduleJamboreeLoop, 1000);
-      }
-    });
-  } else {
-    if (jamboreeLoop.active) jamboreeLoop.timer = setTimeout(scheduleJamboreeLoop, 5000);
-  }
-}
-
-app.post('/api/jamboree/loop/toggle', (req, res) => {
-  jamboreeLoop.active = !jamboreeLoop.active;
-  broadcastLog(`Jamboree loop ${jamboreeLoop.active ? 'ON' : 'OFF'}`, 'VIDEO');
-  if (jamboreeLoop.active) {
-    jamboreeLoop.index = 0;
-    scheduleJamboreeLoop();
-  } else {
-    if (jamboreeLoop.timer) { clearTimeout(jamboreeLoop.timer); jamboreeLoop.timer = null; }
-    stopJamboree();
-  }
-  broadcast({ type: 'state', data: stateSnapshot() });
-  res.json({ ok: true, active: jamboreeLoop.active });
-});
-
 app.post('/api/strikedown', async (req, res) => {
   broadcastLog('STRIKE DOWN — lights to white, all else stopping', 'SYSTEM');
   // Stop all timers
@@ -1457,14 +1423,12 @@ app.post('/api/strikedown', async (req, res) => {
   state.witchTimer.nextAt = null;
   graveyardCycle.active = false;
   if (graveyardCycle.timer) { clearTimeout(graveyardCycle.timer); graveyardCycle.timer = null; }
-  jamboreeLoop.active = false;
-  if (jamboreeLoop.timer) { clearTimeout(jamboreeLoop.timer); jamboreeLoop.timer = null; }
   stopFogAuto();
   stopVLC();
-  stopJamboree();
   stopWitch();
   stopAmbient();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
   try {
     await Promise.allSettled([

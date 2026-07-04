@@ -796,11 +796,6 @@ html, body { touch-action: manipulation; }
 @keyframes allstop-flash { 0%,100%{background:linear-gradient(180deg,#5c0a0a,#2e0000)} 50%{background:linear-gradient(180deg,#cc0000,#880000);box-shadow:0 0 50px rgba(255,0,0,.8);} }
 .btn-allstop-flash { animation:allstop-flash .25s ease 3 !important; }
 
-/* ── Jamboree now-playing bar ── */
-#jamboree-nowplaying-bar { background:rgba(255,127,23,.06); border:1px solid rgba(255,127,23,.25); border-radius:2px; padding:6px 12px; margin-bottom:10px; font-family:'Courier New',monospace; font-size:.74em; letter-spacing:2px; color:var(--orange2); display:none; align-items:center; gap:8px; }
-#jamboree-nowplaying-bar.show { display:flex; }
-.jp-dot { width:7px;height:7px;border-radius:50%;background:var(--orange2);animation:dot-pulse 1s infinite;flex-shrink:0; }
-
 /* ── Scrolling scanlines ── */
 @keyframes scanlines { from{background-position:0 0} to{background-position:0 100px} }
 body::before { animation:scanlines 10s linear infinite; }
@@ -820,7 +815,7 @@ body::before { animation:scanlines 10s linear infinite; }
 
 #pane-cmd       { background: linear-gradient(180deg, rgba(255,130,0,.025) 0%, transparent 300px); }
 #pane-graveyard { background: linear-gradient(180deg, rgba(100,200,100,.03) 0%, transparent 300px); }
-#pane-jamboree  { background: linear-gradient(180deg, rgba(245,127,23,.03) 0%, transparent 300px); }
+#pane-skeleton  { background: linear-gradient(180deg, rgba(255,179,71,.03) 0%, transparent 300px); }
 #pane-audio     { background: linear-gradient(180deg, rgba(200,134,10,.025) 0%, transparent 300px); }
 #pane-lights    { background: linear-gradient(180deg, rgba(79,195,247,.03) 0%, transparent 300px); }
 #pane-setup     { background: linear-gradient(180deg, rgba(206,147,216,.025) 0%, transparent 300px); }
@@ -899,7 +894,7 @@ body::before { animation:scanlines 10s linear infinite; }
 <div class="tabs">
   <div class="tab active" data-pane="cmd">⚡ COMMAND</div>
   <div class="tab" data-pane="graveyard">💀 GRAVEYARD</div>
-  <div class="tab" data-pane="jamboree">🎃 JAMBOREE</div>
+  <div class="tab" data-pane="skeleton">🦴 SKELETON</div>
   <div class="tab" data-pane="audio">🔊 AUDIO</div>
   <div class="tab" data-pane="lights">💡 LIGHTS</div>
   <div class="tab" data-pane="setup">⚙ SETUP</div>
@@ -1168,67 +1163,33 @@ body::before { animation:scanlines 10s linear infinite; }
 
 </div><!-- /pane-graveyard -->
 
-<!-- ─── JAMBOREE ─── -->
-<div class="pane" id="pane-jamboree">
-<div id="jamboree-nowplaying-bar"><span class="jp-dot"></span><span id="jamboree-nowplaying-text">No clip playing</span></div>
+<!-- ─── SKELETON ─── -->
+<div class="pane" id="pane-skeleton">
 
-  <!-- Display controls -->
+  <!-- Skeleton triggers -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">📺</span>Jamboree Display — P1 HDMI</div>
-    <div style="background:#030308;border:1px solid var(--border);padding:8px 12px;border-radius:2px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:.76em;color:var(--orange2);letter-spacing:2px" id="p1-nowplaying">
-      ▶ No content selected
+    <div class="panel-title"><span class="pt-icon">🦴</span>Skeleton Triggers</div>
+    <div class="grid2" style="margin-bottom:14px">
+      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'left'})">🦴 LEFT SKELETON</button>
+      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'right'})">🦴 RIGHT SKELETON</button>
     </div>
-    <div style="background:#0a0a16;border:1px solid var(--border);height:4px;border-radius:2px;margin-bottom:14px;overflow:hidden">
-      <div id="p1-progress" style="height:100%;width:0%;background:var(--orange2);transition:width .5s"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-orange btn-sm" onclick="p1Control('play')">▶ PLAY</button>
-      <button class="btn btn-red    btn-sm" onclick="p1Control('stop')">■ STOP</button>
-      <button class="btn btn-orange btn-sm" onclick="p1Control('next')">⏭ NEXT</button>
-    </div>
+    <button class="btn btn-red btn-full" onclick="api('/api/skeleton/stop')">■ STOP SKELETON</button>
   </div>
 
-  <!-- Jamboree Loop -->
+  <!-- Skeleton zone volume -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🔁</span>Jamboree Auto Loop</div>
+    <div class="panel-title"><span class="pt-icon">🔊</span>Skeleton Zone Volume</div>
     <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
-      Plays all 15 Jamboree clips continuously in sequence — 1s gap between each.
+      Full slider lives in the AUDIO tab (Skeleton row). Quick levels:
     </p>
-    <button class="btn btn-orange btn-full btn-lg" id="jloop-btn" onclick="toggleJamboreeLoop()">▶ Start Jamboree Loop</button>
-  </div>
-
-  <div class="grid2">
-    <!-- Songs -->
-    <div class="panel">
-      <div class="panel-title"><span class="pt-icon">🎵</span>Songs — Jamboree 3 + 1</div>
-      <div class="clip-list">
-        <div class="clip-item" onclick="loadP1('Addams Family')"><span class="clip-icon">🎵</span>Addams Family</div>
-        <div class="clip-item" onclick="loadP1('Ghostbusters')"><span class="clip-icon">🎵</span>Ghostbusters</div>
-        <div class="clip-item" onclick="loadP1('Monster Mash')"><span class="clip-icon">🎵</span>Monster Mash</div>
-        <div class="clip-item" onclick="loadP1('The Pumpkin Song')"><span class="clip-icon">🎵</span>The Pumpkin Song</div>
-        <div class="clip-item" onclick="loadP1('Three Children Bold')"><span class="clip-icon">🎵</span>Three Children Bold</div>
-        <div class="clip-item" onclick="loadP1('Twas The Night')"><span class="clip-icon">🎵</span>Twas The Night</div>
-      </div>
-    </div>
-
-    <!-- Stories -->
-    <div class="panel">
-      <div class="panel-title"><span class="pt-icon">📖</span>Stories, Jokes &amp; More</div>
-      <div class="clip-list">
-        <div class="clip-item" onclick="loadP1('Hall of Pumpkin King')"><span class="clip-icon">👑</span>Hall of Pumpkin King</div>
-        <div class="clip-item" onclick="loadP1('Jokes 1')"><span class="clip-icon">😄</span>Jokes 1</div>
-        <div class="clip-item" onclick="loadP1('Jokes 2')"><span class="clip-icon">😄</span>Jokes 2</div>
-        <div class="clip-item" onclick="loadP1('Jokes 3')"><span class="clip-icon">😄</span>Jokes 3</div>
-        <div class="clip-item" onclick="loadP1('Funny Faces')"><span class="clip-icon">😜</span>Funny Faces</div>
-        <div class="clip-item" onclick="loadP1('Heckling Hijinks')"><span class="clip-icon">🎭</span>Heckling Hijinks</div>
-        <div class="clip-item" onclick="loadP1('Lord of the Gourds')"><span class="clip-icon">👑</span>Lord of the Gourds</div>
-        <div class="clip-item" onclick="loadP1('The Raven')"><span class="clip-icon">🐦</span>The Raven</div>
-        <div class="clip-item" onclick="loadP1('Treater Greeters')"><span class="clip-icon">🍬</span>Treater Greeters</div>
-      </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/volume',{zone:'z1',value:20})">QUIET (20)</button>
+      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/volume',{zone:'z1',value:35})">MID (35)</button>
+      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/volume',{zone:'z1',value:50})">LOUD (50)</button>
     </div>
   </div>
 
-</div><!-- /pane-jamboree -->
+</div><!-- /pane-skeleton -->
 
 <!-- ─── AUDIO ─── -->
 <div class="pane" id="pane-audio">
@@ -1246,7 +1207,7 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
 
     <div class="vol-row">
-      <span class="vol-label" style="color:var(--orange2)">Jamboree</span>
+      <span class="vol-label" style="color:var(--orange2)">Skeleton</span>
       <input type="range" class="vol-slider orange-fill" id="vol-z1" min="0" max="60"
         oninput="onSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
       <span class="vol-val" id="val-z1">30</span>
@@ -1300,8 +1261,8 @@ body::before { animation:scanlines 10s linear infinite; }
   <!-- Zone routing reference -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">📡</span>Speaker Zone Routing</div>
-    <div class="info-row"><span class="info-key">FL / FR</span><span class="info-val">Jamboree music + dialog</span></div>
-    <div class="info-row"><span class="info-key">CENTER</span><span class="info-val">Jamboree dialog anchor</span></div>
+    <div class="info-row"><span class="info-key">FL / FR</span><span class="info-val">Skeleton zone</span></div>
+    <div class="info-row"><span class="info-key">CENTER</span><span class="info-val">Skeleton zone center</span></div>
     <div class="info-row"><span class="info-key">SL / SR</span><span class="info-val">Graveyard atmosphere wrap</span></div>
     <div class="info-row"><span class="info-key">SUB</span><span class="info-val">Shared rumble — hard cap 65%</span></div>
     <div class="info-row"><span class="info-key">ZONE 2</span><span class="info-val">Graveyard display speakers</span></div>
@@ -1418,8 +1379,8 @@ body::before { animation:scanlines 10s linear infinite; }
         <input class="raw-input" id="gip-witch" placeholder="192.168.1.x"/>
       </div>
       <div class="govee-ip-row">
-        <label>🎃 Jamboree Pair</label>
-        <input class="raw-input" id="gip-jamboree" placeholder="192.168.1.x"/>
+        <label>🦴 Skeleton</label>
+        <input class="raw-input" id="gip-skeleton" placeholder="192.168.1.x"/>
       </div>
       <div class="govee-ip-row">
         <label>🌲 Tree Pair</label>
@@ -1488,8 +1449,8 @@ body::before { animation:scanlines 10s linear infinite; }
       <label class="toggle"><input type="checkbox" id="set-haptic" checked onchange="saveSetting('hapticFeedback',this.checked)"><span class="toggle-track"></span></label>
     </div>
     <div class="toggle-row">
-      <span class="toggle-label">Auto-duck Jamboree on Character Triggers</span>
-      <label class="toggle"><input type="checkbox" id="set-autoduck" checked onchange="saveSetting('autoDuckJamboree',this.checked)"><span class="toggle-track"></span></label>
+      <span class="toggle-label">Auto-duck Skeleton on Character Triggers</span>
+      <label class="toggle"><input type="checkbox" id="set-autoduck" checked onchange="saveSetting('autoDuckSkeleton',this.checked)"><span class="toggle-track"></span></label>
     </div>
     <div class="toggle-row">
       <span class="toggle-label">Fog with Characters</span>
@@ -1569,7 +1530,6 @@ let appState = {
   witchTimer: { active:false, nextAt:null },
   fogAutoActive: false, fogAutoNextAt: null, fogWarmup: false,
   graveyardCycle: { active: false, nextAt: null },
-  jamboreeLoop: { active: false },
 };
 let flashStyle = 'single';
 let fogDuration = 5;
@@ -1694,13 +1654,6 @@ function applyState(s) {
     cBtn.className   = s.graveyardCycle.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
   }
 
-  // Jamboree loop
-  if (s.jamboreeLoop !== undefined) {
-    const jBtn = document.getElementById('jloop-btn');
-    jBtn.textContent = s.jamboreeLoop.active ? '■ Stop Jamboree Loop' : '▶ Start Jamboree Loop';
-    jBtn.className   = s.jamboreeLoop.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-orange btn-full btn-lg';
-  }
-
   // Witch timer
   const wb   = document.getElementById('witch-badge');
   const ws2  = document.getElementById('witch-status');
@@ -1728,7 +1681,7 @@ function applyConfig(c) {
 
 function applySettings(s) {
   if (s.hapticFeedback    !== undefined) document.getElementById('set-haptic').checked   = s.hapticFeedback;
-  if (s.autoDuckJamboree  !== undefined) document.getElementById('set-autoduck').checked = s.autoDuckJamboree;
+  if (s.autoDuckSkeleton  !== undefined) document.getElementById('set-autoduck').checked = s.autoDuckSkeleton;
   if (s.fogWithCharacters !== undefined) document.getElementById('set-fogchars').checked = s.fogWithCharacters;
 }
 
@@ -1923,11 +1876,6 @@ function toggleGraveyardCycle() {
   api('/api/graveyard/cycle/toggle');
 }
 
-// ── Jamboree loop ─────────────────────────────────────────────────────────────
-function toggleJamboreeLoop() {
-  api('/api/jamboree/loop/toggle');
-}
-
 // ── Witch timer ───────────────────────────────────────────────────────────────
 function toggleWitch() {
   api('/api/witch/toggle');
@@ -1968,19 +1916,6 @@ function loadClip(char, title) {
   api('/api/character', { character: char, clip: title });
   demoLog(`Clip: ${title}`, 'VIDEO');
 }
-function loadP1(title) {
-  document.getElementById('p1-nowplaying').textContent = `▶ ${title}`;
-  const bar = document.getElementById('jamboree-nowplaying-bar');
-  const txt = document.getElementById('jamboree-nowplaying-text');
-  if (bar && txt) { txt.textContent = title; bar.classList.add('show'); }
-  api('/api/jamboree/play', { title });
-  demoLog(`P1: ${title}`, 'VIDEO');
-}
-function p1Control(cmd) {
-  demoLog(`P1 ${cmd}`, 'VIDEO');
-  if (cmd === 'stop') { api('/api/jamboree/stop'); return; }
-  api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : 'NTCSKIPF' });
-}
 function p2Control(cmd) { demoLog(`P2 ${cmd}`, 'VIDEO'); api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : cmd === 'stop' ? 'NTCSTOP' : 'NTCSKIPF' }); }
 
 // ── Lights ────────────────────────────────────────────────────────────────────
@@ -2016,7 +1951,7 @@ function saveGoveeIPs() {
   [
     { key: 'graveyard', name: 'Graveyard Pair', slot: 'graveyard' },
     { key: 'witch',     name: 'Witch Pair',     slot: 'witch'     },
-    { key: 'jamboree',  name: 'Jamboree Pair',  slot: 'jamboree'  },
+    { key: 'skeleton',  name: 'Skeleton',       slot: 'skeleton'  },
     { key: 'tree',      name: 'Tree Pair',       slot: 'tree'      },
   ].forEach(({ key, name, slot }) => {
     const ip = document.getElementById(`gip-${key}`)?.value?.trim();
