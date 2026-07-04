@@ -515,9 +515,51 @@ function scheduleNextWitch() {
   }, ms);
 }
 
+// Spell colors per witch clip — used for the cast-flash on her light pair
+const SPELL_COLORS = {
+  witchinghour: { r:   0, g: 200, b:  40 },  // green
+  catcrow:      { r: 255, g: 120, b:   0 },  // amber
+  spellbound:   { r:  40, g: 120, b: 255 },  // blue
+  seance:       { r: 160, g:   0, b: 220 },  // purple
+};
+
+// Spell-cast flash on the witch's light pair: erupt white, flicker to spell color,
+// hold as her glow, then restore to previous look after the clip window.
+function castSpellLights(clip) {
+  const ids = getSlotIds('witch');
+  if (!ids.length) return;
+  const spell = SPELL_COLORS[clip] || SPELL_COLORS.witchinghour;
+  const prev = goveeDevices
+    .filter(d => ids.includes(d.id))
+    .map(d => ({ id: d.id, color: { ...d.color }, brightness: d.brightness }));
+
+  goveeSetColor(255, 255, 255, ids).catch(() => {});
+  goveeSetBrightness(100, ids).catch(() => {});
+  setTimeout(() => { goveeSetColor(spell.r, spell.g, spell.b, ids).catch(() => {}); }, 350);
+  setTimeout(() => { goveeSetColor(255, 255, 255, ids).catch(() => {}); }, 700);
+  setTimeout(() => {
+    goveeSetColor(spell.r, spell.g, spell.b, ids).catch(() => {});
+    goveeSetBrightness(85, ids).catch(() => {});
+  }, 1000);
+
+  // Restore previous look when her 30s window ends
+  setTimeout(async () => {
+    for (const snap of prev) {
+      const dev = goveeDevices.find(d => d.id === snap.id);
+      if (!dev) continue;
+      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }).catch(() => {});
+      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
+      dev.color = snap.color;
+      dev.brightness = snap.brightness;
+    }
+    broadcastGovee();
+  }, 30000);
+}
+
 async function fireWitch(clip) {
   broadcastLog(`Witch: ${clip}`, 'WITCH');
   playWitchClip(clip);
+  castSpellLights(clip);
   try {
     const currentZ3 = state.volumes.z3;
     const currentZ1 = state.volumes.z1;
