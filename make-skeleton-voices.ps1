@@ -1,34 +1,83 @@
 # Generates test voice files for the Skeleton zone using Windows built-in TTS.
-# Creates Desktop\SKELETON\skeleton-left.wav and skeleton-right.wav with two different voices.
+# Output is STEREO with the voice panned hard to one side:
+#   skeleton-left.wav  -> voice only in LEFT channel  (FL speaker)
+#   skeleton-right.wav -> voice only in RIGHT channel (FR speaker)
 Add-Type -AssemblyName System.Speech
 
 $dir = "$env:USERPROFILE\OneDrive\Desktop\SKELETON"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
+# Convert a mono 16-bit PCM wav into stereo with audio on only one channel
+function ConvertTo-PannedStereo([string]$monoPath, [string]$outPath, [string]$side) {
+  $bytes = [System.IO.File]::ReadAllBytes($monoPath)
+  # Locate the 'data' chunk
+  $dataPos = -1
+  for ($i = 12; $i -lt $bytes.Length - 8; $i++) {
+    if ($bytes[$i] -eq 0x64 -and $bytes[$i+1] -eq 0x61 -and $bytes[$i+2] -eq 0x74 -and $bytes[$i+3] -eq 0x61) { $dataPos = $i; break }
+  }
+  if ($dataPos -lt 0) { throw "data chunk not found in $monoPath" }
+  $dataLen  = [BitConverter]::ToInt32($bytes, $dataPos + 4)
+  $dataStart = $dataPos + 8
+  $sampleRate = [BitConverter]::ToInt32($bytes, 24)
+
+  $numSamples = [int]($dataLen / 2)
+  $outData = New-Object byte[] ($numSamples * 4)
+  for ($s = 0; $s -lt $numSamples; $s++) {
+    $lo = $bytes[$dataStart + $s*2]
+    $hi = $bytes[$dataStart + $s*2 + 1]
+    if ($side -eq 'left') {
+      $outData[$s*4]     = $lo; $outData[$s*4 + 1] = $hi   # L = voice
+      $outData[$s*4 + 2] = 0;  $outData[$s*4 + 3] = 0      # R = silent
+    } else {
+      $outData[$s*4]     = 0;  $outData[$s*4 + 1] = 0      # L = silent
+      $outData[$s*4 + 2] = $lo; $outData[$s*4 + 3] = $hi   # R = voice
+    }
+  }
+
+  $ms = New-Object System.IO.MemoryStream
+  $w  = New-Object System.IO.BinaryWriter($ms)
+  $w.Write([System.Text.Encoding]::ASCII.GetBytes('RIFF'))
+  $w.Write([int](36 + $outData.Length))
+  $w.Write([System.Text.Encoding]::ASCII.GetBytes('WAVEfmt '))
+  $w.Write([int]16); $w.Write([int16]1); $w.Write([int16]2)          # PCM, stereo
+  $w.Write([int]$sampleRate); $w.Write([int]($sampleRate * 4))       # byte rate
+  $w.Write([int16]4); $w.Write([int16]16)                            # block align, bits
+  $w.Write([System.Text.Encoding]::ASCII.GetBytes('data'))
+  $w.Write([int]$outData.Length)
+  $w.Write($outData)
+  [System.IO.File]::WriteAllBytes($outPath, $ms.ToArray())
+  $w.Dispose(); $ms.Dispose()
+}
+
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $voices = $synth.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }
 Write-Host "Installed voices: $($voices -join ', ')"
+$tmp = "$env:TEMP\skel-mono.wav"
 
-# LEFT skeleton — male voice, slow and low
+# LEFT skeleton — male voice, slow and low, LEFT channel only
 $male = $voices | Where-Object { $_ -match 'David' } | Select-Object -First 1
 if (-not $male) { $male = $voices[0] }
 $synth.SelectVoice($male)
 $synth.Rate = -3
-$synth.SetOutputToWaveFile("$dir\skeleton-left.wav")
-$synth.Speak("Well well well... another visitor. I used to have skin in this game... now I'm just bones. Stick around... we're dying for company.")
+$fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(22050, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+$synth.SetOutputToWaveFile($tmp, $fmt)
+$synth.Speak("Testing testing... left side here. I'm the skeleton on the left. If you hear me anywhere else... we have a problem.")
 $synth.SetOutputToNull()
+ConvertTo-PannedStereo $tmp "$dir\skeleton-left.wav" 'left'
 
-# RIGHT skeleton — different voice, faster and snappier
+# RIGHT skeleton — different voice, RIGHT channel only
 $alt = $voices | Where-Object { $_ -match 'Zira|Mark' } | Select-Object -First 1
 if (-not $alt) { $alt = $voices[-1] }
 $synth.SelectVoice($alt)
 $synth.Rate = -1
-$synth.SetOutputToWaveFile("$dir\skeleton-right.wav")
-$synth.Speak("Don't listen to him, he's all talk and no body! Ha! Get it? No body? ... Tough crowd. We haven't had a good laugh here in centuries.")
+$synth.SetOutputToWaveFile($tmp, $fmt)
+$synth.Speak("And I'm the right side! Right speaker, right skeleton, right now. If I'm coming out of the left speaker, swap those wires!")
 $synth.SetOutputToNull()
+ConvertTo-PannedStereo $tmp "$dir\skeleton-right.wav" 'right'
 
 $synth.Dispose()
+Remove-Item $tmp -ErrorAction SilentlyContinue
 Write-Host ""
-Write-Host "Done! Created:"
-Write-Host "  $dir\skeleton-left.wav"
-Write-Host "  $dir\skeleton-right.wav"
+Write-Host "Done! Created stereo-panned test files:"
+Write-Host "  $dir\skeleton-left.wav   (voice in LEFT channel only)"
+Write-Host "  $dir\skeleton-right.wav  (voice in RIGHT channel only)"
