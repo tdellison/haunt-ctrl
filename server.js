@@ -520,10 +520,27 @@ async function fireWitch(clip) {
   playWitchClip(clip);
   try {
     const currentZ3 = state.volumes.z3;
-    const boost = clampVol('z3', currentZ3 + 8);
+    const currentZ1 = state.volumes.z1;
+    const boost  = clampVol('z3', currentZ3 + 8);
+    // Duck jamboree 8 steps while witch is active — pumpkins are 23 ft away and bleed into her mic
+    const ducked = clampVol('z1', Math.max(0, currentZ1 - 8));
     await sendISCP(`${ZONE_CMD.z3}${volToHex(boost)}`);
+    if (ducked !== currentZ1) {
+      await sendISCP(`${ZONE_CMD.z1}${volToHex(ducked)}`);
+      state.volumes.z1 = ducked;
+      broadcastLog('Witch active — jamboree ducked -8', 'AUDIO');
+      broadcastState();
+    }
     setTimeout(async () => {
-      try { await sendISCP(`${ZONE_CMD.z3}${volToHex(currentZ3)}`); } catch (_) {}
+      try {
+        await sendISCP(`${ZONE_CMD.z3}${volToHex(currentZ3)}`);
+        if (ducked !== currentZ1) {
+          await sendISCP(`${ZONE_CMD.z1}${volToHex(currentZ1)}`);
+          state.volumes.z1 = currentZ1;
+          broadcastLog('Witch done — jamboree restored', 'AUDIO');
+          broadcastState();
+        }
+      } catch (_) {}
     }, 30000);
   } catch (e) {
     broadcastLog(`Witch error: ${e.message}`, 'SYSTEM');
