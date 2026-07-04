@@ -42,10 +42,10 @@
     {
       "id": "rear_projection_screen",
       "name": "Rear Ghost Projection Screen",
-      "position": { "x": 10, "y": 38 },
+      "position": { "x": 24, "y": 36 },
       "zone": "z2",
       "govee_slot": "graveyard",
-      "notes": "Farthest back in the graveyard scene. Measured 29 ft from jamboree at heading ~48°, placing it deep and left, near the back planting line."
+      "notes": "Deep in the yard on the OPPOSITE side from the witch (right side), ~29 ft from jamboree. Position approximate — owner confirmed right side; exact spot flexible pending projector throw testing."
     }
   ],
   "measurements": {
