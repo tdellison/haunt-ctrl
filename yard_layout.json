@@ -1,15 +1,20 @@
 {
   "meta": {
-    "description": "HAUNT CTRL v3 yard layout — compiled from Google Earth measurement screenshots",
+    "description": "HAUNT CTRL v3 yard layout — compiled from Google Earth measurement screenshots (surveyed pass, 11 measurements)",
     "units": "feet",
     "coordinate_system": {
-      "x_axis": "Width of property. 0 = left yard edge, increases rightward, ~35 = driveway edge",
-      "y_axis": "Depth of property. 0 = sidewalk/street edge, increases moving back toward porch/house",
-      "origin": "Front-left corner of yard where left edge meets sidewalk"
+      "x_axis": "Width of property. 0 = left yard edge, increases rightward, 57 = driveway edge at the front",
+      "y_axis": "Depth of property. 0 = sidewalk/street edge, increases moving back toward the house",
+      "origin": "Front-left corner of yard where left side yard line meets the sidewalk corner curve"
     },
     "property": {
-      "yard_width_ft": 35,
-      "yard_depth_ft": 39,
+      "front_yard_line_along_sidewalk_ft": 57,
+      "left_side_yard_line_ft": 44,
+      "corner_curve_segment_ft": 19,
+      "roof_line_ft": 38,
+      "garage_front_ft": 28,
+      "driveway_width_at_yard_ft": 21,
+      "fence_ft": 19,
       "reference_gps": {
         "jamboree_pin": "40°22'18.62\"N 111°58'30.93\"W",
         "front_yard_pin": "40°22'19.04\"N 111°58'30.72\"W"
@@ -26,26 +31,26 @@
     {
       "id": "witch",
       "name": "Interactive Witch",
-      "position": { "x": 2, "y": 4 },
+      "position": { "x": 4, "y": 6 },
       "zone": "z3",
       "govee_slot": "witch",
-      "notes": "Left side of yard in the graveyard scene, near left planting bed. Measured 22 ft west of jamboree at heading ~102°."
+      "notes": "Front-left sidewalk corner of the yard, first display visitors meet. Anchor point for the graveyard scene."
     },
     {
       "id": "jamboree",
       "name": "Singing Pumpkins (Jamboree)",
-      "position": { "x": 23, "y": 1 },
+      "position": { "x": 25, "y": 4 },
       "zone": "z1",
       "govee_slot": null,
-      "notes": "Table at the garage front by the driveway apron. Measured 22 ft from witch at heading ~149°. No Govee lighting — host spot, owner may add standalone bluetooth lights. All Govee pairs are staged in the graveyard zone."
+      "notes": "Host table at the garage front by the driveway apron. Measured 22 ft from witch. No Govee lighting — owner may add standalone bluetooth lights. All Govee pairs are staged in the graveyard zone."
     },
     {
       "id": "rear_projection_screen",
       "name": "Rear Ghost Projection Screen",
-      "position": { "x": 33, "y": 36 },
+      "position": { "x": 40, "y": 30 },
       "zone": "z2",
       "govee_slot": "graveyard",
-      "notes": "Deep back-right of yard, opposite corner from the witch. Measured 46 ft from witch, ~29 ft from jamboree table. Exact spot flexible pending projector throw testing."
+      "notes": "Deep back-right area of the yard, 46 ft diagonal from the witch, ~29 ft from the jamboree table. Exact spot flexible pending projector throw testing."
     }
   ],
   "lighting_plan": {
@@ -58,18 +63,20 @@
   "measurements": {
     "witch_to_jamboree_ft": 22,
     "jamboree_to_projection_screen_ft": 29,
-    "witch_to_projection_screen_ft": 46
+    "witch_to_projection_screen_ft": 46,
+    "consistency_check": "All three pairwise distances verified against surveyed 57x44 ft yard — positions triangulate within ~2 ft"
   },
   "audio_analysis": {
-    "witch_to_pumpkins_distance_ft": 23,
+    "witch_to_pumpkins_distance_ft": 22,
     "bleed_risk": "HIGH",
-    "explanation": "23 ft between the interactive witch (z3) and singing pumpkins (z1, garage table) is nearly identical to the original 22 ft placement — the move improves scene layout and visitor flow but does NOT meaningfully reduce audio bleed. Sound drops ~6 dB per doubling of distance; at 23 ft the pumpkins remain only ~10-12 dB down at the witch's microphone. The garage table position does aim the speakers toward the driveway (away from the witch) and puts landscaping between them, which helps somewhat, but ducking is still required.",
+    "explanation": "22 ft between the interactive witch (z3) and singing pumpkins (z1, garage table) is within outdoor speaker bleed range. Sound drops ~6 dB per doubling of distance; at 22 ft the pumpkins remain only ~10-12 dB down at the witch's microphone. The garage table position aims the speakers toward the driveway (away from the witch), which helps, but ducking is still required.",
     "recommendation": {
       "action": "auto_duck_jamboree_when_witch_active",
       "duck_amount_db": 8,
       "duck_amount_onkyo_steps": 8,
       "trigger": "Duck z1 by 8 dB whenever the witch speaks, listens, or is triggered (manual fire or witch timer). Restore z1 30 seconds after witch activity ends.",
-      "note": "The server's existing witch fire routine boosts z3 by +8 for 30s — mirror that window with a -8 duck on z1. If interference persists during the witch's listening phase, increase to 12 dB."
+      "note": "IMPLEMENTED in server.js — fireWitch ducks z1 by 8 and restores after 30s, alongside her z3 boost. If interference persists during the witch's listening phase, increase to 12 dB.",
+      "status": "implemented"
     }
   }
 }
