@@ -6,6 +6,12 @@ echo   HAUNT CTRL v3 — UPDATING...
 echo  ============================================
 git fetch origin master
 git reset --hard origin/master
+
+REM Generate skeleton test voices if they don't exist yet
+if not exist "C:\Users\tdell\OneDrive\Desktop\SKELETON\skeleton-left.wav" (
+  echo  Generating skeleton test voices...
+  powershell -ExecutionPolicy Bypass -File "%~dp0make-skeleton-voices.ps1"
+)
 echo.
 echo  ============================================
 echo   HAUNT CTRL v3 — SERVER STARTING...
