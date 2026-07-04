@@ -7,9 +7,13 @@ echo  ============================================
 git fetch origin master
 git reset --hard origin/master
 
-REM Generate skeleton test voices if they don't exist yet
+REM Generate skeleton + witch test voices if they don't exist yet
 if not exist "C:\Users\tdell\OneDrive\Desktop\SKELETON\skeleton-left.wav" (
-  echo  Generating skeleton test voices...
+  echo  Generating test voices...
+  powershell -ExecutionPolicy Bypass -File "%~dp0make-skeleton-voices.ps1"
+)
+if not exist "C:\Users\tdell\OneDrive\Desktop\WITCH\witch1-right.wav" (
+  echo  Generating witch test voices...
   powershell -ExecutionPolicy Bypass -File "%~dp0make-skeleton-voices.ps1"
 )
 echo.

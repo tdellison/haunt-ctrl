@@ -75,9 +75,38 @@ $synth.Speak("And I'm the right side! Right speaker, right skeleton, right now. 
 $synth.SetOutputToNull()
 ConvertTo-PannedStereo $tmp "$dir\skeleton-right.wav" 'right'
 
+# ── Witch test voices (Witch 1 = RIGHT speaker w/ future mic, Witch 2 = LEFT) ──
+# Only generated if not already present, so your own files won't be overwritten.
+$wdir = "$env:USERPROFILE\OneDrive\Desktop\WITCH"
+New-Item -ItemType Directory -Force -Path $wdir | Out-Null
+
+if (-not (Test-Path "$wdir\witch1-right.wav")) {
+  $f = $voices | Where-Object { $_ -match 'Zira' } | Select-Object -First 1
+  if (-not $f) { $f = $voices[-1] }
+  $synth.SelectVoice($f)
+  $synth.Rate = -2
+  $synth.SetOutputToWaveFile($tmp, $fmt)
+  $synth.Speak("Witch one, on the right. I am the main witch... soon I shall hear your every word. Right speaker, right side of the cauldron.")
+  $synth.SetOutputToNull()
+  ConvertTo-PannedStereo $tmp "$wdir\witch1-right.wav" 'right'
+  Write-Host "Created $wdir\witch1-right.wav"
+}
+if (-not (Test-Path "$wdir\witch2-left.wav")) {
+  $f2 = $voices | Where-Object { $_ -match 'David|Mark' } | Select-Object -First 1
+  if (-not $f2) { $f2 = $voices[0] }
+  $synth.SelectVoice($f2)
+  $synth.Rate = -3
+  $synth.SetOutputToWaveFile($tmp, $fmt)
+  $synth.Speak("And I am witch two, cackling from the left. If you hear me on the right side, our brooms are crossed.")
+  $synth.SetOutputToNull()
+  ConvertTo-PannedStereo $tmp "$wdir\witch2-left.wav" 'left'
+  Write-Host "Created $wdir\witch2-left.wav"
+}
+
 $synth.Dispose()
 Remove-Item $tmp -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host "Done! Created stereo-panned test files:"
 Write-Host "  $dir\skeleton-left.wav   (voice in LEFT channel only)"
 Write-Host "  $dir\skeleton-right.wav  (voice in RIGHT channel only)"
+Write-Host "  plus witch1-right.wav / witch2-left.wav in the WITCH folder (if not already present)"

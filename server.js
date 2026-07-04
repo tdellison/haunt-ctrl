@@ -710,6 +710,29 @@ function stopWitch() {
     witchProcess = null;
     broadcastLog('Witch stopped', 'WITCH');
   }
+  if (witchSideProcess) {
+    try { witchSideProcess.kill(); } catch (_) {}
+    witchSideProcess = null;
+  }
+}
+
+// Witch 1 = RIGHT speaker (main witch, future reactive mic). Witch 2 = LEFT speaker.
+// Drop these files in the WITCH folder — edit filenames here if yours differ.
+const WITCH_LR_FILES = { right: 'witch1-right.wav', left: 'witch2-left.wav' };
+let witchSideProcess = null;
+
+function fireWitchSide(side) {
+  const filename = WITCH_LR_FILES[side];
+  if (!filename) return false;
+  if (witchSideProcess) { try { witchSideProcess.kill(); } catch (_) {} witchSideProcess = null; }
+  broadcastLog(`Witch ${side === 'right' ? '1 (right)' : '2 (left)'} triggered`, 'WITCH');
+  witchSideProcess = spawn(VLC_PATH, [
+    path.join(WITCH_DIR, filename),
+    '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
+  ], { detached: true, stdio: 'ignore' });
+  witchSideProcess.unref();
+  witchSideProcess.on('exit', () => { witchSideProcess = null; });
+  return true;
 }
 
 function fireSkeleton(side) {
@@ -1161,6 +1184,14 @@ app.post('/api/witch/toggle', (req, res) => {
   }
   broadcastState();
   res.json({ ok: true, active: state.witchTimer.active });
+});
+
+app.post('/api/witch/side', (req, res) => {
+  const { side } = req.body;
+  if (side !== 'left' && side !== 'right') return res.status(400).json({ error: 'side left/right required' });
+  const ok = fireWitchSide(side);
+  if (!ok) return res.status(404).json({ error: 'no file for side' });
+  res.json({ ok: true, side });
 });
 
 app.post('/api/witch/fire', async (req, res) => {

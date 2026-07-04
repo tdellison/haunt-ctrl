@@ -1049,6 +1049,10 @@ body::before { animation:scanlines 10s linear infinite; }
         <span class="cd-dot"></span><span id="witch-status">Inactive</span>
       </div>
       <button class="btn btn-purple btn-full btn-lg" id="witch-toggle-btn" onclick="toggleWitch()">▶ Start Witch Timer</button>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'right'})">🧙 WITCH 1 · R</button>
+        <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'left'})">🧙 WITCH 2 · L</button>
+      </div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'witchinghour'})">🌙 WITCHING HOUR</button>
         <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'catcrow'})">🐈‍⬛ CAT &amp; CROW</button>
