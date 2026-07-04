@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "description": "HAUNT CTRL v3 yard layout — compiled from Google Earth measurement screenshots",
+    "units": "feet",
+    "coordinate_system": {
+      "x_axis": "Width of property. 0 = left yard edge, increases rightward, ~35 = driveway edge",
+      "y_axis": "Depth of property. 0 = sidewalk/street edge, increases moving back toward porch/house",
+      "origin": "Front-left corner of yard where left edge meets sidewalk"
+    },
+    "property": {
+      "yard_width_ft": 35,
+      "yard_depth_ft": 39,
+      "reference_gps": {
+        "jamboree_pin": "40°22'18.62\"N 111°58'30.93\"W",
+        "front_yard_pin": "40°22'19.04\"N 111°58'30.72\"W"
+      },
+      "landmarks": {
+        "shrub_to_sidewalk_ft": 24,
+        "left_edge_setback_ft": 7,
+        "planting_bed_depth_ft": 11,
+        "front_walk_offset_ft": 16
+      }
+    }
+  },
+  "displays": [
+    {
+      "id": "witch",
+      "name": "Interactive Witch",
+      "position": { "x": 6, "y": 26 },
+      "zone": "z3",
+      "govee_slot": "witch",
+      "notes": "Left side of yard in the graveyard scene, near left planting bed. Measured 22 ft west of jamboree at heading ~102°."
+    },
+    {
+      "id": "jamboree",
+      "name": "Singing Pumpkins (Jamboree)",
+      "position": { "x": 27, "y": 30 },
+      "zone": "z1",
+      "govee_slot": "jamboree",
+      "gps": "40°22'18.62\"N 111°58'30.93\"W",
+      "notes": "Right-center near porch/house corner, adjacent to driveway side. AV system located just behind at house corner."
+    },
+    {
+      "id": "rear_projection_screen",
+      "name": "Rear Ghost Projection Screen",
+      "position": { "x": 10, "y": 38 },
+      "zone": "z2",
+      "govee_slot": "graveyard",
+      "notes": "Farthest back in the graveyard scene. Measured 29 ft from jamboree at heading ~48°, placing it deep and left, near the back planting line."
+    }
+  ],
+  "measurements": {
+    "witch_to_jamboree_ft": 22,
+    "jamboree_to_projection_screen_ft": 29,
+    "witch_to_projection_screen_ft": 13
+  },
+  "audio_analysis": {
+    "witch_to_pumpkins_distance_ft": 22,
+    "bleed_risk": "HIGH",
+    "explanation": "22 ft between the interactive witch (z3) and singing pumpkins (z1) is within typical outdoor speaker bleed range. Sound drops ~6 dB per doubling of distance; at 22 ft the pumpkins' audio is only ~10-12 dB quieter at the witch's microphone position, which will interfere with the witch listening and be audible over her speech.",
+    "recommendation": {
+      "action": "auto_duck_jamboree_when_witch_active",
+      "duck_amount_db": 8,
+      "duck_amount_onkyo_steps": 8,
+      "trigger": "Duck z1 by 8 dB whenever the witch speaks, listens, or is triggered (manual fire or witch timer). Restore z1 30 seconds after witch activity ends.",
+      "note": "The server's existing witch fire routine boosts z3 by +8 for 30s — mirror that window with a -8 duck on z1. If interference persists during the witch's listening phase, increase to 12 dB."
+    }
+  }
+}
