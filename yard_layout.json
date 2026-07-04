@@ -26,7 +26,7 @@
     {
       "id": "witch",
       "name": "Interactive Witch",
-      "position": { "x": 6, "y": 26 },
+      "position": { "x": 2, "y": 4 },
       "zone": "z3",
       "govee_slot": "witch",
       "notes": "Left side of yard in the graveyard scene, near left planting bed. Measured 22 ft west of jamboree at heading ~102°."
@@ -34,7 +34,7 @@
     {
       "id": "jamboree",
       "name": "Singing Pumpkins (Jamboree)",
-      "position": { "x": 33, "y": 18 },
+      "position": { "x": 28, "y": 10 },
       "zone": "z1",
       "govee_slot": "jamboree",
       "notes": "Table at the garage corner on the driveway edge. Faces the driveway so visitors hear it on approach. Measured 23 ft from witch at heading ~332°."
@@ -42,16 +42,16 @@
     {
       "id": "rear_projection_screen",
       "name": "Rear Ghost Projection Screen",
-      "position": { "x": 24, "y": 36 },
+      "position": { "x": 33, "y": 36 },
       "zone": "z2",
       "govee_slot": "graveyard",
-      "notes": "Deep in the yard on the OPPOSITE side from the witch (right side), ~29 ft from jamboree. Position approximate — owner confirmed right side; exact spot flexible pending projector throw testing."
+      "notes": "Deep back-right of yard, opposite corner from the witch. Measured 46 ft from witch, ~29 ft from jamboree table. Exact spot flexible pending projector throw testing."
     }
   ],
   "measurements": {
-    "witch_to_jamboree_ft": 22,
+    "witch_to_jamboree_ft": 23,
     "jamboree_to_projection_screen_ft": 29,
-    "witch_to_projection_screen_ft": 13
+    "witch_to_projection_screen_ft": 46
   },
   "audio_analysis": {
     "witch_to_pumpkins_distance_ft": 23,
