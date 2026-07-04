@@ -616,7 +616,7 @@ const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
 const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
 
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
-const SKELETON_FILES = { left: 'skeleton-left.mp3', right: 'skeleton-right.mp3' };
+const SKELETON_FILES = { left: 'skeleton-left.wav', right: 'skeleton-right.wav' };
 
 const STORM_FILES = [
   'bijan6207-thunderstorm-409071.mp3',
