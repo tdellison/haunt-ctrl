@@ -34,10 +34,10 @@
     {
       "id": "jamboree",
       "name": "Singing Pumpkins (Jamboree)",
-      "position": { "x": 28, "y": 10 },
+      "position": { "x": 23, "y": 1 },
       "zone": "z1",
-      "govee_slot": "jamboree",
-      "notes": "Table at the garage corner on the driveway edge. Faces the driveway so visitors hear it on approach. Measured 23 ft from witch at heading ~332°."
+      "govee_slot": null,
+      "notes": "Table at the garage front by the driveway apron. Measured 22 ft from witch at heading ~149°. No Govee lighting — host spot, owner may add standalone bluetooth lights. All Govee pairs are staged in the graveyard zone."
     },
     {
       "id": "rear_projection_screen",
@@ -48,8 +48,15 @@
       "notes": "Deep back-right of yard, opposite corner from the witch. Measured 46 ft from witch, ~29 ft from jamboree table. Exact spot flexible pending projector throw testing."
     }
   ],
+  "lighting_plan": {
+    "strategy": "All 4 Govee pairs concentrated in the graveyard zone, staggered among scattered tombstones as ground uplights",
+    "witch_pair": "Uplight at witch + light in cauldron (spell-flash wired)",
+    "remaining_pairs": "Staggered diagonally through the tombstone field between the witch corner and the projection screen",
+    "ambient_color_suggestion": "Moonlight teal (r:0 g:140 b:150) as the base graveyard wash — reads as cold moonlight, contrasts the witch's green and lets storm white-flashes hit harder than purple does. Deep purple as alternate.",
+    "jamboree": "No Govee — standalone bluetooth lights if needed"
+  },
   "measurements": {
-    "witch_to_jamboree_ft": 23,
+    "witch_to_jamboree_ft": 22,
     "jamboree_to_projection_screen_ft": 29,
     "witch_to_projection_screen_ft": 46
   },
