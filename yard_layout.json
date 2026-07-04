@@ -34,11 +34,10 @@
     {
       "id": "jamboree",
       "name": "Singing Pumpkins (Jamboree)",
-      "position": { "x": 27, "y": 30 },
+      "position": { "x": 33, "y": 18 },
       "zone": "z1",
       "govee_slot": "jamboree",
-      "gps": "40°22'18.62\"N 111°58'30.93\"W",
-      "notes": "Right-center near porch/house corner, adjacent to driveway side. AV system located just behind at house corner."
+      "notes": "Table at the garage corner on the driveway edge. Faces the driveway so visitors hear it on approach. Measured 23 ft from witch at heading ~332°."
     },
     {
       "id": "rear_projection_screen",
@@ -55,9 +54,9 @@
     "witch_to_projection_screen_ft": 13
   },
   "audio_analysis": {
-    "witch_to_pumpkins_distance_ft": 22,
+    "witch_to_pumpkins_distance_ft": 23,
     "bleed_risk": "HIGH",
-    "explanation": "22 ft between the interactive witch (z3) and singing pumpkins (z1) is within typical outdoor speaker bleed range. Sound drops ~6 dB per doubling of distance; at 22 ft the pumpkins' audio is only ~10-12 dB quieter at the witch's microphone position, which will interfere with the witch listening and be audible over her speech.",
+    "explanation": "23 ft between the interactive witch (z3) and singing pumpkins (z1, garage table) is nearly identical to the original 22 ft placement — the move improves scene layout and visitor flow but does NOT meaningfully reduce audio bleed. Sound drops ~6 dB per doubling of distance; at 23 ft the pumpkins remain only ~10-12 dB down at the witch's microphone. The garage table position does aim the speakers toward the driveway (away from the witch) and puts landscaping between them, which helps somewhat, but ducking is still required.",
     "recommendation": {
       "action": "auto_duck_jamboree_when_witch_active",
       "duck_amount_db": 8,
