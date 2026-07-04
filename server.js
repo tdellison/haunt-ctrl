@@ -724,25 +724,23 @@ function fireSkeleton(side) {
   skeletonProcess.unref();
   skeletonProcess.on('exit', () => { skeletonProcess = null; });
 
-  // Flash the skeleton Govee slot white, then restore
+  // Subtle talk pulse on the skeleton Govee slot — brightness eases up, no color
+  // change, no spotlight. Skeletons stay dim shapes in the dark.
   const ids = getSlotIds('skeleton');
   if (ids.length) {
     const prev = goveeDevices
       .filter(d => ids.includes(d.id))
-      .map(d => ({ id: d.id, color: { ...d.color }, brightness: d.brightness }));
-    goveeSetColor(255, 255, 255, ids).catch(() => {});
-    goveeSetBrightness(100, ids).catch(() => {});
+      .map(d => ({ id: d.id, brightness: d.brightness }));
+    goveeSetBrightness(45, ids).catch(() => {});
     setTimeout(async () => {
       for (const snap of prev) {
         const dev = goveeDevices.find(d => d.id === snap.id);
         if (!dev) continue;
-        await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }).catch(() => {});
         await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
-        dev.color = snap.color;
         dev.brightness = snap.brightness;
       }
       broadcastGovee();
-    }, 800);
+    }, 8000);
   }
   return true;
 }
