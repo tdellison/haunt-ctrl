@@ -206,8 +206,9 @@ async function flashLights(stage) {
   } else if (stage === 3) {
     await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds);
   } else {
-    // Overhead — full white blast on every configured slot (or all lights if no slots)
-    let allIds = getSlotIds(...Object.keys(SLOT_BASES));
+    // Overhead — full white blast on every configured slot (or all lights if no slots).
+    // Cauldron excluded: it never goes white, stays green/red only.
+    let allIds = getSlotIds(...Object.keys(SLOT_BASES).filter(s => s !== 'cauldron'));
     const usingSlots = allIds.length > 0;
     if (!usingSlots) {
       if (!goveeDevices.length) return;
@@ -576,14 +577,14 @@ function castSpellLights(clip) {
   const ids = getSlotIds('cauldron');
   if (!ids.length) return;
 
-  goveeSetColor(255, 255, 255, ids).catch(() => {});
+  // No white — cauldron flickers green→red→green→red then holds red for the spell
+  goveeSetColor(180, 0, 0, ids).catch(() => {});
   goveeSetBrightness(100, ids).catch(() => {});
-  setTimeout(() => { goveeSetColor(180, 0, 0, ids).catch(() => {}); }, 350);
-  setTimeout(() => { goveeSetColor(255, 255, 255, ids).catch(() => {}); }, 700);
+  setTimeout(() => { goveeSetColor(0, 180, 0, ids).catch(() => {}); }, 350);
   setTimeout(() => {
     goveeSetColor(180, 0, 0, ids).catch(() => {});
     goveeSetBrightness(85, ids).catch(() => {});
-  }, 1000);
+  }, 700);
 
   // Pulse back to green base after 20 seconds
   setTimeout(() => {
