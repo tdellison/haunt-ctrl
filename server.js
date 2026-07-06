@@ -187,22 +187,51 @@ async function applyShowScheme() {
 // 3 Very Close:     storm slots bright electric blue 75%
 // 4 Overhead:       ALL 9 slots full white blast, back to base after 600ms
 async function flashLights(stage) {
-  const stormIds = getSlotIds('storm_left', 'storm_right');
+  // Fallback: if no lights are assigned to storm slots yet, flash ALL lights so
+  // testing works before slot setup. Assign storm_left/storm_right for show behavior.
+  let stormIds = getSlotIds('storm_left', 'storm_right');
+  if (!stormIds.length && goveeDevices.length) {
+    broadcastLog('Storm flash: no storm slots assigned — flashing all lights (assign Storm L/R slots in Test tab)', 'LIGHT');
+    stormIds = undefined; // undefined targets all devices in goveeSetColor/Brightness
+  } else if (!stormIds.length) {
+    broadcastLog('Storm flash: no Govee lights connected', 'LIGHT');
+    return;
+  }
   if (stage <= 0) {
-    if (stormIds.length) { await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(15, stormIds); }
+    await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(15, stormIds);
   } else if (stage === 1) {
-    if (stormIds.length) { await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(30, stormIds); }
+    await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(30, stormIds);
   } else if (stage === 2) {
-    if (stormIds.length) { await goveeSetColor(50, 140, 255, stormIds); await goveeSetBrightness(50, stormIds); }
+    await goveeSetColor(50, 140, 255, stormIds); await goveeSetBrightness(50, stormIds);
   } else if (stage === 3) {
-    if (stormIds.length) { await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds); }
+    await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds);
   } else {
-    // Overhead — full white blast on every configured slot
-    const allIds = getSlotIds(...Object.keys(SLOT_BASES));
-    if (!allIds.length) return;
+    // Overhead — full white blast on every configured slot (or all lights if no slots)
+    let allIds = getSlotIds(...Object.keys(SLOT_BASES));
+    const usingSlots = allIds.length > 0;
+    if (!usingSlots) {
+      if (!goveeDevices.length) return;
+      allIds = undefined; // all devices
+    }
+    const snapshot = usingSlots ? null : goveeDevices.map(d => ({ id: d.id, color: {...d.color}, brightness: d.brightness }));
     await goveeSetColor(255, 255, 255, allIds);
     await goveeSetBrightness(100, allIds);
-    setTimeout(() => { applyShowScheme().catch(() => {}); }, 600);
+    setTimeout(async () => {
+      if (usingSlots) {
+        applyShowScheme().catch(() => {});
+      } else {
+        // No slots configured — restore each light to what it was before the blast
+        for (const snap of snapshot) {
+          const dev = goveeDevices.find(d => d.id === snap.id);
+          if (!dev) continue;
+          await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }).catch(() => {});
+          await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
+          dev.color = snap.color;
+          dev.brightness = snap.brightness;
+        }
+        broadcastGovee();
+      }
+    }, 600);
   }
 }
 
