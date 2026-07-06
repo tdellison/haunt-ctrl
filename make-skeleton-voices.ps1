@@ -75,32 +75,32 @@ $synth.Speak("And I'm the right side! Right speaker, right skeleton, right now. 
 $synth.SetOutputToNull()
 ConvertTo-PannedStereo $tmp "$dir\skeleton-right.wav" 'right'
 
-# ── Witch test voices (Witch 1 = RIGHT speaker w/ future mic, Witch 2 = LEFT) ──
+# ── Witch test voices (Main witch = LEFT RCA w/ future mic, Witch 2 = RIGHT) ──
 # Only generated if not already present, so your own files won't be overwritten.
 $wdir = "$env:USERPROFILE\OneDrive\Desktop\WITCH"
 New-Item -ItemType Directory -Force -Path $wdir | Out-Null
 
-if (-not (Test-Path "$wdir\witch1-right.wav")) {
+if (-not (Test-Path "$wdir\witch-main-left.wav")) {
   $f = $voices | Where-Object { $_ -match 'Zira' } | Select-Object -First 1
   if (-not $f) { $f = $voices[-1] }
   $synth.SelectVoice($f)
   $synth.Rate = -2
   $synth.SetOutputToWaveFile($tmp, $fmt)
-  $synth.Speak("Witch one, on the right. I am the main witch... soon I shall hear your every word. Right speaker, right side of the cauldron.")
+  $synth.Speak("I am the main witch, on the left. Soon I shall hear your every word. Left speaker, left side of the cauldron.")
   $synth.SetOutputToNull()
-  ConvertTo-PannedStereo $tmp "$wdir\witch1-right.wav" 'right'
-  Write-Host "Created $wdir\witch1-right.wav"
+  ConvertTo-PannedStereo $tmp "$wdir\witch-main-left.wav" 'left'
+  Write-Host "Created $wdir\witch-main-left.wav"
 }
-if (-not (Test-Path "$wdir\witch2-left.wav")) {
+if (-not (Test-Path "$wdir\witch2-right.wav")) {
   $f2 = $voices | Where-Object { $_ -match 'David|Mark' } | Select-Object -First 1
   if (-not $f2) { $f2 = $voices[0] }
   $synth.SelectVoice($f2)
   $synth.Rate = -3
   $synth.SetOutputToWaveFile($tmp, $fmt)
-  $synth.Speak("And I am witch two, cackling from the left. If you hear me on the right side, our brooms are crossed.")
+  $synth.Speak("And I am witch two, cackling from the right. If you hear me on the left side, our brooms are crossed.")
   $synth.SetOutputToNull()
-  ConvertTo-PannedStereo $tmp "$wdir\witch2-left.wav" 'left'
-  Write-Host "Created $wdir\witch2-left.wav"
+  ConvertTo-PannedStereo $tmp "$wdir\witch2-right.wav" 'right'
+  Write-Host "Created $wdir\witch2-right.wav"
 }
 
 $synth.Dispose()
@@ -109,4 +109,4 @@ Write-Host ""
 Write-Host "Done! Created stereo-panned test files:"
 Write-Host "  $dir\skeleton-left.wav   (voice in LEFT channel only)"
 Write-Host "  $dir\skeleton-right.wav  (voice in RIGHT channel only)"
-Write-Host "  plus witch1-right.wav / witch2-left.wav in the WITCH folder (if not already present)"
+Write-Host "  plus witch-main-left.wav / witch2-right.wav in the WITCH folder (if not already present)"

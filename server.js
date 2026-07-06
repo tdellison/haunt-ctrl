@@ -23,18 +23,32 @@ let config = {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 let settings = {
-  autoDuckSkeleton: true,
-  fogWithCharacters: true,
   hapticFeedback: true,
 };
 
 // ─── Govee Devices ────────────────────────────────────────────────────────────
+// Slot roles:
+//  1. skel_left    — orange/red base, brightens when the LEFT skeleton talks
+//  2. skel_right   — orange/red base, brightens when the RIGHT skeleton talks
+//  3. witch_main   — deep purple base (main witch, left RCA)
+//  4. witch_second — deep purple base (second witch, right RCA)
+//  5. moon_left    — cool blue, consistent, white flash on Overhead only
+//  6. moon_right   — same
+//  7. storm_left   — cold blue, tracks storm progression dim → electric
+//  8. storm_right  — same
+//  9. cauldron     — separate A19 bulb, green base RGB(0,180,0), deep red
+//                    RGB(180,0,0) on spell trigger, pulses back to green after 20s
 let goveeDevices = [];
 const GOVEE_IPS = {
-  graveyard: '',
-  witch: '',
-  skeleton: '',
-  tree: '',
+  skel_left:    '',
+  skel_right:   '',
+  witch_main:   '',
+  witch_second: '',
+  moon_left:    '',
+  moon_right:   '',
+  storm_left:   '',
+  storm_right:  '',
+  cauldron:     '',
 };
 const GOVEE_SLOT_IDS = {};
 
@@ -56,7 +70,7 @@ goveeSocket.on('message', (msg, rinfo) => {
     if (!m) return;
     if (m.cmd === 'scan') {
       const ip = rinfo.address;
-      if (!goveeDevices.find(d => d.ip === ip) && goveeDevices.length < 8) {
+      if (!goveeDevices.find(d => d.ip === ip) && goveeDevices.length < 12) {
         goveeDevices.push({
           id: `govee-${Date.now()}`,
           name: m.data?.sku || `Light ${goveeDevices.length + 1}`,
@@ -137,30 +151,59 @@ const GOVEE_COLORS = {
   off:       { r:  0, g:  0, b:  0 },
 };
 
+// Base show scheme — every slot's resting color + brightness
+const SLOT_BASES = {
+  skel_left:    { color: { r:255, g: 80, b:  0 }, bri: 25 },
+  skel_right:   { color: { r:255, g: 80, b:  0 }, bri: 25 },
+  witch_main:   { color: { r:100, g:  0, b:180 }, bri: 30 },
+  witch_second: { color: { r:100, g:  0, b:180 }, bri: 30 },
+  moon_left:    { color: { r: 60, g:120, b:255 }, bri: 40 },
+  moon_right:   { color: { r: 60, g:120, b:255 }, bri: 40 },
+  storm_left:   { color: { r: 30, g:120, b:255 }, bri: 15 },
+  storm_right:  { color: { r: 30, g:120, b:255 }, bri: 15 },
+  cauldron:     { color: { r:  0, g:180, b:  0 }, bri: 60 },
+};
+
 // Return Govee device IDs for named slots
 function getSlotIds(...slots) {
   return slots.map(s => GOVEE_SLOT_IDS[s]).filter(Boolean);
 }
 
-// Flash lights: storm-only or all-lights, with brightness level
-async function flashLights(style, allLights) {
-  const snapshot = goveeDevices.map(d => ({ id: d.id, color: {...d.color}, brightness: d.brightness }));
-  const bri = style === 'dim' ? 25 : style === 'medium' ? 60 : 100;
-  const holdMs = style === 'all-blast' ? 600 : style === 'all-medium' ? 400 : 250;
-  await goveeSetColor(255, 255, 255);
-  await goveeSetBrightness(bri);
+// Set every configured slot to its base show look
+async function applyShowScheme() {
+  for (const [slot, base] of Object.entries(SLOT_BASES)) {
+    const ids = getSlotIds(slot);
+    if (!ids.length) continue;
+    await goveeSetColor(base.color.r, base.color.g, base.color.b, ids).catch(() => {});
+    await goveeSetBrightness(base.bri, ids).catch(() => {});
+  }
+  broadcastLog('Lights: show scheme applied', 'LIGHT');
+}
 
-  setTimeout(async () => {
-    for (const snap of snapshot) {
-      const dev = goveeDevices.find(d => d.id === snap.id);
-      if (!dev) continue;
-      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } });
-      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } });
-      dev.color = snap.color;
-      dev.brightness = snap.brightness;
-    }
-    broadcastGovee();
-  }, holdMs);
+// Storm lighting per progression stage (0-4).
+// 0 Distant:        storm slots cold blue 15%
+// 1 Getting Closer: storm slots cold blue 30%
+// 2 Close:          storm slots brighter cold blue 50%
+// 3 Very Close:     storm slots bright electric blue 75%
+// 4 Overhead:       ALL 9 slots full white blast, back to base after 600ms
+async function flashLights(stage) {
+  const stormIds = getSlotIds('storm_left', 'storm_right');
+  if (stage <= 0) {
+    if (stormIds.length) { await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(15, stormIds); }
+  } else if (stage === 1) {
+    if (stormIds.length) { await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(30, stormIds); }
+  } else if (stage === 2) {
+    if (stormIds.length) { await goveeSetColor(50, 140, 255, stormIds); await goveeSetBrightness(50, stormIds); }
+  } else if (stage === 3) {
+    if (stormIds.length) { await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds); }
+  } else {
+    // Overhead — full white blast on every configured slot
+    const allIds = getSlotIds(...Object.keys(SLOT_BASES));
+    if (!allIds.length) return;
+    await goveeSetColor(255, 255, 255, allIds);
+    await goveeSetBrightness(100, allIds);
+    setTimeout(() => { applyShowScheme().catch(() => {}); }, 600);
+  }
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -176,19 +219,13 @@ let state = {
   sceneMode:   'normal',
   volumes:     { z1: 30, z2: 25, z3: 20, sub: 30 },
   mute:        { z1: false, z2: false, z3: false },
-  autoScare: {
-    active:      false,
-    intervalMin: 2,
-    chars:       { grimreaper: true, headlesshorseman: true, pumpkinking: true },
-    lastChar:    null,
-    timer:       null,
-    nextAt:      null,
-  },
-  witchTimer: {
-    active: false,
-    timer:  null,
-    nextAt: null,
-  },
+};
+
+// ─── Sound presets ────────────────────────────────────────────────────────────
+let soundPreset = 'normal';
+const SOUND_PRESETS = {
+  normal: { z1: 30, z2: 28, z3: 26 },
+  boost:  { z1: 40, z2: 38, z3: 36 },
 };
 
 // ─── ISCP ─────────────────────────────────────────────────────────────────────
@@ -272,6 +309,7 @@ function saveShowState() {
       sceneMode: state.sceneMode,
       kidMode: state.kidMode,
       maxVol: config.maxVol,
+      soundPreset,
     }), 'utf8');
   } catch(_) {}
 }
@@ -282,6 +320,7 @@ function loadShowState() {
     if (saved.sceneMode) state.sceneMode = saved.sceneMode;
     if (saved.kidMode !== undefined) state.kidMode = saved.kidMode;
     if (saved.maxVol) config.maxVol = { ...config.maxVol, ...saved.maxVol };
+    if (saved.soundPreset) soundPreset = saved.soundPreset;
     console.log('[HAUNT] Show state restored from disk');
   } catch(_) {}
 }
@@ -302,6 +341,11 @@ function broadcastLog(msg, category = 'SYSTEM') {
   } catch(_) {}
 }
 
+function anyVlcRunning() {
+  return !!(stormProcess || skeletonProcess || witchProcess || witchSideProcess ||
+            ambientProcess || fxProcess || atmosfxProcess || soundProcess);
+}
+
 function stateSnapshot() {
   const strike = STRIKE_SEQUENCE[strikeIndex];
   return {
@@ -319,17 +363,10 @@ function stateSnapshot() {
     fogAutoActive:    fogAuto.active,
     fogAutoNextAt:    fogAuto.nextAt,
     fogWarmup:        fogAuto.warmup,
-    autoScare: {
-      active:      state.autoScare.active,
-      intervalMin: state.autoScare.intervalMin,
-      chars:       state.autoScare.chars,
-      nextAt:      state.autoScare.nextAt,
-    },
-    witchTimer: {
-      active: state.witchTimer.active,
-      nextAt: state.witchTimer.nextAt,
-    },
-    graveyardCycle: { active: graveyardCycle.active },
+    soundPreset,
+    ambientActive:    ambientSystem.active,
+    vlcActive:        anyVlcRunning(),
+    goveeSlotsConfigured: Object.values(GOVEE_SLOT_IDS).filter(Boolean).length,
   };
 }
 
@@ -350,6 +387,22 @@ function volToHex(v) { return v.toString(16).toUpperCase().padStart(2, '0'); }
 
 const ZONE_CMD = { z1: 'MVL', z2: 'ZVL', z3: 'Z3L' };
 const MUTE_CMD = { z1: 'AMT', z2: 'ZMT', z3: 'MT3' };
+
+// Ducking helper — snapshot current zone volume, lower by `amount`,
+// restore after `durationMs`.
+function duckZone(zone, amount, durationMs) {
+  const original = state.volumes[zone];
+  const ducked = clampVol(zone, Math.max(0, original - amount));
+  if (ducked === original) return;
+  queueISCP(`${ZONE_CMD[zone]}${volToHex(ducked)}`)
+    .then(() => { state.volumes[zone] = ducked; broadcastState(); })
+    .catch(() => {});
+  setTimeout(() => {
+    queueISCP(`${ZONE_CMD[zone]}${volToHex(original)}`)
+      .then(() => { state.volumes[zone] = original; broadcastState(); })
+      .catch(() => {});
+  }, durationMs);
+}
 
 // ─── Fog helpers ──────────────────────────────────────────────────────────────
 async function fogOn() {
@@ -421,12 +474,14 @@ function stopFogAuto() {
 }
 
 // ─── Storm progressive sequence engine ───────────────────────────────────────
+// Storm volumes are LOCKED — never affected by the Normal/Boost preset.
+// Strikes hit all three zones full blast (z1/z3 mirror z2 intensity).
 const STRIKE_SEQUENCE = [
-  { name: 'Distant',       emoji: '🌧', z2Vol: 48, fog: false, flash: 'dim',        allLights: false },
-  { name: 'Getting Closer',emoji: '⛈', z2Vol: 46, fog: false, flash: 'medium',     allLights: false },
-  { name: 'Close',         emoji: '🌩', z2Vol: 42, fog: false, flash: 'bright',     allLights: false },
-  { name: 'Very Close',    emoji: '⚡', z2Vol: 38, fog: false, flash: 'all-medium', allLights: true  },
-  { name: 'Overhead',      emoji: '💥', z2Vol: 36, fog: true,  flash: 'all-blast',  allLights: true  },
+  { name: 'Distant',       emoji: '🌧', z1Vol: 48, z2Vol: 48, z3Vol: 48, fog: false, flash: 0 },
+  { name: 'Getting Closer',emoji: '⛈', z1Vol: 46, z2Vol: 46, z3Vol: 46, fog: false, flash: 1 },
+  { name: 'Close',         emoji: '🌩', z1Vol: 42, z2Vol: 42, z3Vol: 42, fog: false, flash: 2 },
+  { name: 'Very Close',    emoji: '⚡', z1Vol: 38, z2Vol: 38, z3Vol: 38, fog: false, flash: 3 },
+  { name: 'Overhead',      emoji: '💥', z1Vol: 36, z2Vol: 36, z3Vol: 36, fog: true,  flash: 4 },
 ];
 
 const STRIKE_INTERVAL_MS = 120000; // 2 minutes
@@ -439,17 +494,23 @@ async function fireStrike(idx) {
   playStormClip(s.name === 'Overhead');
 
   try {
+    const z1 = clampVol('z1', s.z1Vol);
     const z2 = clampVol('z2', s.z2Vol);
-    await sendISCP(`${ZONE_CMD.z2}${volToHex(z2)}`);
+    const z3 = clampVol('z3', s.z3Vol);
+    await queueISCP(`${ZONE_CMD.z1}${volToHex(z1)}`);
+    await queueISCP(`${ZONE_CMD.z2}${volToHex(z2)}`);
+    await queueISCP(`${ZONE_CMD.z3}${volToHex(z3)}`);
+    state.volumes.z1 = z1;
     state.volumes.z2 = z2;
+    state.volumes.z3 = z3;
     broadcastState();
 
     if (s.fog) fogBurst(5000);
 
     const delay = 1200 + Math.random() * 800;
     setTimeout(() => {
-      broadcastLog(`Storm: lightning flash [${s.flash}]`, 'LIGHT');
-      flashLights(s.flash, s.allLights).catch(() => {});
+      broadcastLog(`Storm: lightning flash [stage ${s.flash}]`, 'LIGHT');
+      flashLights(s.flash).catch(() => {});
     }, delay);
   } catch (e) {
     broadcastLog(`Storm error: ${e.message}`, 'SYSTEM');
@@ -471,49 +532,6 @@ function scheduleNextStrike() {
   }, STRIKE_INTERVAL_MS);
 }
 
-// ─── Auto scare engine ────────────────────────────────────────────────────────
-const ALL_CHARS = ['grimreaper', 'headlesshorseman', 'pumpkinking'];
-
-function pickNextChar() {
-  const enabled = ALL_CHARS.filter(c => state.autoScare.chars[c]);
-  if (enabled.length === 0) return null;
-  const pool = enabled.filter(c => c !== state.autoScare.lastChar);
-  return pool.length > 0
-    ? pool[Math.floor(Math.random() * pool.length)]
-    : enabled[Math.floor(Math.random() * enabled.length)];
-}
-
-function scheduleNextScare() {
-  if (!state.autoScare.active) return;
-  const ms = state.autoScare.intervalMin * 60000;
-  state.autoScare.nextAt = Date.now() + ms;
-  broadcastState();
-  state.autoScare.timer = setTimeout(async () => {
-    if (!state.autoScare.active || state.paused) return scheduleNextScare();
-    const char = pickNextChar();
-    if (char) {
-      broadcastLog(`Auto Scare: firing ${char}`, 'SCARE');
-      state.autoScare.lastChar = char;
-      await fireCharacter(char);
-    }
-    scheduleNextScare();
-  }, ms);
-}
-
-// ─── Witch timer ──────────────────────────────────────────────────────────────
-function scheduleNextWitch() {
-  if (!state.witchTimer.active) return;
-  const ms = 120000 + Math.random() * 60000;
-  state.witchTimer.nextAt = Date.now() + ms;
-  broadcastState();
-  state.witchTimer.timer = setTimeout(async () => {
-    if (!state.witchTimer.active || state.paused) return scheduleNextWitch();
-    broadcastLog('Witch timer: auto-fire', 'WITCH');
-    await fireWitch('auto');
-    scheduleNextWitch();
-  }, ms);
-}
-
 // Spell colors per witch clip — used for the cast-flash on her light pair
 const SPELL_COLORS = {
   witchinghour: { r:   0, g: 200, b:  40 },  // green
@@ -522,37 +540,28 @@ const SPELL_COLORS = {
   seance:       { r: 160, g:   0, b: 220 },  // purple
 };
 
-// Spell-cast flash on the witch's light pair: erupt white, flicker to spell color,
-// hold as her glow, then restore to previous look after the clip window.
+// Spell-cast: cauldron bulb erupts white, flickers, then holds DEEP RED
+// RGB(180,0,0), pulsing back to its green base after 20 seconds.
+// Witch slots stay purple throughout.
 function castSpellLights(clip) {
-  const ids = getSlotIds('witch');
+  const ids = getSlotIds('cauldron');
   if (!ids.length) return;
-  const spell = SPELL_COLORS[clip] || SPELL_COLORS.witchinghour;
-  const prev = goveeDevices
-    .filter(d => ids.includes(d.id))
-    .map(d => ({ id: d.id, color: { ...d.color }, brightness: d.brightness }));
 
   goveeSetColor(255, 255, 255, ids).catch(() => {});
   goveeSetBrightness(100, ids).catch(() => {});
-  setTimeout(() => { goveeSetColor(spell.r, spell.g, spell.b, ids).catch(() => {}); }, 350);
+  setTimeout(() => { goveeSetColor(180, 0, 0, ids).catch(() => {}); }, 350);
   setTimeout(() => { goveeSetColor(255, 255, 255, ids).catch(() => {}); }, 700);
   setTimeout(() => {
-    goveeSetColor(spell.r, spell.g, spell.b, ids).catch(() => {});
+    goveeSetColor(180, 0, 0, ids).catch(() => {});
     goveeSetBrightness(85, ids).catch(() => {});
   }, 1000);
 
-  // Restore previous look when her 30s window ends
-  setTimeout(async () => {
-    for (const snap of prev) {
-      const dev = goveeDevices.find(d => d.id === snap.id);
-      if (!dev) continue;
-      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }).catch(() => {});
-      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
-      dev.color = snap.color;
-      dev.brightness = snap.brightness;
-    }
-    broadcastGovee();
-  }, 30000);
+  // Pulse back to green base after 20 seconds
+  setTimeout(() => {
+    const base = SLOT_BASES.cauldron;
+    goveeSetColor(base.color.r, base.color.g, base.color.b, ids).catch(() => {});
+    goveeSetBrightness(base.bri, ids).catch(() => {});
+  }, 20000);
 }
 
 async function fireWitch(clip) {
@@ -561,59 +570,27 @@ async function fireWitch(clip) {
   castSpellLights(clip);
   try {
     const currentZ3 = state.volumes.z3;
-    const currentZ1 = state.volumes.z1;
-    const boost  = clampVol('z3', currentZ3 + 8);
-    // Duck skeleton zone 8 steps while witch is active — skeletons are ~22 ft away and bleed into her mic
-    const ducked = clampVol('z1', Math.max(0, currentZ1 - 8));
-    await sendISCP(`${ZONE_CMD.z3}${volToHex(boost)}`);
-    if (ducked !== currentZ1) {
-      await sendISCP(`${ZONE_CMD.z1}${volToHex(ducked)}`);
-      state.volumes.z1 = ducked;
-      broadcastLog('Witch active — skeleton zone ducked -8', 'AUDIO');
-      broadcastState();
-    }
+    const boost = clampVol('z3', currentZ3 + 8);
+    await queueISCP(`${ZONE_CMD.z3}${volToHex(boost)}`);
+    // Duck skeleton zone 8 steps while witch is active — skeletons are ~22 ft
+    // away and bleed into her mic
+    duckZone('z1', 8, 30000);
     setTimeout(async () => {
-      try {
-        await sendISCP(`${ZONE_CMD.z3}${volToHex(currentZ3)}`);
-        if (ducked !== currentZ1) {
-          await sendISCP(`${ZONE_CMD.z1}${volToHex(currentZ1)}`);
-          state.volumes.z1 = currentZ1;
-          broadcastLog('Witch done — skeleton zone restored', 'AUDIO');
-          broadcastState();
-        }
-      } catch (_) {}
+      try { await queueISCP(`${ZONE_CMD.z3}${volToHex(currentZ3)}`); } catch (_) {}
     }, 30000);
   } catch (e) {
     broadcastLog(`Witch error: ${e.message}`, 'SYSTEM');
   }
 }
 
-// ─── Character trigger ────────────────────────────────────────────────────────
-const CHAR_CONFIG = {
-  grimreaper: {
-    label: 'Grim Reaper',
-    z2Boost: 12, fogDur: 7000, light: 'coldblue', bri: 85,
-    flashColor: { r:255, g:255, b:255 }, holdColor: 'coldblue',
-  },
-  headlesshorseman: {
-    label: 'Headless Horseman',
-    z2Boost: 10, fogDur: 3000, light: 'bloodred', bri: 100,
-    flashColor: { r:255, g:255, b:255 }, holdColor: 'bloodred',
-  },
-  pumpkinking: {
-    label: 'Pumpkin King',
-    z2Boost: 14, fogDur: 12000, light: 'witchgreen', bri: 90,
-    flashColor: { r:255, g:130, b:0 }, holdColor: 'witchgreen',
-  },
-};
-
 // ─── VLC Playback ─────────────────────────────────────────────────────────────
 const VLC_PATH    = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
-const MEDIA_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\LEGENDS ATMOS';
 const STORM_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
 const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
 const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
+const ATMOSFX_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\ATMOSFX';
+const HAUNT_SOUNDS_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\HAUNT SOUNDS';
 
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
 const SKELETON_FILES = { left: 'skeleton-left.wav', right: 'skeleton-right.wav' };
@@ -629,18 +606,21 @@ const STORM_FILES = [
 const OVERHEAD_FILE = '646912__alexdarek__lightning-strike-2.wav';
 
 let stormProcess    = null;
-let vlcProcess      = null;
 let skeletonProcess = null;
 let witchProcess    = null;
 let ambientProcess  = null;
-let ambientActive   = false;
 let fxProcess       = null;
-let graveyardCycle  = { active: false, index: 0, timer: null };
+let soundProcess    = null;
+let atmosfxProcess  = null;
 
 function playStormClip(overhead) {
   const file = overhead
     ? OVERHEAD_FILE
     : STORM_FILES[Math.floor(Math.random() * STORM_FILES.length)];
+  playStormFile(file);
+}
+
+function playStormFile(file) {
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
   stormProcess = spawn(VLC_PATH, [
@@ -652,25 +632,30 @@ function playStormClip(overhead) {
   stormProcess.on('exit', (code) => { console.log('[VLC-STORM exit]', code); stormProcess = null; });
 }
 
+// ─── Ambient audio system ─────────────────────────────────────────────────────
+// Ambient bed runs across all three zones simultaneously at a low level.
 const AMBIENT_FILE = 'graveyardam.mp3';
 
+let ambientSystem = {
+  active: false,
+  baseLevels: { z1: 14, z2: 16, z3: 12 },
+};
+
 let ambientShouldRun = false;
-function startAmbient() {
+function startAmbientLoop() {
   if (ambientProcess) return;
   ambientShouldRun = true;
-  broadcastLog('Graveyard ambient loop started', 'AUDIO');
+  broadcastLog('Ambient loop started', 'AUDIO');
   ambientProcess = spawn(VLC_PATH, [
     path.join(AMBIENT_DIR, AMBIENT_FILE),
     '--intf', 'dummy', '--loop', '--no-video',
   ], { stdio: 'ignore' });
-  ambientActive = true;
   ambientProcess.on('exit', (code) => {
     ambientProcess = null;
-    ambientActive = false;
     broadcastState();
     if (ambientShouldRun && code !== 0 && code !== null) {
       broadcastLog('Ambient VLC crashed — restarting in 3s', 'AUDIO');
-      setTimeout(() => { if (ambientShouldRun) startAmbient(); }, 3000);
+      setTimeout(() => { if (ambientShouldRun) startAmbientLoop(); }, 3000);
     }
   });
   ambientProcess.on('error', (e) => {
@@ -678,7 +663,7 @@ function startAmbient() {
   });
 }
 
-function stopAmbient() {
+function stopAmbientLoop() {
   ambientShouldRun = false;
   if (ambientProcess) {
     try {
@@ -686,9 +671,30 @@ function stopAmbient() {
       spawn('taskkill', ['/pid', ambientProcess.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
     } catch (_) {}
     ambientProcess = null;
-    broadcastLog('Graveyard ambient loop stopped', 'AUDIO');
+    broadcastLog('Ambient loop stopped', 'AUDIO');
   }
-  ambientActive = false;
+}
+
+async function startAmbientSystem() {
+  if (ambientSystem.active) return;
+  ambientSystem.active = true;
+  startAmbientLoop();
+  // Send base low volumes to all three zones
+  for (const z of ['z1', 'z2', 'z3']) {
+    const v = clampVol(z, ambientSystem.baseLevels[z]);
+    queueISCP(`${ZONE_CMD[z]}${volToHex(v)}`)
+      .then(() => { state.volumes[z] = v; broadcastState(); })
+      .catch(() => {});
+  }
+  broadcastLog(`Ambient system ON — bed at z1:${ambientSystem.baseLevels.z1} z2:${ambientSystem.baseLevels.z2} z3:${ambientSystem.baseLevels.z3}`, 'AUDIO');
+  broadcastState();
+}
+
+function stopAmbientSystem() {
+  ambientSystem.active = false;
+  stopAmbientLoop();
+  broadcastLog('Ambient system OFF', 'AUDIO');
+  broadcastState();
 }
 
 function playWitchClip(clip) {
@@ -716,16 +722,16 @@ function stopWitch() {
   }
 }
 
-// Witch 1 = RIGHT speaker (main witch, future reactive mic). Witch 2 = LEFT speaker.
+// Main witch = LEFT RCA (future reactive mic). Witch 2 = RIGHT RCA.
 // Drop these files in the WITCH folder — edit filenames here if yours differ.
-const WITCH_LR_FILES = { right: 'witch1-right.wav', left: 'witch2-left.wav' };
+const WITCH_LR_FILES = { left: 'witch-main-left.wav', right: 'witch2-right.wav' };
 let witchSideProcess = null;
 
 function fireWitchSide(side) {
   const filename = WITCH_LR_FILES[side];
   if (!filename) return false;
   if (witchSideProcess) { try { witchSideProcess.kill(); } catch (_) {} witchSideProcess = null; }
-  broadcastLog(`Witch ${side === 'right' ? '1 (right)' : '2 (left)'} triggered`, 'WITCH');
+  broadcastLog(`Witch ${side === 'left' ? 'MAIN (left)' : '2 (right)'} triggered`, 'WITCH');
   witchSideProcess = spawn(VLC_PATH, [
     path.join(WITCH_DIR, filename),
     '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
@@ -747,9 +753,10 @@ function fireSkeleton(side) {
   skeletonProcess.unref();
   skeletonProcess.on('exit', () => { skeletonProcess = null; });
 
-  // Subtle talk pulse on the skeleton Govee slot — brightness eases up, no color
-  // change, no spotlight. Skeletons stay dim shapes in the dark.
-  const ids = getSlotIds('skeleton');
+  // Subtle talk pulse on that side's dedicated Govee slot only — brightness
+  // eases up, no color change. Skeletons stay dim shapes in the dark.
+  const slot = side === 'left' ? 'skel_left' : 'skel_right';
+  const ids = getSlotIds(slot);
   if (ids.length) {
     const prev = goveeDevices
       .filter(d => ids.includes(d.id))
@@ -768,63 +775,51 @@ function fireSkeleton(side) {
   return true;
 }
 
-function playClip(character, title) {
-  const clips = CLIP_MAP[character];
-  if (!clips) return;
-  const clipTitle = title || Object.keys(clips)[Math.floor(Math.random() * Object.keys(clips).length)];
-  const filename  = clips[clipTitle];
-  if (!filename) return;
-  if (vlcProcess) { try { vlcProcess.kill(); } catch (_) {} vlcProcess = null; }
-  broadcastLog(`Playing: ${clipTitle}`, 'VIDEO');
-  vlcProcess = spawn(VLC_PATH, [
-    path.join(MEDIA_DIR, filename),
-    '--play-and-exit', '--fullscreen', '--no-video-title-show', '--qt-start-minimized',
-  ], { detached: true, stdio: 'ignore' });
-  vlcProcess.unref();
-  vlcProcess.on('exit', () => { vlcProcess = null; });
-}
-
-function stopVLC() {
-  if (vlcProcess) {
-    try { vlcProcess.kill(); } catch (_) {}
-    vlcProcess = null;
-    broadcastLog('VLC stopped', 'VIDEO');
+// ─── AtmosFX projection system ────────────────────────────────────────────────
+function stopAtmosfx() {
+  if (atmosfxProcess) {
+    try { atmosfxProcess.kill(); } catch (_) {}
+    atmosfxProcess = null;
+    broadcastLog('AtmosFX stopped', 'VIDEO');
   }
 }
 
-// ─── Clip maps ────────────────────────────────────────────────────────────────
-const CLIP_MAP = {
-  grimreaper: {
-    'Fear the Reaper':     'Grim Reaper_Fear the Reaper_Holl_H.mp4',
-    'Out of Time':         'Grim Reaper_Out of Time_Holl_H.mp4',
-    'The Ferryman':        'Grim Reaper_The Ferryman_Holl_H.mp4',
-    'Deep Sleeper':        'Grim Reaper_Deep Sleeper_Holl_H.mp4',
-    'Dreadful Apparition': 'Grim Reaper_Dreadful Apparition_Holl_H.mp4',
-    'Grave Warning':       'Grim Reaper_Grave Warning_Holl_H.mp4',
-    'Startle Scare 1':     'Grim Reaper_Startle Scare1_Holl_H.mp4',
-    'Startle Scare 2':     'Grim Reaper_Startle Scare2_Holl_H.mp4',
-    'Startle Scare 3':     'Grim Reaper_Startle Scare3_Holl_H.mp4',
-  },
-  headlesshorseman: {
-    'Headless Hessian':     'Horseman_Headless Hessian_Holl_H.mp4',
-    'Ride of the Horseman': 'Horseman_Ride of the Horseman_Holl_H.mp4',
-    'Sleepy Hollow Steed':  'Horseman_Sleepy Hollow Steed_Holl_H.mp4',
-    'Stormy Hollow':        'Horseman_Stormy Hollow_Holl_H.mp4',
-    'Startle Scare 1':      'Horseman_Startle Scare 1_Holl_H.mp4',
-    'Startle Scare 2':      'Horseman_Startle Scare 2_Holl_H.mp4',
-    'Startle Scare 3':      'Horseman_Startle Scare 3_Holl_H.mp4',
-  },
-  pumpkinking: {
-    'Hail to the King':  'Pumpkin King_Hail to the King_Holl_H.mp4',
-    'Hungry Goblin':     'Pumpkin King_Hungry Goblin_Holl_H.mp4',
-    'Lord of the Patch': 'Pumpkin King_Lord of the Patch_Holl_H.mp4',
-    'The Scarecrow':     'Pumpkin King_The Scarecrow_Holl_H.mp4',
-    'Startle Scare 1':   'Pumpkin King_Startle Scare1_Holl_H.mp4',
-    'Startle Scare 2':   'Pumpkin King_Startle Scare2_Holl_H.mp4',
-    'Startle Scare 3':   'Pumpkin King_Startle Scare3_Holl_H.mp4',
-  },
-};
+function playAtmosfx(filename, display) {
+  stopAtmosfx();
+  const args = [
+    path.join(ATMOSFX_DIR, filename),
+    '--play-and-exit', '--fullscreen', '--no-video-title-show', '--qt-start-minimized',
+  ];
+  if (display !== undefined && display !== null && display !== '') {
+    args.push(`--qt-fullscreen-screennumber=${parseInt(display, 10)}`);
+  }
+  broadcastLog(`AtmosFX: ${filename}${display ? ` on display ${display}` : ''}`, 'VIDEO');
 
+  // Duck graveyard zone to 60% of current for the clip duration
+  const origZ2 = state.volumes.z2;
+  const duckedZ2 = clampVol('z2', Math.floor(origZ2 * 0.6));
+  if (duckedZ2 !== origZ2) {
+    queueISCP(`${ZONE_CMD.z2}${volToHex(duckedZ2)}`)
+      .then(() => { state.volumes.z2 = duckedZ2; broadcastState(); })
+      .catch(() => {});
+  }
+
+  atmosfxProcess = spawn(VLC_PATH, args, { detached: true, stdio: 'ignore' });
+  atmosfxProcess.unref();
+  atmosfxProcess.on('error', (e) => broadcastLog(`AtmosFX VLC error: ${e.message}`, 'SYSTEM'));
+  atmosfxProcess.on('exit', () => {
+    atmosfxProcess = null;
+    broadcastState();
+    // Restore graveyard zone level on clip end
+    if (duckedZ2 !== origZ2) {
+      queueISCP(`${ZONE_CMD.z2}${volToHex(origZ2)}`)
+        .then(() => { state.volumes.z2 = origZ2; broadcastState(); })
+        .catch(() => {});
+    }
+  });
+}
+
+// ─── Clip maps ────────────────────────────────────────────────────────────────
 const WITCH_MAP = {
   witchinghour: 'WH_Song 1_WitchingHour_3DFX_H.mp4',
   catcrow:      'WH_Song 2_CatCrow_3DFX_H.mp4',
@@ -842,57 +837,7 @@ const FX_FILES = {
   cackle: '831699__thevoicejournals__witch-cackle.wav',
 };
 
-// ─── Character fire ───────────────────────────────────────────────────────────
-async function fireCharacter(character, clip) {
-  const c = CHAR_CONFIG[character];
-  if (!c) return;
-  broadcastLog(`Character: ${c.label}`, 'VIDEO');
-  playClip(character, clip);
-
-  const ambientZ2 = state.volumes.z2;
-  const boostedZ2 = clampVol('z2', ambientZ2 + c.z2Boost);
-  const origZ1    = state.volumes.z1;
-  const duckedZ1  = settings.autoDuckSkeleton ? clampVol('z1', Math.max(0, origZ1 - 8)) : origZ1;
-
-  try {
-    const fc = c.flashColor;
-    await goveeSetColor(fc.r, fc.g, fc.b);
-    await goveeSetBrightness(100);
-    setTimeout(() => {
-      const hc = GOVEE_COLORS[c.holdColor] || GOVEE_COLORS.orange;
-      goveeSetColor(hc.r, hc.g, hc.b);
-      goveeSetBrightness(c.bri);
-    }, 300);
-
-    await sendISCP(`${ZONE_CMD.z2}${volToHex(boostedZ2)}`);
-    state.volumes.z2 = boostedZ2;
-
-    if (settings.autoDuckSkeleton && duckedZ1 !== origZ1) {
-      await sendISCP(`${ZONE_CMD.z1}${volToHex(duckedZ1)}`);
-      state.volumes.z1 = duckedZ1;
-    }
-
-    if (settings.fogWithCharacters && c.fogDur > 0) fogBurst(c.fogDur);
-    broadcastState();
-
-    setTimeout(async () => {
-      try {
-        await sendISCP(`${ZONE_CMD.z2}${volToHex(ambientZ2)}`);
-        state.volumes.z2 = ambientZ2;
-        if (settings.autoDuckSkeleton && duckedZ1 !== origZ1) {
-          await sendISCP(`${ZONE_CMD.z1}${volToHex(origZ1)}`);
-          state.volumes.z1 = origZ1;
-        }
-        broadcastLog(`Character: ${c.label} ended, levels restored`, 'AUDIO');
-        broadcastState();
-      } catch (_) {}
-    }, 20000);
-  } catch (e) {
-    broadcastLog(`Character error: ${e.message}`, 'SYSTEM');
-  }
-}
-
-// ─── Scene presets ────────────────────────────────────────────────────────────
+// ─── Scene presets (kept in code — driven by AI conductor later) ──────────────
 const SCENES = {
   kids:    { z1: 44, z2: 20, z3: 16, sub: 36, light: 'orange',  bri: 60,  fog: false },
   normal:  { z1: 52, z2: 48, z3: 32, sub: 48, light: 'deepred', bri: 70,  fog: false },
@@ -953,6 +898,27 @@ app.post('/api/onkyo/mute', async (req, res) => {
   }
 });
 
+// ─── Sound preset (Normal / Boost) — storm volumes are never affected ─────────
+app.post('/api/preset', async (req, res) => {
+  const { preset } = req.body;
+  const p = SOUND_PRESETS[preset];
+  if (!p) return res.status(400).json({ error: 'preset normal/boost required' });
+  soundPreset = preset;
+  broadcastLog(`Sound preset: ${preset.toUpperCase()}`, 'AUDIO');
+  try {
+    for (const z of ['z1', 'z2', 'z3']) {
+      const v = clampVol(z, p[z]);
+      await queueISCP(`${ZONE_CMD[z]}${volToHex(v)}`);
+      state.volumes[z] = v;
+    }
+    saveShowState();
+    broadcastState();
+    res.json({ ok: true, preset, volumes: state.volumes });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 app.post('/api/fog/fire', async (req, res) => {
   const { duration = 5000 } = req.body;
   broadcastLog(`Fog burst ${duration}ms`, 'FOG');
@@ -991,15 +957,12 @@ app.post('/api/allstop', async (req, res) => {
   state.stormActive = false;
   strikeIndex = 0;
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
-  state.autoScare.active = false;
-  if (state.autoScare.timer) { clearTimeout(state.autoScare.timer); state.autoScare.timer = null; }
-  state.witchTimer.active = false;
-  if (state.witchTimer.timer) { clearTimeout(state.witchTimer.timer); state.witchTimer.timer = null; }
   stopFogAuto();
-  stopVLC();
   stopWitch();
-  stopAmbient();
+  stopAmbientSystem();
+  stopAtmosfx();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
 
   try {
@@ -1021,10 +984,11 @@ app.post('/api/allstop', async (req, res) => {
 app.post('/api/shutdown', async (req, res) => {
   broadcastLog('Shutdown sequence initiated', 'SYSTEM');
   stopFogAuto();
-  stopVLC();
   stopWitch();
-  stopAmbient();
+  stopAmbientSystem();
+  stopAtmosfx();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
   try {
     await Promise.allSettled([
@@ -1037,8 +1001,6 @@ app.post('/api/shutdown', async (req, res) => {
     ]);
     state.volumes = { z1: 0, z2: 0, z3: 0, sub: 0 };
     state.stormActive = false;
-    state.autoScare.active = false;
-    state.witchTimer.active = false;
     broadcastState();
     res.json({ ok: true });
   } catch (e) {
@@ -1085,22 +1047,7 @@ app.post('/api/scene', async (req, res) => {
   }
 });
 
-app.post('/api/character', async (req, res) => {
-  const { character, clip } = req.body;
-  const key = character?.toLowerCase().replace(/\s/g, '');
-  if (!CHAR_CONFIG[key]) return res.status(400).json({ error: 'unknown character' });
-  if (!debounceRoute(`char-${key}`, 3000, () => {})) {
-    return res.json({ ok: false, debounced: true });
-  }
-  await fireCharacter(key, clip);
-  res.json({ ok: true, character: key });
-});
-
-app.post('/api/vlc/stop', (req, res) => {
-  stopVLC();
-  res.json({ ok: true });
-});
-
+// ─── Skeleton routes ──────────────────────────────────────────────────────────
 app.post('/api/skeleton/fire', (req, res) => {
   const { side } = req.body;
   if (side !== 'left' && side !== 'right') return res.status(400).json({ error: 'side left/right required' });
@@ -1117,12 +1064,41 @@ app.post('/api/skeleton/stop', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/ambient/toggle', (req, res) => {
-  if (ambientActive) stopAmbient();
-  else startAmbient();
-  res.json({ ok: true, active: ambientActive });
+// Argument sequence: left → right (6s) → left (12s)
+app.post('/api/skeleton/argument', (req, res) => {
+  broadcastLog('Skeleton argument sequence started', 'AUDIO');
+  fireSkeleton('left');
+  setTimeout(() => { broadcastLog('Argument: right replies', 'AUDIO'); fireSkeleton('right'); }, 6000);
+  setTimeout(() => { broadcastLog('Argument: left gets the last word', 'AUDIO'); fireSkeleton('left'); }, 12000);
+  res.json({ ok: true });
 });
 
+// L/R balance test: left, then right after 6s
+app.post('/api/skeleton/balance', (req, res) => {
+  broadcastLog('Skeleton L/R balance test — left first', 'AUDIO');
+  fireSkeleton('left');
+  setTimeout(() => { broadcastLog('Balance test — right side', 'AUDIO'); fireSkeleton('right'); }, 6000);
+  res.json({ ok: true });
+});
+
+// ─── Ambient routes ───────────────────────────────────────────────────────────
+app.post('/api/ambient/start', async (req, res) => {
+  await startAmbientSystem();
+  res.json({ ok: true, active: ambientSystem.active });
+});
+
+app.post('/api/ambient/stop', (req, res) => {
+  stopAmbientSystem();
+  res.json({ ok: true, active: ambientSystem.active });
+});
+
+app.post('/api/ambient/toggle', async (req, res) => {
+  if (ambientSystem.active) stopAmbientSystem();
+  else await startAmbientSystem();
+  res.json({ ok: true, active: ambientSystem.active });
+});
+
+// ─── Storm routes ─────────────────────────────────────────────────────────────
 app.post('/api/storm/toggle', (req, res) => {
   state.stormActive = !state.stormActive;
   if (state.stormActive) {
@@ -1149,43 +1125,28 @@ app.post('/api/storm/strike', async (req, res) => {
   res.json({ ok: true, strikeIndex });
 });
 
-app.post('/api/autoscare/toggle', (req, res) => {
-  const { intervalMin, chars } = req.body;
-  if (intervalMin) state.autoScare.intervalMin = intervalMin;
-  if (chars) state.autoScare.chars = { ...state.autoScare.chars, ...chars };
-  state.autoScare.active = !state.autoScare.active;
-  broadcastLog(`Auto Scare ${state.autoScare.active ? 'ON' : 'OFF'}`, 'SCARE');
-  if (state.autoScare.active) {
-    scheduleNextScare();
-  } else {
-    if (state.autoScare.timer) { clearTimeout(state.autoScare.timer); state.autoScare.timer = null; }
-    state.autoScare.nextAt = null;
+// Test a single storm lighting stage (lights only — no audio)
+app.post('/api/storm/test', async (req, res) => {
+  const stage = parseInt(req.body?.stage, 10);
+  if (isNaN(stage) || stage < 0 || stage > 4) return res.status(400).json({ error: 'stage 0-4 required' });
+  const s = STRIKE_SEQUENCE[stage];
+  broadcastLog(`Storm stage test: ${s.emoji} ${s.name} (lights only)`, 'LIGHT');
+  await flashLights(stage).catch(() => {});
+  res.json({ ok: true, stage });
+});
+
+// Play a specific storm clip by filename (or the overhead clip)
+app.post('/api/storm/clip', (req, res) => {
+  const { file } = req.body;
+  if (!file) return res.status(400).json({ error: 'file required' });
+  if (file !== OVERHEAD_FILE && !STORM_FILES.includes(file)) {
+    return res.status(400).json({ error: 'unknown storm file' });
   }
-  broadcastState();
-  res.json({ ok: true, active: state.autoScare.active });
+  playStormFile(file);
+  res.json({ ok: true, file });
 });
 
-app.post('/api/autoscare/config', (req, res) => {
-  const { intervalMin, chars } = req.body;
-  if (intervalMin) state.autoScare.intervalMin = intervalMin;
-  if (chars) state.autoScare.chars = { ...state.autoScare.chars, ...chars };
-  broadcastState();
-  res.json({ ok: true });
-});
-
-app.post('/api/witch/toggle', (req, res) => {
-  state.witchTimer.active = !state.witchTimer.active;
-  broadcastLog(`Witch Timer ${state.witchTimer.active ? 'ON' : 'OFF'}`, 'WITCH');
-  if (state.witchTimer.active) {
-    scheduleNextWitch();
-  } else {
-    if (state.witchTimer.timer) { clearTimeout(state.witchTimer.timer); state.witchTimer.timer = null; }
-    state.witchTimer.nextAt = null;
-  }
-  broadcastState();
-  res.json({ ok: true, active: state.witchTimer.active });
-});
-
+// ─── Witch routes ─────────────────────────────────────────────────────────────
 app.post('/api/witch/side', (req, res) => {
   const { side } = req.body;
   if (side !== 'left' && side !== 'right') return res.status(400).json({ error: 'side left/right required' });
@@ -1200,6 +1161,71 @@ app.post('/api/witch/fire', async (req, res) => {
   res.json({ ok: true });
 });
 
+// TODO (October): ElevenLabs integration — synthesize `text` with the main
+// witch voice, pan LEFT, play through z3. Requires ELEVENLABS_API_KEY.
+app.post('/api/witch/speak', (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text required' });
+  broadcastLog(`Witch speak (placeholder): "${text}"`, 'WITCH');
+  if (!process.env.ELEVENLABS_API_KEY) {
+    return res.json({ ok: false, error: 'ElevenLabs not configured yet' });
+  }
+  // TODO: real ElevenLabs synthesis goes here
+  res.json({ ok: false, error: 'ElevenLabs not configured yet' });
+});
+
+// ─── AtmosFX routes ───────────────────────────────────────────────────────────
+app.get('/api/atmosfx/list', (req, res) => {
+  try {
+    const files = fs.readdirSync(ATMOSFX_DIR);
+    res.json({ ok: true, files });
+  } catch (_) {
+    res.json({ ok: true, files: [] });
+  }
+});
+
+app.post('/api/atmosfx/play', (req, res) => {
+  const { filename, display } = req.body;
+  if (!filename) return res.status(400).json({ error: 'filename required' });
+  playAtmosfx(filename, display);
+  res.json({ ok: true, filename, display: display ?? null });
+});
+
+app.post('/api/atmosfx/stop', (req, res) => {
+  stopAtmosfx();
+  res.json({ ok: true });
+});
+
+// Placeholder — projection test pattern (requires files, coming later)
+app.post('/api/atmosfx/pattern', (req, res) => {
+  broadcastLog('AtmosFX test pattern requested — requires files (not yet installed)', 'VIDEO');
+  res.json({ ok: true, placeholder: true });
+});
+
+// ─── Haunt sounds (short overlay FX: owl, crow, wolf, chains…) ────────────────
+app.get('/api/sounds/list', (req, res) => {
+  try {
+    const files = fs.readdirSync(HAUNT_SOUNDS_DIR);
+    res.json({ ok: true, files });
+  } catch (_) {
+    res.json({ ok: true, files: [] });
+  }
+});
+
+app.post('/api/sounds/play', (req, res) => {
+  const { filename } = req.body;
+  if (!filename) return res.status(400).json({ error: 'filename required' });
+  broadcastLog(`Sound: ${filename}`, 'AUDIO');
+  if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
+  soundProcess = spawn(VLC_PATH, [
+    path.join(HAUNT_SOUNDS_DIR, filename), '--intf', 'dummy', '--play-and-exit', '--no-video',
+  ], { detached: true, stdio: 'ignore' });
+  soundProcess.unref();
+  soundProcess.on('exit', () => { soundProcess = null; });
+  res.json({ ok: true, filename });
+});
+
+// ─── FX soundboard (kept as-is) ───────────────────────────────────────────────
 app.post('/api/fx/play', (req, res) => {
   const { fx } = req.body;
   broadcastLog(`FX: ${fx}`, 'AUDIO');
@@ -1210,7 +1236,6 @@ app.post('/api/fx/play', (req, res) => {
     });
   }
   if (FX_FILES[fx]) {
-    // BUG FIX: kill previous FX before spawning new one
     if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
     fxProcess = spawn(VLC_PATH, [
       path.join(AMBIENT_DIR, FX_FILES[fx]), '--intf', 'dummy', '--play-and-exit', '--no-video',
@@ -1267,9 +1292,7 @@ app.post('/api/config', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
-  const { autoDuckSkeleton, fogWithCharacters, hapticFeedback } = req.body;
-  if (autoDuckSkeleton !== undefined) settings.autoDuckSkeleton = !!autoDuckSkeleton;
-  if (fogWithCharacters !== undefined) settings.fogWithCharacters = !!fogWithCharacters;
+  const { hapticFeedback } = req.body;
   if (hapticFeedback !== undefined) settings.hapticFeedback = !!hapticFeedback;
   broadcast({ type: 'settings', data: settings });
   res.json({ ok: true, settings });
@@ -1293,10 +1316,14 @@ app.post('/api/govee/discover', (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/govee/slots', (req, res) => {
+  res.json({ ok: true, ips: GOVEE_IPS, slotIds: GOVEE_SLOT_IDS, bases: SLOT_BASES });
+});
+
 app.post('/api/govee/add', (req, res) => {
   const { ip, name, slot } = req.body;
   if (!ip) return res.status(400).json({ error: 'ip required' });
-  if (goveeDevices.length >= 8) return res.status(400).json({ error: 'max 8 devices' });
+  if (goveeDevices.length >= 12) return res.status(400).json({ error: 'max 12 devices' });
   const existing = goveeDevices.find(d => d.ip === ip);
   if (existing) {
     // Update slot mapping for existing device
@@ -1304,19 +1331,21 @@ app.post('/api/govee/add', (req, res) => {
       GOVEE_IPS[slot] = ip;
       GOVEE_SLOT_IDS[slot] = existing.id;
     }
+    broadcastState();
     return res.json({ ok: true, device: existing });
   }
   if (slot && GOVEE_IPS.hasOwnProperty(slot)) {
     GOVEE_IPS[slot] = ip;
   }
   const dev = {
-    id: `govee-${Date.now()}`, name: name || `Light ${goveeDevices.length + 1}`,
+    id: `govee-${Date.now()}-${Math.floor(Math.random()*1000)}`, name: name || `Light ${goveeDevices.length + 1}`,
     ip, model: 'Manual', on: true, color: { r:255, g:98, b:0 }, brightness: 100,
   };
   if (slot) GOVEE_SLOT_IDS[slot] = dev.id;
   goveeDevices.push(dev);
   broadcastLog(`Govee: added ${dev.name} @ ${ip}`, 'LIGHT');
   broadcastGovee();
+  broadcastState();
   res.json({ ok: true, device: dev });
 });
 
@@ -1327,6 +1356,7 @@ app.post('/api/govee/remove', (req, res) => {
     if (GOVEE_SLOT_IDS[slot] === id) delete GOVEE_SLOT_IDS[slot];
   }
   broadcastGovee();
+  broadcastState();
   res.json({ ok: true });
 });
 
@@ -1403,38 +1433,43 @@ app.get('/api/govee/devices', (req, res) => {
   res.json({ ok: true, devices: goveeDevices });
 });
 
-// ─── Graveyard Auto Cycle ─────────────────────────────────────────────────────
-const GRAVEYARD_FILES = Array.from({length:23}, (_,i) => `clip${String(i+1).padStart(2,'0')}.mp3`);
+// Reset every configured slot to its base show scheme
+app.post('/api/lights/scheme', async (req, res) => {
+  await applyShowScheme();
+  res.json({ ok: true });
+});
 
-function scheduleGraveyardCycle() {
-  if (!graveyardCycle.active) return;
-  graveyardCycle.timer = setTimeout(() => {
-    if (!graveyardCycle.active) return;
-    const file = GRAVEYARD_FILES[graveyardCycle.index % GRAVEYARD_FILES.length];
-    graveyardCycle.index++;
-    broadcastLog(`Graveyard cycle: ${file}`, 'AUDIO');
-    if (ambientProcess) { try { ambientProcess.kill(); } catch (_) {} ambientProcess = null; }
-    ambientProcess = spawn(VLC_PATH, [
-      path.join(AMBIENT_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-video',
-    ], { stdio: 'ignore' });
-    ambientProcess.on('exit', () => {
-      ambientProcess = null;
-      if (graveyardCycle.active) scheduleGraveyardCycle();
-    });
-  }, 120000); // 2 min gap
-}
+// ─── Sensors (groundwork — ESP32 not yet installed) ───────────────────────────
+app.post('/api/sensor/trigger', (req, res) => {
+  const { zone, cooldownOverride } = req.body;
+  broadcastLog(`Sensor zone ${zone} simulated trigger${cooldownOverride ? ' (cooldown override)' : ''}`, 'SYSTEM');
+  res.json({ ok: true, zone });
+});
 
-app.post('/api/graveyard/cycle/toggle', (req, res) => {
-  graveyardCycle.active = !graveyardCycle.active;
-  broadcastLog(`Graveyard cycle ${graveyardCycle.active ? 'ON' : 'OFF'}`, 'AUDIO');
-  if (graveyardCycle.active) {
-    graveyardCycle.index = 0;
-    scheduleGraveyardCycle();
-  } else {
-    if (graveyardCycle.timer) { clearTimeout(graveyardCycle.timer); graveyardCycle.timer = null; }
+// ─── Media / system info ──────────────────────────────────────────────────────
+app.get('/api/media/lists', (req, res) => {
+  const dirs = {
+    storm: STORM_DIR,
+    ambient: AMBIENT_DIR,
+    skeleton: SKELETON_DIR,
+    witch: WITCH_DIR,
+    atmosfx: ATMOSFX_DIR,
+    sounds: HAUNT_SOUNDS_DIR,
+  };
+  const lists = {};
+  for (const [key, dir] of Object.entries(dirs)) {
+    try { lists[key] = fs.readdirSync(dir); } catch (_) { lists[key] = []; }
   }
-  broadcast({ type: 'state', data: stateSnapshot() });
-  res.json({ ok: true, active: graveyardCycle.active });
+  res.json({ ok: true, lists });
+});
+
+app.get('/api/system/info', (req, res) => {
+  res.json({
+    ok: true,
+    uptime: process.uptime(),
+    memoryRss: process.memoryUsage().rss,
+    clients: wss.clients.size,
+  });
 });
 
 app.post('/api/strikedown', async (req, res) => {
@@ -1444,19 +1479,12 @@ app.post('/api/strikedown', async (req, res) => {
   strikeIndex = 0;
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
   state.stormNextAt = null;
-  state.autoScare.active = false;
-  if (state.autoScare.timer) { clearTimeout(state.autoScare.timer); state.autoScare.timer = null; }
-  state.autoScare.nextAt = null;
-  state.witchTimer.active = false;
-  if (state.witchTimer.timer) { clearTimeout(state.witchTimer.timer); state.witchTimer.timer = null; }
-  state.witchTimer.nextAt = null;
-  graveyardCycle.active = false;
-  if (graveyardCycle.timer) { clearTimeout(graveyardCycle.timer); graveyardCycle.timer = null; }
   stopFogAuto();
-  stopVLC();
   stopWitch();
-  stopAmbient();
+  stopAmbientSystem();
+  stopAtmosfx();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
+  if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
   try {
@@ -1503,7 +1531,6 @@ function runSequencerStep() {
     }
   }
   if (step.fog) fogBurst(step.fog);
-  if (step.character) fireCharacter(step.character).catch(() => {});
   sequencer.stepIndex++;
   sequencer.timer = setTimeout(runSequencerStep, step.delayMs || 5000);
 }

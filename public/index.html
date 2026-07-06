@@ -234,6 +234,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 }
 .btn:hover::after{left:150%}
 .btn:active{transform:scale(.95) translateY(1px)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
 
 .btn-red    { background:linear-gradient(180deg,#5c0a0a,#2e0000); color:#ffaaaa; border-color:#8a1010; box-shadow:0 2px 10px rgba(130,0,0,.5); }
 .btn-red:hover    { background:linear-gradient(180deg,#8a0000,#5c0000); box-shadow:0 4px 20px var(--gr); border-color:var(--red2); color:#fff; }
@@ -244,6 +245,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .btn-green.active { background:linear-gradient(180deg,#1a5a28,#0e3018); box-shadow:0 0 18px var(--gg); border-color:#44dd66; color:#aaffcc; animation:pulse 2s infinite; }
 .btn-blue   { background:linear-gradient(180deg,#06182a,#020c18); color:var(--blue); border-color:#0e3a5a; box-shadow:0 2px 8px rgba(0,60,100,.4); }
 .btn-blue:hover   { background:linear-gradient(180deg,#0e2a42,#06182a); box-shadow:0 4px 18px var(--gb); border-color:var(--blue); }
+.btn-blue.active  { background:linear-gradient(180deg,#0e3a5a,#06202e); box-shadow:0 0 18px var(--gb); border-color:var(--blue); color:#bfe8ff; }
 .btn-purple { background:linear-gradient(180deg,#1c0828,#0c0418); color:var(--purple); border-color:#4a1060; box-shadow:0 2px 8px rgba(80,0,140,.4); }
 .btn-purple:hover { background:linear-gradient(180deg,#2e0e42,#1c0828); box-shadow:0 4px 18px var(--gp); border-color:var(--purple); }
 .btn-amber  { background:linear-gradient(180deg,#281400,#140a00); color:var(--amber2); border-color:#503000; box-shadow:0 2px 8px rgba(80,40,0,.4); }
@@ -392,46 +394,6 @@ body.demo-mode #demo-badge { display: inline-block; }
 .vol-cap { font-size:.68em; color:var(--dim2); width:36px; letter-spacing:1px; flex-shrink:0; }
 .vol-warn-line { font-size:.66em; color:var(--amber); letter-spacing:1px; }
 
-/* ── Char cards ── */
-.char-card {
-  background: linear-gradient(180deg, #0e0800 0%, #060400 100%);
-  border: 1px solid #1e0e00;
-  border-radius: 3px;
-  padding: 22px 12px 16px;
-  cursor: pointer;
-  text-align: center;
-  transition: all .2s;
-  position: relative;
-  overflow: hidden;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-.char-card:hover { border-color: var(--orange); box-shadow: 0 0 24px var(--go); transform: translateY(-2px); }
-.char-card:active { transform: scale(.95); }
-.char-card .cicon { font-size:2.8em; display:block; margin-bottom:10px; filter:drop-shadow(0 0 8px rgba(255,80,0,.5)); transition:transform .2s; }
-.char-card:hover .cicon { transform:scale(1.15); }
-.char-card h3 { font-family:Georgia,serif; font-size:.82em; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--orange); margin-bottom:6px; }
-.char-card p  { font-size:.68em; color:var(--dim2); letter-spacing:1px; }
-
-/* ── Scene btn grid ── */
-.scene-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-.scene-btn {
-  background: linear-gradient(180deg, #100a1a 0%, #080610 100%);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 16px 10px;
-  cursor: pointer;
-  text-align: center;
-  transition: all .2s;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-.scene-btn:hover { border-color:var(--orange); box-shadow:0 0 16px var(--go); transform:translateY(-1px); }
-.scene-btn.active { border-color:var(--orange); background:linear-gradient(180deg,#1c1000,#0e0800); box-shadow:0 0 20px var(--go); }
-.scene-btn .sicon { font-size:1.8em; display:block; margin-bottom:8px; }
-.scene-btn .slabel { font-family:Georgia,serif; font-size:.7em; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--dim2); }
-.scene-btn:hover .slabel,.scene-btn.active .slabel { color:var(--orange); }
-
 /* ── Storm ── */
 .strike-btn {
   width:100%; padding:28px; border:2px solid var(--amber2); border-radius:3px;
@@ -517,12 +479,12 @@ body.demo-mode #demo-badge { display: inline-block; }
   color: var(--dim2);
 }
 
-/* ── Clip library ── */
+/* ── Clip / file list ── */
 .clip-list { display:flex; flex-direction:column; gap:4px; }
 .clip-item {
   display:flex; align-items:center; gap:10px;
   padding:7px 10px; border:1px solid var(--border);
-  background:rgba(0,0,0,.3); border-radius:2px; cursor:pointer;
+  background:rgba(0,0,0,.3); border-radius:2px;
   font-family:'Courier New',monospace; font-size:.74em; letter-spacing:1px;
   color:var(--dim2); transition:all .15s;
   min-height: 40px;
@@ -531,6 +493,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 }
 .clip-item:hover { border-color:var(--orange); color:var(--orange); background:rgba(255,179,71,.03); }
 .clip-item .clip-icon { font-size:1.1em; flex-shrink:0; }
+.clip-item .clip-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* ── Log box ── */
 #log-box {
@@ -600,6 +563,7 @@ body.demo-mode #demo-badge { display: inline-block; }
 .raw-input { flex:1; width:100%; }
 .field-row input:focus, .raw-input:focus { border-color:var(--orange); box-shadow:0 0 8px var(--go); color:var(--orange); }
 .field-row input::placeholder, .raw-input::placeholder { color:#2a1a08; }
+select.raw-input { width:auto; flex:0 0 auto; min-width:90px; }
 
 /* ── Toggle switch ── */
 .toggle-row {
@@ -636,24 +600,59 @@ body.demo-mode #demo-badge { display: inline-block; }
 .countdown-badge.active .cd-dot { background:var(--green); box-shadow:0 0 6px var(--gg); animation:dot-pulse 1s infinite; }
 .cd-dot { width:7px; height:7px; border-radius:50%; background:var(--dim); flex-shrink:0; }
 
-/* ── Color swatches ── */
-.swatch-grid { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
-.swatch-item { display:flex; flex-direction:column; align-items:center; gap:5px; }
-.swatch {
-  width:44px; height:44px; border-radius:50%; border:2px solid rgba(0,0,0,.4);
-  cursor:pointer; transition:all .15s;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+/* ── Govee slot rows ── */
+.slot-row {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:8px 10px; margin-bottom:6px;
+  background:rgba(0,0,0,.3); border:1px solid #14101e; border-radius:2px;
 }
-.swatch:hover { transform:scale(1.15); border-color:rgba(255,255,255,.4); }
-.swatch:active { transform:scale(.92); }
-.swatch-name { font-size:.58em; letter-spacing:1px; text-transform:uppercase; color:var(--dim2); }
+.slot-name {
+  width:130px; flex-shrink:0;
+  font-family:'Courier New',monospace; font-size:.7em; font-weight:700;
+  letter-spacing:2px; text-transform:uppercase; color:var(--orange);
+}
+.slot-row input[type=color] {
+  width:44px; height:32px; padding:0; border:1px solid var(--border2);
+  background:transparent; border-radius:3px; cursor:pointer;
+}
+.slot-row input[type=range] { flex:1; min-width:80px; }
+.slot-status { font-size:.64em; color:var(--dim2); letter-spacing:1px; width:90px; }
 
 /* ── Govee IP fields ── */
-.govee-ip-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.govee-ip-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
 .govee-ip-row { display:flex; flex-direction:column; gap:4px; }
 .govee-ip-row label { font-family:'Courier New',monospace; font-size:.68em; letter-spacing:2px; text-transform:uppercase; color:var(--dim2); }
-.govee-ip-row label.storm-label { color: var(--blue); }
+
+/* ── Zone level indicator tiles ── */
+.zone-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.zone-tile {
+  background:rgba(0,0,0,.35); border:1px solid var(--border2); border-radius:3px;
+  padding:16px 10px; text-align:center;
+}
+.zone-tile .zt-name { font-size:.66em; letter-spacing:3px; text-transform:uppercase; color:var(--dim2); display:block; margin-bottom:6px; }
+.zone-tile .zt-val  { font-family:'Courier New',monospace; font-size:2em; font-weight:700; display:block; }
+.zone-tile.zt-z1 .zt-val { color:var(--orange2); text-shadow:0 0 12px var(--go); }
+.zone-tile.zt-z2 .zt-val { color:var(--green);   text-shadow:0 0 12px var(--gg); }
+.zone-tile.zt-z3 .zt-val { color:var(--purple);  text-shadow:0 0 12px var(--gp); }
+
+/* ── Health row ── */
+.health-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.health-item {
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  background:rgba(0,0,0,.3); border:1px solid var(--border); border-radius:3px;
+  padding:12px 6px; font-family:'Courier New',monospace;
+}
+.health-item .hi-name { font-size:.62em; letter-spacing:2px; text-transform:uppercase; color:var(--dim2); }
+.health-item .hi-val  { font-size:.74em; letter-spacing:1px; color:var(--dim2); }
+.health-item .hi-val.good { color:var(--green); }
+.health-item .hi-val.bad  { color:var(--red2); }
+
+/* ── Mic level meter ── */
+.mic-meter {
+  height:10px; background:#0a0a16; border:1px solid var(--border);
+  border-radius:5px; overflow:hidden; flex:1; min-width:120px;
+}
+.mic-meter-fill { height:100%; width:0%; background:linear-gradient(90deg,var(--green),var(--yellow),var(--red2)); transition:width .06s linear; }
 
 /* ── Keyboard shortcuts table ── */
 .kbd-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:.76em; }
@@ -666,15 +665,12 @@ body.demo-mode #demo-badge { display: inline-block; }
 .info-key { color:var(--dim2); width:120px; letter-spacing:2px; text-transform:uppercase; flex-shrink:0; }
 .info-val { color:var(--orange); }
 
-/* ── Auto-scare char toggles ── */
-.char-toggle-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:.78em; font-family:'Courier New',monospace; letter-spacing:1px; }
-.char-toggle-row:last-child { border-bottom:none; }
-
 /* ── Responsive ── */
 @media(max-width:700px) {
   .grid2,.grid3{ grid-template-columns:1fr; }
-  .scene-grid  { grid-template-columns:1fr 1fr; }
   .govee-ip-grid { grid-template-columns:1fr; }
+  .zone-grid { grid-template-columns:repeat(3,1fr); }
+  .health-grid { grid-template-columns:1fr 1fr; }
   .btn-xl { padding:12px 20px; font-size:.88em; }
 }
 
@@ -701,7 +697,6 @@ body.demo-mode #demo-badge { display: inline-block; }
   .btn-lg { min-height: 46px; padding: 12px 16px; }
   .btn-xl { min-height: 50px; padding: 12px 16px; font-size: .84em; }
 
-  .scene-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .grid2,.grid3 { grid-template-columns: 1fr; }
 
   .fx-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -712,15 +707,8 @@ body.demo-mode #demo-badge { display: inline-block; }
   .vol-cap { display: none; }
   .vol-val { width: 26px; font-size: .85em; }
 
-  .char-card { padding: 16px 8px 12px; }
-  .char-card .cicon { font-size: 2.2em; }
-  .char-card h3 { font-size: .74em; }
-  .char-card p { display: none; }
-
-  .swatch-grid { gap: 8px; }
-  .swatch { width: 48px; height: 48px; }
-
   .govee-ip-grid { grid-template-columns: 1fr; }
+  .slot-name { width: 100px; }
 
   .strike-btn { padding: 20px; font-size: 1em; letter-spacing: 3px; }
 
@@ -736,48 +724,22 @@ body.demo-mode #demo-badge { display: inline-block; }
 
 html, body { touch-action: manipulation; }
 
-/* ── Character card color themes ── */
-.char-card-reaper { background:linear-gradient(180deg,#060c18,#020810); border-color:#0e2a42; }
-.char-card-reaper:hover { border-color:var(--blue); box-shadow:0 0 24px var(--gb); transform:translateY(-2px); }
-.char-card-reaper h3 { color:var(--blue); }
-.char-card-reaper .cicon { filter:drop-shadow(0 0 8px rgba(79,195,247,.6)); }
-.char-card-horseman { background:linear-gradient(180deg,#180606,#0e0202); border-color:#3a1010; }
-.char-card-horseman:hover { border-color:var(--red); box-shadow:0 0 24px var(--gr); transform:translateY(-2px); }
-.char-card-horseman h3 { color:var(--red2); }
-.char-card-horseman .cicon { filter:drop-shadow(0 0 8px rgba(192,57,43,.6)); }
-.char-card-pumpkin { background:linear-gradient(180deg,#061806,#020e02); border-color:#1a4a1a; }
-.char-card-pumpkin:hover { border-color:var(--green); box-shadow:0 0 24px var(--gg); transform:translateY(-2px); }
-.char-card-pumpkin h3 { color:var(--green); }
-.char-card-pumpkin .cicon { filter:drop-shadow(0 0 8px rgba(102,187,106,.6)); }
-@keyframes pulse-blue  { 0%,100%{box-shadow:0 0 20px var(--gb)} 50%{box-shadow:0 0 40px var(--gb),0 0 60px rgba(79,195,247,.3)} }
-@keyframes pulse-red   { 0%,100%{box-shadow:0 0 20px var(--gr)} 50%{box-shadow:0 0 40px var(--gr),0 0 60px rgba(192,57,43,.4)} }
-@keyframes pulse-green { 0%,100%{box-shadow:0 0 20px var(--gg)} 50%{box-shadow:0 0 40px var(--gg),0 0 60px rgba(102,187,106,.3)} }
-.char-card-reaper.playing   { border-color:var(--blue);  animation:pulse-blue  1.2s infinite; }
-.char-card-horseman.playing { border-color:var(--red);   animation:pulse-red   1.2s infinite; }
-.char-card-pumpkin.playing  { border-color:var(--green); animation:pulse-green 1.2s infinite; }
-
 /* ── Screen flash overlay ── */
 #screen-flash { position:fixed; inset:0; pointer-events:none; z-index:9997; opacity:0; }
 @keyframes sflash { 0%{opacity:.35} 100%{opacity:0} }
 #screen-flash.flashing { animation:sflash .6s ease-out forwards; }
 
 /* ── Tab theme colors ── */
-.tab[data-pane="graveyard"].active { color:var(--green); border-bottom-color:var(--green); background:rgba(102,187,106,.06); text-shadow:0 0 10px var(--gg); }
-.tab[data-pane="lights"].active    { color:var(--blue);  border-bottom-color:var(--blue);  background:rgba(79,195,247,.06);  text-shadow:0 0 10px var(--gb); }
-
-/* ── Graveyard pane green corner accents ── */
-#pane-graveyard .panel::before,#pane-graveyard .panel::after { border-color:var(--green); }
+.tab[data-pane="test"].active  { color:var(--blue);  border-bottom-color:var(--blue);  background:rgba(79,195,247,.06);  text-shadow:0 0 10px var(--gb); }
 
 /* ── Storm panel blue theme ── */
 .panel-storm { border-color:rgba(79,195,247,.3) !important; }
 .panel-storm .panel-title { color:var(--blue); text-shadow:0 0 8px var(--gb); }
-.panel-storm .panel::before,.panel-storm .panel::after { border-color:var(--blue); }
 .panel-storm #storm-strike-label { color:var(--blue); text-shadow:0 0 8px var(--gb); }
 
 /* ── Witch panel purple theme ── */
 .panel-witch { border-color:rgba(206,147,216,.25) !important; }
 .panel-witch .panel-title { color:var(--purple); text-shadow:0 0 8px var(--gp); }
-.panel-witch .panel::before,.panel-witch .panel::after { border-color:var(--purple); }
 
 /* ── Ambient dot ── */
 .ambient-dot { display:none; width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--gg); animation:dot-pulse 1s infinite; margin-left:8px; vertical-align:middle; }
@@ -813,12 +775,9 @@ body::before { animation:scanlines 10s linear infinite; }
   border: 1px solid rgba(255,179,71,.12) !important;
 }
 
-#pane-cmd       { background: linear-gradient(180deg, rgba(255,130,0,.025) 0%, transparent 300px); }
-#pane-graveyard { background: linear-gradient(180deg, rgba(100,200,100,.03) 0%, transparent 300px); }
-#pane-skeleton  { background: linear-gradient(180deg, rgba(255,179,71,.03) 0%, transparent 300px); }
-#pane-audio     { background: linear-gradient(180deg, rgba(200,134,10,.025) 0%, transparent 300px); }
-#pane-lights    { background: linear-gradient(180deg, rgba(79,195,247,.03) 0%, transparent 300px); }
-#pane-setup     { background: linear-gradient(180deg, rgba(206,147,216,.025) 0%, transparent 300px); }
+#pane-show  { background: linear-gradient(180deg, rgba(255,130,0,.025) 0%, transparent 300px); }
+#pane-test  { background: linear-gradient(180deg, rgba(79,195,247,.03) 0%, transparent 300px); }
+#pane-setup { background: linear-gradient(180deg, rgba(206,147,216,.025) 0%, transparent 300px); }
 
 .btn-red:hover    { box-shadow:0 0 22px rgba(220,50,50,.85),0 0 50px rgba(220,50,50,.35) !important; text-shadow:0 0 8px rgba(255,100,100,.8); }
 .btn-orange:hover { box-shadow:0 0 22px rgba(255,130,0,.85),0 0 50px rgba(255,130,0,.35) !important; text-shadow:0 0 8px rgba(255,179,71,.8); }
@@ -874,9 +833,10 @@ body::before { animation:scanlines 10s linear infinite; }
   <div class="hdr-right">
     <div id="live-clock">--:--:--</div>
     <div class="status-dot-row">
-      <span class="si"><span id="dot-rx" class="dot"></span><span class="si-label">RX</span></span>
+      <span class="si"><span id="dot-rx" class="dot"></span><span class="si-label">ONKYO</span></span>
       <span class="si"><span id="dot-fog" class="dot"></span><span class="si-label">FOG</span></span>
       <span class="si"><span id="dot-storm" class="dot"></span><span class="si-label">STORM</span></span>
+      <span class="si"><span id="dot-ambient" class="dot"></span><span class="si-label">AMB</span></span>
     </div>
     <span id="demo-badge">DEMO</span>
   </div>
@@ -886,70 +846,212 @@ body::before { animation:scanlines 10s linear infinite; }
 <div class="global-bar">
   <button class="btn btn-red btn-xl" id="allstop-btn" onclick="openShutdown()">⛔ ALL STOP</button>
   <button class="btn btn-amber btn-lg" id="pause-btn" onclick="api('/api/pause')">⏸ PAUSE</button>
-<button class="btn btn-blue  btn-lg" onclick="api('/api/fog/fire',{duration:5000})">🌫 FOG BURST</button>
   <button class="btn btn-lg" style="background:linear-gradient(180deg,#3a3a00,#1a1a00);border-color:#aaaa00;color:#ffff88;" onclick="api('/api/strikedown')">⬇ STRIKE DOWN</button>
 </div>
 
 <!-- ══ TABS ══ -->
 <div class="tabs">
-  <div class="tab active" data-pane="cmd">⚡ COMMAND</div>
-  <div class="tab" data-pane="graveyard">💀 GRAVEYARD</div>
-  <div class="tab" data-pane="skeleton">🦴 SKELETON</div>
-  <div class="tab" data-pane="audio">🔊 AUDIO</div>
-  <div class="tab" data-pane="lights">💡 LIGHTS</div>
+  <div class="tab active" data-pane="show">🎃 SHOW</div>
+  <div class="tab" data-pane="test">🧪 TEST</div>
   <div class="tab" data-pane="setup">⚙ SETUP</div>
 </div>
 
 <!-- ══ CONTENT ══ -->
 <div class="content">
 
-<!-- ─── COMMAND ─── -->
-<div class="pane active" id="pane-cmd">
+<!-- ─── SHOW ─── -->
+<div class="pane active" id="pane-show">
 
-  <!-- Scene modes -->
+  <!-- Zone level indicators (read-only) -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎭</span>Scene Mode</div>
-    <div class="scene-grid">
-      <div class="scene-btn" id="scene-kids"    onclick="setScene('kids')">
-        <span class="sicon">🧒</span><span class="slabel">Kids</span>
+    <div class="panel-title"><span class="pt-icon">🔊</span>Zone Levels</div>
+    <div class="zone-grid" style="margin-bottom:14px">
+      <div class="zone-tile zt-z1">
+        <span class="zt-name">🦴 Skeletons · Z1</span>
+        <span class="zt-val" id="zi-z1">--</span>
       </div>
-      <div class="scene-btn active" id="scene-normal"  onclick="setScene('normal')">
-        <span class="sicon">👻</span><span class="slabel">Normal</span>
+      <div class="zone-tile zt-z2">
+        <span class="zt-name">🪦 Graveyard · Z2</span>
+        <span class="zt-val" id="zi-z2">--</span>
       </div>
-      <div class="scene-btn" id="scene-intense" onclick="setScene('intense')">
-        <span class="sicon">💀</span><span class="slabel">Intense</span>
+      <div class="zone-tile zt-z3">
+        <span class="zt-name">🧙 Witches · Z3</span>
+        <span class="zt-val" id="zi-z3">--</span>
       </div>
-      <div class="scene-btn" id="scene-loud"    onclick="setScene('loud')">
-        <span class="sicon">📢</span><span class="slabel">Loud</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-green btn-lg" id="preset-normal" style="flex:1" onclick="setPreset('normal')">👻 NORMAL</button>
+      <button class="btn btn-amber btn-lg" id="preset-boost" style="flex:1" onclick="setPreset('boost')">📢 BOOST</button>
+    </div>
+  </div>
+
+  <!-- Show health -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">❤️</span>Show Health</div>
+    <div class="health-grid">
+      <div class="health-item"><span class="hi-name">Govee</span><span class="hi-val" id="health-govee">0 / 9 slots</span></div>
+      <div class="health-item"><span class="hi-name">ESP32</span><span class="hi-val bad" id="health-esp32">OFFLINE</span></div>
+      <div class="health-item"><span class="hi-name">VLC</span><span class="hi-val" id="health-vlc">Idle</span></div>
+      <div class="health-item"><span class="hi-name">Onkyo</span><span class="hi-val bad" id="health-onkyo">Down</span></div>
+    </div>
+  </div>
+
+  <!-- Emergency / shutdown -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">⛔</span>Show Control</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-red btn-xl" style="flex:2" onclick="openShutdown()">⛔ ALL STOP</button>
+      <button class="btn btn-orange btn-lg" style="flex:1" onclick="openShutdown()">🌙 SHUTDOWN SEQUENCE</button>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📋</span>Activity Log</div>
+    <div id="log-box"></div>
+  </div>
+
+</div><!-- /pane-show -->
+
+<!-- ─── TEST ─── -->
+<div class="pane" id="pane-test">
+
+  <!-- Lights -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">💡</span>Lights — Per-Slot Test</div>
+    <div id="slot-rows"><!-- populated from /api/govee/slots --></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+      <button class="btn btn-blue btn-sm" onclick="api('/api/govee/lightning',{duration:400,style:'single'})">⚡ SINGLE</button>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/govee/lightning',{duration:400,style:'double'})">⚡⚡ DOUBLE</button>
+      <button class="btn btn-green btn-sm" onclick="api('/api/govee/power',{on:true})">💡 ALL ON</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/govee/power',{on:false})">⬛ ALL OFF</button>
+      <button class="btn btn-orange btn-sm" onclick="api('/api/lights/scheme')">🎃 RESET TO SHOW SCHEME</button>
+    </div>
+    <div style="margin-top:14px">
+      <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Storm stage step-through (lights only):</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-blue btn-sm" onclick="api('/api/storm/test',{stage:0})">🌧 DISTANT</button>
+        <button class="btn btn-blue btn-sm" onclick="api('/api/storm/test',{stage:1})">⛈ CLOSER</button>
+        <button class="btn btn-blue btn-sm" onclick="api('/api/storm/test',{stage:2})">🌩 CLOSE</button>
+        <button class="btn btn-blue btn-sm" onclick="api('/api/storm/test',{stage:3})">⚡ VERY CLOSE</button>
+        <button class="btn btn-amber btn-sm" onclick="api('/api/storm/test',{stage:4})">💥 OVERHEAD</button>
       </div>
     </div>
   </div>
 
-  <!-- Character quick fire -->
+  <!-- Projections -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎬</span>Character Quick Fire</div>
-    <div class="grid3">
-      <div class="char-card char-card-reaper" id="charcard-cmd-reaper" onclick="fireChar('grimreaper')">
-        <span class="cicon">☠️</span>
-        <h3>Reaper</h3>
-        <p>7s fog · cold blue · boost</p>
-      </div>
-      <div class="char-card char-card-horseman" id="charcard-cmd-horseman" onclick="fireChar('headlesshorseman')">
-        <span class="cicon">🐴</span>
-        <h3>Horseman</h3>
-        <p>3s fog · blood red · boost</p>
-      </div>
-      <div class="char-card char-card-pumpkin" id="charcard-cmd-pumpkin" onclick="fireChar('pumpkinking')">
-        <span class="cicon">👑</span>
-        <h3>Pmp King</h3>
-        <p>12s fog · witch green · boost</p>
-      </div>
+    <div class="panel-title"><span class="pt-icon">📽</span>Projections — AtmosFX</div>
+    <div class="field-row" style="margin-bottom:10px">
+      <label>Display</label>
+      <select class="raw-input" id="atmosfx-display">
+        <option value="1">1</option><option value="2">2</option>
+        <option value="3">3</option><option value="4">4</option>
+      </select>
+      <button class="btn btn-blue btn-sm" onclick="loadAtmosfxList()">↻ REFRESH</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/atmosfx/stop')">■ STOP</button>
+      <button class="btn btn-amber btn-sm" onclick="api('/api/atmosfx/pattern')">🔲 TEST PATTERN</button>
+    </div>
+    <p style="font-size:.68em;color:var(--dim2);letter-spacing:1px;margin-bottom:10px">Test pattern requires files — AtmosFX library not yet installed.</p>
+    <div class="clip-list" id="atmosfx-list">
+      <div class="clip-item"><span class="clip-icon">⏳</span><span class="clip-name">Loading…</span></div>
     </div>
   </div>
 
-  <!-- Storm mode -->
+  <!-- Witches -->
+  <div class="panel panel-witch">
+    <div class="panel-title"><span class="pt-icon">🧙</span>Witches</div>
+    <div class="field-row">
+      <label>Main line</label>
+      <input id="witch-line" placeholder="Type a line for the main witch…"/>
+      <button class="btn btn-purple btn-sm" onclick="witchSpeak()">🗣 FIRE LINE</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'left'})">🧙 MAIN WITCH · L</button>
+      <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'right'})">🧙 WITCH 2 · R</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'witchinghour'})">🌙 WITCHING HOUR</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'catcrow'})">🐈‍⬛ CAT &amp; CROW</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'spellbound'})">🔮 SPELLBOUND</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'seance'})">🕯 SÉANCE</button>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-blue btn-sm" id="mic-test-btn" onclick="toggleMicTest()">🎙 MIC TEST</button>
+      <div class="mic-meter"><div class="mic-meter-fill" id="mic-level"></div></div>
+      <span id="mic-status" style="font-size:.66em;color:var(--dim2);letter-spacing:1px"></span>
+    </div>
+    <div class="info-row"><span class="info-key">ElevenLabs</span><span class="info-val" style="color:var(--dim2)">Not connected</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn btn-purple btn-sm" disabled>🔈 VOICE PREVIEW 1</button>
+      <button class="btn btn-purple btn-sm" disabled>🔈 VOICE PREVIEW 2</button>
+    </div>
+  </div>
+
+  <!-- Skeletons -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🦴</span>Skeletons</div>
+    <div class="grid2" style="margin-bottom:12px">
+      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'left'})">🦴 LEFT LINE</button>
+      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'right'})">🦴 RIGHT LINE</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-amber btn-sm" onclick="api('/api/skeleton/argument')">🗯 ARGUMENT SEQUENCE</button>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/skeleton/balance')">🔀 L/R BALANCE TEST</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/skeleton/stop')">■ STOP</button>
+    </div>
+  </div>
+
+  <!-- Audio -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🔊</span>Audio<span class="ambient-dot" id="ambient-dot"></span></div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--orange2)">Skeleton</span>
+      <input type="range" class="vol-slider orange-fill" id="vol-z1" min="0" max="60"
+        oninput="onSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
+      <span class="vol-val" id="val-z1">30</span>
+      <span class="vol-cap">/ <span id="cap-z1">60</span></span>
+      <button class="btn btn-orange btn-sm" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--green)">Graveyard</span>
+      <input type="range" class="vol-slider green-fill" id="vol-z2" min="0" max="48"
+        oninput="onSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
+      <span class="vol-val" id="val-z2">25</span>
+      <span class="vol-cap">/ <span id="cap-z2">48</span></span>
+      <button class="btn btn-orange btn-sm" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--purple)">Witch</span>
+      <input type="range" class="vol-slider purple-fill" id="vol-z3" min="0" max="44"
+        oninput="onSlider(this,'z3')" onchange="setVol('z3',this.value)"/>
+      <span class="vol-val" id="val-z3">20</span>
+      <span class="vol-cap">/ <span id="cap-z3">44</span></span>
+      <button class="btn btn-orange btn-sm" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
+    </div>
+
+    <button class="btn btn-green btn-full btn-lg" id="ambient-btn" onclick="toggleAmbient()" style="margin-bottom:14px">▶ Start Ambient System</button>
+
+    <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Haunt sounds (HAUNT SOUNDS folder):</div>
+    <div class="fx-grid" id="sounds-grid" style="margin-bottom:14px">
+      <button class="btn btn-amber btn-sm" disabled>No files found</button>
+    </div>
+
+    <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Storm clip tests:</div>
+    <div class="fx-grid" id="storm-clips-grid" style="margin-bottom:14px"></div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-blue btn-sm" onclick="toggleMicTest()">🎙 MIC TEST</button>
+      <div class="mic-meter"><div class="mic-meter-fill" id="mic-level-2"></div></div>
+    </div>
+  </div>
+
+  <!-- Storm engine -->
   <div class="panel panel-storm">
-    <div class="panel-title"><span class="pt-icon">⛈</span>Storm Mode</div>
+    <div class="panel-title"><span class="pt-icon">⛈</span>Storm Engine</div>
     <div class="grid2">
       <div>
         <div id="storm-strike-info">
@@ -965,9 +1067,26 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
   </div>
 
-  <!-- Fog Auto-Timer -->
+  <!-- Sensors -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🌫</span>Fog Auto-Timer</div>
+    <div class="panel-title"><span class="pt-icon">📡</span>Sensors</div>
+    <div class="info-row" style="margin-bottom:10px"><span class="info-key">ESP32</span><span class="info-val" style="color:var(--red2)">OFFLINE — not yet installed</span></div>
+    <div class="toggle-row" style="margin-bottom:10px">
+      <span class="toggle-label">Cooldown override</span>
+      <label class="toggle"><input type="checkbox" id="sensor-cooldown-override"><span class="toggle-track"></span></label>
+    </div>
+    <div class="grid2">
+      <button class="btn btn-blue btn-sm" onclick="simSensor(1)">📡 SIM ZONE 1</button>
+      <button class="btn btn-blue btn-sm" onclick="simSensor(2)">📡 SIM ZONE 2</button>
+      <button class="btn btn-blue btn-sm" onclick="simSensor(3)">📡 SIM ZONE 3</button>
+      <button class="btn btn-blue btn-sm" onclick="simSensor(4)">📡 SIM ZONE 4</button>
+    </div>
+    <p style="font-size:.66em;color:var(--dim2);letter-spacing:1px;margin-top:10px">Sensor events appear in the main activity log.</p>
+  </div>
+
+  <!-- Fog -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌫</span>Fog</div>
     <div class="fog-timer-card">
       <div class="fog-warmup-badge" id="fog-warmup-badge">⏳ Warming up — 4 min until ready</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -976,6 +1095,7 @@ body::before { animation:scanlines 10s linear infinite; }
         </div>
         <button class="btn btn-red btn-sm" onclick="killFog()">⛔ KILL FOG</button>
       </div>
+      <button class="btn btn-blue btn-full btn-lg" onclick="api('/api/fog/fire',{duration:fogDuration*1000})">🌫 MANUAL BURST</button>
       <button class="btn btn-blue btn-full btn-lg" id="fog-auto-btn" onclick="toggleFogAuto()">▶ Start Fog Auto-Timer</button>
       <div class="fog-dur-row">
         <span>Burst:</span>
@@ -983,422 +1103,41 @@ body::before { animation:scanlines 10s linear infinite; }
         <button class="btn btn-blue btn-sm"         id="fog-dur-10" onclick="setFogDuration(10)">10s</button>
         <button class="btn btn-blue btn-sm"         id="fog-dur-15" onclick="setFogDuration(15)">15s</button>
       </div>
+      <button class="btn btn-amber btn-full btn-sm" onclick="relayTest()">🔁 RELAY TEST (1s on → off)</button>
     </div>
   </div>
 
-  <!-- FX Soundboard -->
+  <!-- System -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎵</span>FX Soundboard</div>
-    <div class="fx-grid">
-      <button class="btn btn-amber btn-sm" onclick="playFX('scream')">😱 SCREAM</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('thunder')">⛈ THUNDER</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('laugh')">😈 LAUGH</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('chains')">⛓ CHAINS</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('crows')">🐦‍⬛ CROWS</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('gallop')">🐴 GALLOP</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('scythe')">☠️ SCYTHE</button>
-      <button class="btn btn-amber btn-sm" onclick="playFX('cackle')">🧙 CACKLE</button>
+    <div class="panel-title"><span class="pt-icon">🖥</span>System</div>
+
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-blue btn-sm" onclick="api('/api/govee/discover')">🔍 GOVEE DISCOVER</button>
+      <button class="btn btn-orange btn-sm" onclick="saveGoveeIPs()">💾 SAVE SLOT IPS</button>
+      <button class="btn btn-green btn-sm" onclick="testAllGovee()">✓ TEST ALL LIGHTS</button>
     </div>
-    <div style="margin-top:10px">
-      <button class="btn btn-red btn-full btn-sm" onclick="stopFX()">■ STOP FX</button>
+    <div class="govee-ip-grid" id="govee-ip-grid" style="margin-bottom:14px">
+      <!-- 9 slot IP inputs generated by JS -->
     </div>
-  </div>
 
-  <!-- Event log -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">📋</span>Event Log</div>
-    <div id="log-box"></div>
-  </div>
+    <div class="info-row"><span class="info-key">Uptime</span><span class="info-val" id="sys-uptime">--</span></div>
+    <div class="info-row"><span class="info-key">Memory</span><span class="info-val" id="sys-mem">--</span></div>
+    <div class="info-row" style="margin-bottom:12px"><span class="info-key">Clients</span><span class="info-val" id="sys-clients">--</span></div>
+    <button class="btn btn-blue btn-sm" onclick="refreshSystemInfo()" style="margin-bottom:14px">↻ REFRESH INFO</button>
 
-</div><!-- /pane-cmd -->
-
-<!-- ─── GRAVEYARD ─── -->
-<div class="pane" id="pane-graveyard">
-
-  <!-- Status boxes -->
-  <div class="grid2">
-    <div class="panel">
-      <div class="panel-title"><span class="pt-icon">👻</span>Auto Scare</div>
-      <div class="countdown-badge" id="autoscare-badge" style="margin-bottom:12px">
-        <span class="cd-dot"></span><span id="autoscare-status">Inactive</span>
-      </div>
-      <button class="btn btn-green btn-full btn-lg" id="autoscare-btn" onclick="toggleAutoScare()">▶ Start Auto Scare</button>
-      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">Interval:</span>
-        <button class="btn btn-orange btn-sm" id="interval-2" onclick="setScareInterval(2)">2 MIN</button>
-        <button class="btn btn-orange btn-sm" id="interval-3" onclick="setScareInterval(3)">3 MIN</button>
-      </div>
-      <div style="margin-top:12px">
-        <div class="char-toggle-row">
-          <span>☠️ Reaper</span>
-          <label class="toggle"><input type="checkbox" id="scare-reaper" checked onchange="updateScareChars()"><span class="toggle-track"></span></label>
-        </div>
-        <div class="char-toggle-row">
-          <span>🐴 Horseman</span>
-          <label class="toggle"><input type="checkbox" id="scare-horseman" checked onchange="updateScareChars()"><span class="toggle-track"></span></label>
-        </div>
-        <div class="char-toggle-row">
-          <span>👑 Pumpkin King</span>
-          <label class="toggle"><input type="checkbox" id="scare-pumpkin" checked onchange="updateScareChars()"><span class="toggle-track"></span></label>
-        </div>
-      </div>
+    <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Media folders:</div>
+    <div id="media-lists" style="margin-bottom:14px">
+      <button class="btn btn-blue btn-sm" onclick="loadMediaLists()">📁 LOAD MEDIA LISTS</button>
     </div>
-    <div class="panel panel-witch">
-      <div class="panel-title"><span class="pt-icon">🧙</span>Witch Audio Timer</div>
-      <div class="countdown-badge" id="witch-badge" style="margin-bottom:12px">
-        <span class="cd-dot"></span><span id="witch-status">Inactive</span>
-      </div>
-      <button class="btn btn-purple btn-full btn-lg" id="witch-toggle-btn" onclick="toggleWitch()">▶ Start Witch Timer</button>
-      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'right'})">🧙 WITCH 1 · R</button>
-        <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'left'})">🧙 WITCH 2 · L</button>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'witchinghour'})">🌙 WITCHING HOUR</button>
-        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'catcrow'})">🐈‍⬛ CAT &amp; CROW</button>
-        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'spellbound'})">🔮 SPELLBOUND</button>
-        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'seance'})">🕯 SÉANCE</button>
-      </div>
+
+    <div class="field-row" style="margin-bottom:0">
+      <label>Raw ISCP</label>
+      <input class="raw-input" id="raw-iscp" placeholder="e.g. PWRQSTN"/>
+      <button class="btn btn-orange btn-sm" onclick="sendRawISCP()">SEND</button>
     </div>
   </div>
 
-  <!-- Graveyard Auto Cycle -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎞</span>Graveyard Auto Cycle</div>
-    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
-      Cycles through all 23 clips in random order — 2 min gap between each clip.
-    </p>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <div class="countdown-badge" id="cycle-badge" style="flex:1">
-        <span class="cd-dot"></span><span id="cycle-status">Inactive</span>
-      </div>
-    </div>
-    <button class="btn btn-green btn-full btn-lg" id="cycle-btn" onclick="toggleGraveyardCycle()">▶ Start Auto Cycle</button>
-  </div>
-
-  <!-- Ambient loop -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🌫</span>Graveyard Ambient Loop<span class="ambient-dot" id="ambient-dot"></span></div>
-    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
-      Continuous shuffled background atmosphere — runs underneath, audio only.
-    </p>
-    <button class="btn btn-green btn-full btn-lg" id="ambient-btn" onclick="toggleAmbient()">▶ Start Ambient Loop</button>
-  </div>
-
-  <!-- Graveyard display controls -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">📺</span>Graveyard Display — P2 Component</div>
-    <div style="background:#030308;border:1px solid var(--border);padding:8px 12px;border-radius:2px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:.76em;color:var(--green);letter-spacing:2px" id="p2-nowplaying">
-      ▶ No clip selected
-    </div>
-    <div style="background:#0a0a16;border:1px solid var(--border);height:4px;border-radius:2px;margin-bottom:14px;overflow:hidden">
-      <div id="p2-progress" style="height:100%;width:0%;background:var(--green);transition:width .5s"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-green btn-sm" onclick="p2Control('play')">▶ PLAY</button>
-      <button class="btn btn-red   btn-sm" onclick="p2Control('stop')">■ STOP</button>
-      <button class="btn btn-orange btn-sm" onclick="p2Control('next')">⏭ NEXT</button>
-    </div>
-  </div>
-
-  <!-- Character triggers -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎬</span>Character Triggers</div>
-    <p style="font-size:.72em;color:var(--dim2);margin-bottom:14px;letter-spacing:1px;line-height:1.6">
-      Graveyard ambient runs continuously underneath — character triggers boost audio above ambient, fire fog + lights, then restore.
-    </p>
-    <div class="grid3">
-      <div class="char-card char-card-reaper" id="charcard-grave-reaper" onclick="fireChar('grimreaper')">
-        <span class="cicon">☠️</span><h3>Grim Reaper</h3><p>Boost · 7s fog · cold blue</p>
-      </div>
-      <div class="char-card char-card-horseman" id="charcard-grave-horseman" onclick="fireChar('headlesshorseman')">
-        <span class="cicon">🐴</span><h3>Headless Horseman</h3><p>Boost · 3s fog · blood red</p>
-      </div>
-      <div class="char-card char-card-pumpkin" id="charcard-grave-pumpkin" onclick="fireChar('pumpkinking')">
-        <span class="cicon">👑</span><h3>Pumpkin King</h3><p>Boost · 12s fog · witch green</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Clip library -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎞</span>Clip Library — Legends of Halloween</div>
-    <div class="grid3">
-      <div>
-        <div style="font-family:Georgia,serif;font-size:.8em;color:var(--orange);letter-spacing:3px;margin-bottom:10px;text-transform:uppercase">☠️ Grim Reaper</div>
-        <div class="clip-list">
-          <div class="clip-item" onclick="loadClip('grimreaper','Fear the Reaper')"><span class="clip-icon">▶</span>Fear the Reaper</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Out of Time')"><span class="clip-icon">▶</span>Out of Time</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','The Ferryman')"><span class="clip-icon">▶</span>The Ferryman</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Deep Sleeper')"><span class="clip-icon">▶</span>Deep Sleeper</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Dreadful Apparition')"><span class="clip-icon">▶</span>Dreadful Apparition</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Grave Warning')"><span class="clip-icon">▶</span>Grave Warning</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Startle Scare 1')"><span class="clip-icon">▶</span>Startle Scare 1</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Startle Scare 2')"><span class="clip-icon">▶</span>Startle Scare 2</div>
-          <div class="clip-item" onclick="loadClip('grimreaper','Startle Scare 3')"><span class="clip-icon">▶</span>Startle Scare 3</div>
-        </div>
-      </div>
-      <div>
-        <div style="font-family:Georgia,serif;font-size:.8em;color:var(--orange2);letter-spacing:3px;margin-bottom:10px;text-transform:uppercase">🐴 Headless Horseman</div>
-        <div class="clip-list">
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Headless Hessian')"><span class="clip-icon">▶</span>Headless Hessian</div>
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Ride of the Horseman')"><span class="clip-icon">▶</span>Ride of the Horseman</div>
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Sleepy Hollow Steed')"><span class="clip-icon">▶</span>Sleepy Hollow Steed</div>
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Stormy Hollow')"><span class="clip-icon">▶</span>Stormy Hollow</div>
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Startle Scare 1')"><span class="clip-icon">▶</span>Startle Scare 1</div>
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Startle Scare 2')"><span class="clip-icon">▶</span>Startle Scare 2</div>
-          <div class="clip-item" onclick="loadClip('headlesshorseman','Startle Scare 3')"><span class="clip-icon">▶</span>Startle Scare 3</div>
-        </div>
-      </div>
-      <div>
-        <div style="font-family:Georgia,serif;font-size:.8em;color:var(--purple);letter-spacing:3px;margin-bottom:10px;text-transform:uppercase">👑 Pumpkin King</div>
-        <div class="clip-list">
-          <div class="clip-item" onclick="loadClip('pumpkinking','Hail to the King')"><span class="clip-icon">▶</span>Hail to the King</div>
-          <div class="clip-item" onclick="loadClip('pumpkinking','Hungry Goblin')"><span class="clip-icon">▶</span>Hungry Goblin</div>
-          <div class="clip-item" onclick="loadClip('pumpkinking','Lord of the Patch')"><span class="clip-icon">▶</span>Lord of the Patch</div>
-          <div class="clip-item" onclick="loadClip('pumpkinking','The Scarecrow')"><span class="clip-icon">▶</span>The Scarecrow</div>
-          <div class="clip-item" onclick="loadClip('pumpkinking','Startle Scare 1')"><span class="clip-icon">▶</span>Startle Scare 1</div>
-          <div class="clip-item" onclick="loadClip('pumpkinking','Startle Scare 2')"><span class="clip-icon">▶</span>Startle Scare 2</div>
-          <div class="clip-item" onclick="loadClip('pumpkinking','Startle Scare 3')"><span class="clip-icon">▶</span>Startle Scare 3</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-</div><!-- /pane-graveyard -->
-
-<!-- ─── SKELETON ─── -->
-<div class="pane" id="pane-skeleton">
-
-  <!-- Skeleton triggers -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🦴</span>Skeleton Triggers</div>
-    <div class="grid2" style="margin-bottom:14px">
-      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'left'})">🦴 LEFT SKELETON</button>
-      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'right'})">🦴 RIGHT SKELETON</button>
-    </div>
-    <button class="btn btn-red btn-full" onclick="api('/api/skeleton/stop')">■ STOP SKELETON</button>
-  </div>
-
-  <!-- Skeleton zone volume -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🔊</span>Skeleton Zone Volume</div>
-    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
-      Full slider lives in the AUDIO tab (Skeleton row). Quick levels:
-    </p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/volume',{zone:'z1',value:20})">QUIET (20)</button>
-      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/volume',{zone:'z1',value:35})">MID (35)</button>
-      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/volume',{zone:'z1',value:50})">LOUD (50)</button>
-    </div>
-  </div>
-
-</div><!-- /pane-skeleton -->
-
-<!-- ─── AUDIO ─── -->
-<div class="pane" id="pane-audio">
-
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🔊</span>Zone Volumes — Safe Caps Enforced</div>
-
-    <div class="vol-row">
-      <span class="vol-label" style="color:var(--green)">Graveyard</span>
-      <input type="range" class="vol-slider green-fill" id="vol-z2" min="0" max="48"
-        oninput="onSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
-      <span class="vol-val" id="val-z2">25</span>
-      <span class="vol-cap">/ <span id="cap-z2">48</span></span>
-      <button class="btn btn-orange btn-sm" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
-    </div>
-
-    <div class="vol-row">
-      <span class="vol-label" style="color:var(--orange2)">Skeleton</span>
-      <input type="range" class="vol-slider orange-fill" id="vol-z1" min="0" max="60"
-        oninput="onSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
-      <span class="vol-val" id="val-z1">30</span>
-      <span class="vol-cap">/ <span id="cap-z1">60</span></span>
-      <button class="btn btn-orange btn-sm" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
-    </div>
-
-    <div class="vol-row">
-      <span class="vol-label" style="color:var(--purple)">Witch</span>
-      <input type="range" class="vol-slider purple-fill" id="vol-z3" min="0" max="44"
-        oninput="onSlider(this,'z3')" onchange="setVol('z3',this.value)"/>
-      <span class="vol-val" id="val-z3">20</span>
-      <span class="vol-cap">/ <span id="cap-z3">44</span></span>
-      <button class="btn btn-orange btn-sm" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
-    </div>
-
-    <div class="vol-row">
-      <span class="vol-label" style="color:var(--blue)">Subwoofer</span>
-      <input type="range" class="vol-slider blue-fill" id="vol-sub" min="0" max="52"
-        oninput="onSlider(this,'sub')" onchange="demoLog('Sub level set to '+this.value,'AUDIO')"/>
-      <span class="vol-val" id="val-sub">30</span>
-      <span class="vol-cap">/ 52</span>
-      <span class="vol-warn-line">HARD CAP</span>
-    </div>
-
-  </div>
-
-  <!-- Scene presets -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎭</span>Scene Volume Presets</div>
-    <div class="scene-grid">
-      <div class="scene-btn" onclick="setScene('kids')">
-        <span class="sicon">🧒</span><span class="slabel">Kids</span>
-        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:25 J:44 W:16 S:36</div>
-      </div>
-      <div class="scene-btn" onclick="setScene('normal')">
-        <span class="sicon">👻</span><span class="slabel">Normal</span>
-        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:48 J:52 W:32 S:48</div>
-      </div>
-      <div class="scene-btn" onclick="setScene('intense')">
-        <span class="sicon">💀</span><span class="slabel">Intense</span>
-        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:60 J:56 W:40 S:52</div>
-      </div>
-      <div class="scene-btn" onclick="setScene('loud')">
-        <span class="sicon">📢</span><span class="slabel">Loud</span>
-        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:60 J:60 W:44 S:52</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Zone routing reference -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">📡</span>Speaker Zone Routing</div>
-    <div class="info-row"><span class="info-key">FL / FR</span><span class="info-val">Skeleton zone</span></div>
-    <div class="info-row"><span class="info-key">CENTER</span><span class="info-val">Skeleton zone center</span></div>
-    <div class="info-row"><span class="info-key">SL / SR</span><span class="info-val">Graveyard atmosphere wrap</span></div>
-    <div class="info-row"><span class="info-key">SUB</span><span class="info-val">Shared rumble — hard cap 65%</span></div>
-    <div class="info-row"><span class="info-key">ZONE 2</span><span class="info-val">Graveyard display speakers</span></div>
-    <div class="info-row" style="border-bottom:none"><span class="info-key">HIDDEN</span><span class="info-val">Witch animatronic speakers (Z3)</span></div>
-  </div>
-
-</div><!-- /pane-audio -->
-
-<!-- ─── LIGHTS ─── -->
-<div class="pane" id="pane-lights">
-
-  <!-- Lightning -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">⚡</span>Lightning Control</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <button class="btn btn-blue btn-xl btn-full" onclick="api('/api/govee/lightning',{duration:400,style:flashStyle})">⚡ FLASH ALL LIGHTS</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-      <span style="font-size:.72em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">Style:</span>
-      <button class="btn btn-blue btn-sm active" id="flash-single" onclick="setFlashStyle('single')">SINGLE</button>
-      <button class="btn btn-blue btn-sm"         id="flash-double" onclick="setFlashStyle('double')">DOUBLE ⚡⚡</button>
-      <button class="btn btn-amber btn-sm"         id="flash-storm"  onclick="setFlashStyle('storm')">STORM 🌩</button>
-    </div>
-    <div class="toggle-row">
-      <span class="toggle-label">Auto-flash with Thunder FX</span>
-      <label class="toggle"><input type="checkbox" id="auto-flash-toggle"><span class="toggle-track"></span></label>
-    </div>
-  </div>
-
-  <!-- Ambient color presets -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🎨</span>Ambient Color Presets</div>
-    <div class="swatch-grid">
-      <div class="swatch-item">
-        <div class="swatch" style="background:#6400b4" onclick="setLightPreset(100,0,180)"></div>
-        <span class="swatch-name">Death Purple</span>
-      </div>
-      <div class="swatch-item">
-        <div class="swatch" style="background:#001eff" onclick="setLightPreset(0,30,255)"></div>
-        <span class="swatch-name">Ghost Blue</span>
-      </div>
-      <div class="swatch-item">
-        <div class="swatch" style="background:#cc0000" onclick="setLightPreset(204,0,0)"></div>
-        <span class="swatch-name">Reaper Red</span>
-      </div>
-      <div class="swatch-item">
-        <div class="swatch" style="background:#00b41e" onclick="setLightPreset(0,180,30)"></div>
-        <span class="swatch-name">Witch Green</span>
-      </div>
-      <div class="swatch-item">
-        <div class="swatch" style="background:#cc5500" onclick="setLightPreset(204,85,0)"></div>
-        <span class="swatch-name">Blood Orange</span>
-      </div>
-      <div class="swatch-item">
-        <div class="swatch" style="background:#111;border-color:#333" onclick="api('/api/govee/power',{on:false})"></div>
-        <span class="swatch-name">Lights Off</span>
-      </div>
-    </div>
-
-    <!-- Brightness -->
-    <div class="vol-row" style="margin-bottom:0">
-      <span class="vol-label">Brightness</span>
-      <input type="range" class="vol-slider orange-fill" id="bri-slider" min="0" max="100" value="100"
-        style="--pct:100%"
-        oninput="this.style.setProperty('--pct',this.value+'%');document.getElementById('bri-val').textContent=this.value"
-        onchange="api('/api/govee/brightness',{value:parseInt(this.value)})"/>
-      <span class="vol-val" id="bri-val">100</span>
-      <span class="vol-cap">%</span>
-    </div>
-  </div>
-
-  <!-- Custom color -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🖌</span>Custom Color</div>
-    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
-      <div style="flex:1;min-width:100px">
-        <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--red2);margin-bottom:6px">R</div>
-        <input type="range" class="vol-slider red-fill" id="cr" min="0" max="255" value="255"
-          oninput="updateCustomColor()" style="--pct:100%;width:100%"/>
-      </div>
-      <div style="flex:1;min-width:100px">
-        <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:6px">G</div>
-        <input type="range" class="vol-slider green-fill" id="cg" min="0" max="255" value="98"
-          oninput="updateCustomColor()" style="--pct:38%;width:100%"/>
-      </div>
-      <div style="flex:1;min-width:100px">
-        <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:6px">B</div>
-        <input type="range" class="vol-slider blue-fill" id="cb" min="0" max="255" value="0"
-          oninput="updateCustomColor()" style="--pct:0%;width:100%"/>
-      </div>
-      <div id="color-preview" style="width:52px;height:52px;border-radius:3px;border:1px solid var(--border2);background:rgb(255,98,0);flex-shrink:0"></div>
-      <button class="btn btn-orange" onclick="applyCustomColor()">Apply All</button>
-    </div>
-
-    <!-- Character color reference -->
-    <div style="font-family:Georgia,serif;font-size:.72em;letter-spacing:3px;text-transform:uppercase;color:var(--orange);margin-bottom:10px">Character Auto Colors</div>
-    <div class="info-row"><span class="info-key">☠️ Reaper</span><span class="info-val">White flash → cold blue hold</span></div>
-    <div class="info-row"><span class="info-key">🐴 Horseman</span><span class="info-val">White flash → blood red hold</span></div>
-    <div class="info-row"><span class="info-key">👑 Pmp King</span><span class="info-val">Orange flash → witch green hold</span></div>
-    <div class="info-row" style="border-bottom:none"><span class="info-key">All</span><span class="info-val">Return to ambient after scene</span></div>
-  </div>
-
-  <!-- Govee IP config -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">💡</span>Govee Light Pairs</div>
-    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">Each pair is 2 daisy-chained lights on one controller IP.</p>
-    <div class="govee-ip-grid">
-      <div class="govee-ip-row">
-        <label>🪦 Graveyard Pair</label>
-        <input class="raw-input" id="gip-graveyard" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label>🧙 Witch Pair</label>
-        <input class="raw-input" id="gip-witch" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label>🦴 Skeleton</label>
-        <input class="raw-input" id="gip-skeleton" placeholder="192.168.1.x"/>
-      </div>
-      <div class="govee-ip-row">
-        <label>🌲 Tree Pair</label>
-        <input class="raw-input" id="gip-tree" placeholder="192.168.1.x"/>
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-      <button class="btn btn-orange btn-sm" onclick="saveGoveeIPs()">💾 Save</button>
-      <button class="btn btn-blue   btn-sm" onclick="api('/api/govee/discover')">🔍 Scan LAN</button>
-      <button class="btn btn-green  btn-sm" onclick="testAllGovee()">✓ Test All</button>
-    </div>
-  </div>
-
-</div><!-- /pane-lights -->
+</div><!-- /pane-test -->
 
 <!-- ─── SETUP ─── -->
 <div class="pane" id="pane-setup">
@@ -1452,27 +1191,14 @@ body::before { animation:scanlines 10s linear infinite; }
       <span class="toggle-label">Haptic Feedback</span>
       <label class="toggle"><input type="checkbox" id="set-haptic" checked onchange="saveSetting('hapticFeedback',this.checked)"><span class="toggle-track"></span></label>
     </div>
-    <div class="toggle-row">
-      <span class="toggle-label">Auto-duck Skeleton on Character Triggers</span>
-      <label class="toggle"><input type="checkbox" id="set-autoduck" checked onchange="saveSetting('autoDuckSkeleton',this.checked)"><span class="toggle-track"></span></label>
-    </div>
-    <div class="toggle-row">
-      <span class="toggle-label">Fog with Characters</span>
-      <label class="toggle"><input type="checkbox" id="set-fogchars" checked onchange="saveSetting('fogWithCharacters',this.checked)"><span class="toggle-track"></span></label>
-    </div>
   </div>
 
   <!-- Keyboard shortcuts -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">⌨</span>Keyboard Shortcuts</div>
     <div class="kbd-grid">
-      <span class="kbd">1</span><span class="kbd-desc">Fire Reaper</span>
-      <span class="kbd">2</span><span class="kbd-desc">Fire Horseman</span>
-      <span class="kbd">3</span><span class="kbd-desc">Fire Pumpkin King</span>
       <span class="kbd">F</span><span class="kbd-desc">Fog burst</span>
       <span class="kbd">L</span><span class="kbd-desc">Lightning flash</span>
-      <span class="kbd">K</span><span class="kbd-desc">Kids mode</span>
-      <span class="kbd">N</span><span class="kbd-desc">Normal mode</span>
       <span class="kbd">SPACE</span><span class="kbd-desc">Pause / Resume</span>
       <span class="kbd">ESC</span><span class="kbd-desc">All Stop shutdown sequence</span>
     </div>
@@ -1497,7 +1223,7 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
     <div class="shutdown-step" id="step-3">
       <span class="step-icon">🎬</span>
-      <span>Stopping projectors (P1 &amp; P2)</span>
+      <span>Stopping projections</span>
       <span class="step-status" id="step-3-status"></span>
     </div>
     <div class="shutdown-step" id="step-4">
@@ -1530,13 +1256,33 @@ let appState = {
   kidMode: false, paused: false, sceneMode: 'normal',
   volumes: { z1:30, z2:25, z3:20, sub:30 },
   mute: { z1:false, z2:false, z3:false },
-  autoScare: { active:false, intervalMin:2, chars:{grimreaper:true,headlesshorseman:true,pumpkinking:true}, nextAt:null },
-  witchTimer: { active:false, nextAt:null },
   fogAutoActive: false, fogAutoNextAt: null, fogWarmup: false,
-  graveyardCycle: { active: false, nextAt: null },
+  soundPreset: 'normal', ambientActive: false, vlcActive: false,
+  goveeSlotsConfigured: 0,
 };
-let flashStyle = 'single';
 let fogDuration = 5;
+
+// The 9 Govee light slots — mirrors the server's GOVEE_IPS keys
+const SLOT_DEFS = [
+  { key:'skel_left',    label:'🦴 Skel Left' },
+  { key:'skel_right',   label:'🦴 Skel Right' },
+  { key:'witch_main',   label:'🧙 Witch Main' },
+  { key:'witch_second', label:'🧙 Witch 2nd' },
+  { key:'moon_left',    label:'🌙 Moon Left' },
+  { key:'moon_right',   label:'🌙 Moon Right' },
+  { key:'storm_left',   label:'⛈ Storm Left' },
+  { key:'storm_right',  label:'⛈ Storm Right' },
+  { key:'cauldron',     label:'🍯 Cauldron' },
+];
+
+const STORM_CLIP_FILES = [
+  { file:'bijan6207-thunderstorm-409071.mp3',                   label:'⛈ Thunderstorm' },
+  { file:'freesound_community-lightning-storm-6077.mp3',        label:'🌩 Lightning Storm' },
+  { file:'freesound_community-lightning-strike-29683.mp3',      label:'⚡ Lightning Strike' },
+  { file:'soundsforyou-natural-thunder-113219.mp3',             label:'🌧 Natural Thunder' },
+  { file:'u_39xav15uou-lightning-237994.mp3',                   label:'⚡ Lightning' },
+  { file:'646912__alexdarek__lightning-strike-2.wav',           label:'💥 OVERHEAD' },
+];
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let ws, wsRetry = 1000;
@@ -1598,30 +1344,65 @@ async function api(url, body) {
   }
 }
 
+async function apiGet(url) {
+  if (DEMO) return { ok: true, files: [], lists: {} };
+  try {
+    const r = await fetch(url);
+    return await r.json();
+  } catch(e) {
+    appendLog(`Network error: ${e.message}`, 'SYSTEM');
+    return { ok: false };
+  }
+}
+
 function demoLog(msg, cat) { if (DEMO) appendLog(msg, cat); }
 
 // ── State sync ────────────────────────────────────────────────────────────────
 function applyState(s) {
   appState = { ...appState, ...s };
 
-  document.getElementById('dot-rx').className    = 'dot ' + (s.connected   ? 'on'  : 'off');
-  document.getElementById('dot-fog').className   = 'dot ' + (s.fogActive   ? 'fog' : '');
-  document.getElementById('dot-storm').className = 'dot ' + (s.stormActive ? 'storm': '');
+  document.getElementById('dot-rx').className      = 'dot ' + (s.connected     ? 'on'  : 'off');
+  document.getElementById('dot-fog').className     = 'dot ' + (s.fogActive     ? 'fog' : '');
+  document.getElementById('dot-storm').className   = 'dot ' + (s.stormActive   ? 'storm': '');
+  document.getElementById('dot-ambient').className = 'dot ' + (s.ambientActive ? 'on' : '');
 
   const pb = document.getElementById('pause-btn');
   pb.textContent = s.paused ? '▶ RESUME' : '⏸ PAUSE';
   pb.className   = s.paused ? 'btn btn-green btn-lg' : 'btn btn-amber btn-lg';
 
-  // Scene buttons
-  ['kids','normal','intense','loud'].forEach(sc => {
-    const el = document.getElementById(`scene-${sc}`);
-    if (el) el.classList.toggle('active', s.sceneMode === sc);
+  // Zone level indicators (read-only)
+  ['z1','z2','z3'].forEach(z => {
+    const el = document.getElementById(`zi-${z}`);
+    if (el && s.volumes) el.textContent = s.volumes[z] ?? '--';
   });
+
+  // Sound preset buttons
+  document.getElementById('preset-normal')?.classList.toggle('active', s.soundPreset === 'normal');
+  document.getElementById('preset-boost')?.classList.toggle('active', s.soundPreset === 'boost');
+
+  // Health indicators
+  const hg = document.getElementById('health-govee');
+  if (hg && s.goveeSlotsConfigured !== undefined) {
+    hg.textContent = `${s.goveeSlotsConfigured} / 9 slots`;
+    hg.className = 'hi-val' + (s.goveeSlotsConfigured > 0 ? ' good' : '');
+  }
+  const hv = document.getElementById('health-vlc');
+  if (hv) {
+    hv.textContent = s.vlcActive ? 'Playing' : 'Idle';
+    hv.className = 'hi-val' + (s.vlcActive ? ' good' : '');
+  }
+  const ho = document.getElementById('health-onkyo');
+  if (ho) {
+    ho.textContent = s.connected ? 'Connected' : 'Down';
+    ho.className = 'hi-val ' + (s.connected ? 'good' : 'bad');
+  }
 
   // Storm
   const stBtn = document.getElementById('storm-toggle-btn');
-  stBtn.textContent = s.stormActive ? '■ Stop Storm' : '▶ Start Auto Storm';
-  stBtn.className   = s.stormActive ? 'btn btn-red btn-lg btn-full' : 'btn btn-amber btn-lg btn-full';
+  if (stBtn) {
+    stBtn.textContent = s.stormActive ? '■ Stop Storm' : '▶ Start Auto Storm';
+    stBtn.className   = s.stormActive ? 'btn btn-red btn-lg btn-full' : 'btn btn-amber btn-lg btn-full';
+  }
   updateStormCountdown(s);
 
   // Fog auto-timer
@@ -1634,40 +1415,14 @@ function applyState(s) {
     if (mb) mb.classList.toggle('active', s.mute?.[z]);
   });
 
-  // Auto scare
-  const ab = document.getElementById('autoscare-badge');
-  const as = document.getElementById('autoscare-status');
-  const aBtn = document.getElementById('autoscare-btn');
-  ab.classList.toggle('active', s.autoScare?.active);
-  as.textContent = s.autoScare?.active
-    ? (s.autoScare.nextAt ? `Next in ${countdown(s.autoScare.nextAt)}` : 'Active')
-    : 'Inactive';
-  aBtn.textContent = s.autoScare?.active ? '■ Stop Auto Scare' : '▶ Start Auto Scare';
-  aBtn.className   = s.autoScare?.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
-
-  // Graveyard auto cycle
-  if (s.graveyardCycle !== undefined) {
-    const cb   = document.getElementById('cycle-badge');
-    const cs   = document.getElementById('cycle-status');
-    const cBtn = document.getElementById('cycle-btn');
-    cb.classList.toggle('active', !!s.graveyardCycle.active);
-    cs.textContent = s.graveyardCycle.active
-      ? (s.graveyardCycle.nextAt ? `Next in ${countdown(s.graveyardCycle.nextAt)}` : 'Playing…')
-      : 'Inactive';
-    cBtn.textContent = s.graveyardCycle.active ? '■ Stop Auto Cycle' : '▶ Start Auto Cycle';
-    cBtn.className   = s.graveyardCycle.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
+  // Ambient system
+  const btn = document.getElementById('ambient-btn');
+  const dot = document.getElementById('ambient-dot');
+  if (btn) {
+    btn.textContent = s.ambientActive ? '■ Stop Ambient System' : '▶ Start Ambient System';
+    btn.className = s.ambientActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
   }
-
-  // Witch timer
-  const wb   = document.getElementById('witch-badge');
-  const ws2  = document.getElementById('witch-status');
-  const wBtn = document.getElementById('witch-toggle-btn');
-  wb.classList.toggle('active', s.witchTimer?.active);
-  ws2.textContent = s.witchTimer?.active
-    ? (s.witchTimer.nextAt ? `Next in ${countdown(s.witchTimer.nextAt)}` : 'Active')
-    : 'Inactive';
-  wBtn.textContent = s.witchTimer?.active ? '■ Stop Witch Timer' : '▶ Start Witch Timer';
-  wBtn.className   = s.witchTimer?.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-purple btn-full btn-lg';
+  if (dot) dot.classList.toggle('show', !!s.ambientActive);
 }
 
 function applyConfig(c) {
@@ -1684,9 +1439,7 @@ function applyConfig(c) {
 }
 
 function applySettings(s) {
-  if (s.hapticFeedback    !== undefined) document.getElementById('set-haptic').checked   = s.hapticFeedback;
-  if (s.autoDuckSkeleton  !== undefined) document.getElementById('set-autoduck').checked = s.autoDuckSkeleton;
-  if (s.fogWithCharacters !== undefined) document.getElementById('set-fogchars').checked = s.fogWithCharacters;
+  if (s.hapticFeedback !== undefined) document.getElementById('set-haptic').checked = s.hapticFeedback;
 }
 
 function applyGovee(devices) {
@@ -1716,14 +1469,14 @@ function toggleMute(zone) {
   api('/api/onkyo/mute', { zone, mute: !btn?.classList.contains('active') });
 }
 
-// ── Scene / character ─────────────────────────────────────────────────────────
-function setScene(s) {
-  api('/api/scene', { scene: s });
-  demoLog(`Scene: ${s}`, 'SYSTEM');
-  ['kids','normal','intense','loud'].forEach(sc =>
-    document.getElementById(`scene-${sc}`)?.classList.toggle('active', sc === s)
-  );
+// ── Sound preset ──────────────────────────────────────────────────────────────
+function setPreset(preset) {
+  api('/api/preset', { preset });
+  demoLog(`Preset: ${preset}`, 'AUDIO');
+  document.getElementById('preset-normal')?.classList.toggle('active', preset === 'normal');
+  document.getElementById('preset-boost')?.classList.toggle('active', preset === 'boost');
 }
+
 function screenFlash(color) {
   const el = document.getElementById('screen-flash');
   if (!el) return;
@@ -1732,24 +1485,6 @@ function screenFlash(color) {
   void el.offsetWidth;
   el.classList.add('flashing');
   el.addEventListener('animationend', () => el.classList.remove('flashing'), { once: true });
-}
-
-function fireChar(c) {
-  api('/api/character', { character: c });
-  demoLog(`Character trigger: ${c}`, 'SCARE');
-  const flashColors = { grimreaper: 'rgba(79,195,247,.22)', headlesshorseman: 'rgba(192,57,43,.28)', pumpkinking: 'rgba(102,187,106,.2)' };
-  const cardKeys    = { grimreaper: 'reaper', headlesshorseman: 'horseman', pumpkinking: 'pumpkin' };
-  screenFlash(flashColors[c] || 'rgba(255,179,71,.15)');
-  const key = cardKeys[c];
-  if (key) {
-    ['cmd','grave'].forEach(loc => {
-      const card = document.getElementById(`charcard-${loc}-${key}`);
-      if (card) {
-        card.classList.add('playing');
-        setTimeout(() => card.classList.remove('playing'), 20000);
-      }
-    });
-  }
 }
 
 // ── Storm ─────────────────────────────────────────────────────────────────────
@@ -1804,7 +1539,7 @@ function countdown(targetMs) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-// ── Fog auto-timer ────────────────────────────────────────────────────────────
+// ── Fog ───────────────────────────────────────────────────────────────────────
 function toggleFogAuto() {
   api('/api/fog/auto/toggle');
   if (DEMO) {
@@ -1846,126 +1581,233 @@ function updateFogAutoUI(s) {
   btn.className   = s.fogAutoActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-blue btn-full btn-lg';
   warmup.classList.toggle('show', !!s.fogWarmup);
 }
-
-// ── Auto scare ────────────────────────────────────────────────────────────────
-let scareInterval = 2;
-function toggleAutoScare() {
-  api('/api/autoscare/toggle', {
-    intervalMin: scareInterval,
-    chars: {
-      grimreaper:       document.getElementById('scare-reaper')?.checked,
-      headlesshorseman: document.getElementById('scare-horseman')?.checked,
-      pumpkinking:      document.getElementById('scare-pumpkin')?.checked,
-    },
-  });
-}
-function setScareInterval(min) {
-  scareInterval = min;
-  document.getElementById('interval-2').className = 'btn btn-sm ' + (min === 2 ? 'btn-green' : 'btn-orange');
-  document.getElementById('interval-3').className = 'btn btn-sm ' + (min === 3 ? 'btn-green' : 'btn-orange');
-  api('/api/autoscare/config', { intervalMin: min });
-}
-function updateScareChars() {
-  api('/api/autoscare/config', {
-    chars: {
-      grimreaper:       document.getElementById('scare-reaper')?.checked,
-      headlesshorseman: document.getElementById('scare-horseman')?.checked,
-      pumpkinking:      document.getElementById('scare-pumpkin')?.checked,
-    },
-  });
+async function relayTest() {
+  appendLog('Fog relay test — 1s on, then off', 'FOG');
+  await api('/api/fog/fire', { duration: 1000 });
+  setTimeout(() => api('/api/fog/stop'), 1200);
 }
 
-// ── Graveyard auto cycle ──────────────────────────────────────────────────────
-function toggleGraveyardCycle() {
-  api('/api/graveyard/cycle/toggle');
-}
-
-// ── Witch timer ───────────────────────────────────────────────────────────────
-function toggleWitch() {
-  api('/api/witch/toggle');
-}
-
-// ── Ambient loop ──────────────────────────────────────────────────────────────
+// ── Ambient system ────────────────────────────────────────────────────────────
 async function toggleAmbient() {
   const r = await api('/api/ambient/toggle');
-  const btn = document.getElementById('ambient-btn');
-  const dot = document.getElementById('ambient-dot');
-  if (r?.active) {
-    btn.textContent = '■ Stop Ambient Loop';
-    btn.className = 'btn btn-red btn-full btn-lg';
-    if (dot) dot.classList.add('show');
-  } else {
-    btn.textContent = '▶ Start Ambient Loop';
-    btn.className = 'btn btn-green btn-full btn-lg';
-    if (dot) dot.classList.remove('show');
+  if (DEMO) return;
+  appState.ambientActive = !!r?.active;
+  applyState(appState);
+}
+
+// ── Witch ─────────────────────────────────────────────────────────────────────
+async function witchSpeak() {
+  const text = document.getElementById('witch-line').value.trim();
+  if (!text) { appendLog('Type a line for the witch first', 'WITCH'); return; }
+  const r = await api('/api/witch/speak', { text });
+  if (r && r.ok === false && r.error) appendLog(`Witch speak: ${r.error}`, 'WITCH');
+}
+
+// ── Mic test (client-side only) ───────────────────────────────────────────────
+let micStream = null, micRaf = null, micCtx = null;
+async function toggleMicTest() {
+  const status = document.getElementById('mic-status');
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+    if (micRaf) cancelAnimationFrame(micRaf);
+    if (micCtx) { try { micCtx.close(); } catch(_) {} micCtx = null; }
+    ['mic-level','mic-level-2'].forEach(id => { const el = document.getElementById(id); if (el) el.style.width = '0%'; });
+    if (status) status.textContent = '';
+    appendLog('Mic test stopped', 'SYSTEM');
+    return;
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = micCtx.createMediaStreamSource(micStream);
+    const analyser = micCtx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    if (status) status.textContent = 'listening…';
+    appendLog('Mic test started', 'SYSTEM');
+    (function tick() {
+      if (!micStream) return;
+      analyser.getByteTimeDomainData(buf);
+      let peak = 0;
+      for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+      const pct = Math.min(100, (peak / 128) * 100 * 1.4);
+      ['mic-level','mic-level-2'].forEach(id => { const el = document.getElementById(id); if (el) el.style.width = pct + '%'; });
+      micRaf = requestAnimationFrame(tick);
+    })();
+  } catch(e) {
+    if (status) status.textContent = 'mic unavailable';
+    appendLog('Mic unavailable: ' + e.message, 'SYSTEM');
   }
 }
 
-// ── FX soundboard ─────────────────────────────────────────────────────────────
-function playFX(fx) {
-  api('/api/fx/play', { fx });
-  demoLog(`FX: ${fx}`, 'AUDIO');
-  if (fx === 'thunder' && document.getElementById('auto-flash-toggle')?.checked) {
-    api('/api/govee/lightning', { duration: 400, style: flashStyle });
-  }
-}
-function stopFX() {
-  api('/api/fx/stop');
-  demoLog('FX stopped', 'AUDIO');
+// ── Sensors (client-side groundwork) ──────────────────────────────────────────
+function simSensor(zone) {
+  const override = document.getElementById('sensor-cooldown-override')?.checked || false;
+  api('/api/sensor/trigger', { zone, cooldownOverride: override });
+  demoLog(`Sensor zone ${zone} simulated trigger`, 'SYSTEM');
 }
 
-// ── Clip library ──────────────────────────────────────────────────────────────
-function loadClip(char, title) {
-  document.getElementById('p2-nowplaying').textContent = `▶ ${title}`;
-  api('/api/character', { character: char, clip: title });
-  demoLog(`Clip: ${title}`, 'VIDEO');
+// ── Govee slot rows (Test tab lights section) ─────────────────────────────────
+let slotInfo = { ips: {}, slotIds: {} };
+function rgbToHex(c) {
+  return '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
-function p2Control(cmd) { demoLog(`P2 ${cmd}`, 'VIDEO'); api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : cmd === 'stop' ? 'NTCSTOP' : 'NTCSKIPF' }); }
-
-// ── Lights ────────────────────────────────────────────────────────────────────
-function setLightPreset(r, g, b) {
-  api('/api/govee/color', { r, g, b });
-  demoLog(`Light color rgb(${r},${g},${b})`, 'LIGHT');
+function hexToRgb(hex) {
+  return {
+    r: parseInt(hex.slice(1,3), 16),
+    g: parseInt(hex.slice(3,5), 16),
+    b: parseInt(hex.slice(5,7), 16),
+  };
 }
-function setFlashStyle(style) {
-  flashStyle = style;
-  ['single','double','storm'].forEach(s => {
-    const btn = document.getElementById(`flash-${s}`);
-    if (btn) btn.classList.toggle('active', s === style);
+async function loadSlots() {
+  const r = await apiGet('/api/govee/slots');
+  if (r?.ok) slotInfo = r;
+  const box = document.getElementById('slot-rows');
+  if (!box) return;
+  box.innerHTML = '';
+  SLOT_DEFS.forEach(def => {
+    const base = r?.bases?.[def.key];
+    const hex = base ? rgbToHex(base.color) : '#ff5000';
+    const bri = base ? base.bri : 50;
+    const configured = !!(slotInfo.slotIds && slotInfo.slotIds[def.key]);
+    const row = document.createElement('div');
+    row.className = 'slot-row';
+    row.innerHTML = `
+      <span class="slot-name">${def.label}</span>
+      <input type="color" id="slot-color-${def.key}" value="${hex}"/>
+      <input type="range" class="vol-slider blue-fill" id="slot-bri-${def.key}" min="0" max="100" value="${bri}"
+        style="--pct:${bri}%" oninput="this.style.setProperty('--pct',this.value+'%')"/>
+      <button class="btn btn-blue btn-sm" onclick="applySlot('${def.key}')">APPLY</button>
+      <span class="slot-status">${configured ? '● assigned' : '○ no device'}</span>`;
+    box.appendChild(row);
   });
 }
-function updateCustomColor() {
-  const r = document.getElementById('cr').value;
-  const g = document.getElementById('cg').value;
-  const b = document.getElementById('cb').value;
-  document.getElementById('cr').style.setProperty('--pct', (r/255*100).toFixed(1)+'%');
-  document.getElementById('cg').style.setProperty('--pct', (g/255*100).toFixed(1)+'%');
-  document.getElementById('cb').style.setProperty('--pct', (b/255*100).toFixed(1)+'%');
-  document.getElementById('color-preview').style.background = `rgb(${r},${g},${b})`;
-}
-function applyCustomColor() {
-  const r = parseInt(document.getElementById('cr').value);
-  const g = parseInt(document.getElementById('cg').value);
-  const b = parseInt(document.getElementById('cb').value);
-  api('/api/govee/color', { r, g, b });
+async function applySlot(key) {
+  const id = slotInfo.slotIds?.[key];
+  if (!id) { appendLog(`Slot ${key}: no device assigned (set IP in System panel)`, 'LIGHT'); return; }
+  const hex = document.getElementById(`slot-color-${key}`).value;
+  const bri = parseInt(document.getElementById(`slot-bri-${key}`).value, 10);
+  const { r, g, b } = hexToRgb(hex);
+  await api('/api/govee/color', { r, g, b, ids: [id] });
+  await api('/api/govee/brightness', { value: bri, ids: [id] });
+  appendLog(`Slot ${key}: rgb(${r},${g},${b}) @ ${bri}%`, 'LIGHT');
 }
 
-// ── Govee IPs ─────────────────────────────────────────────────────────────────
+// ── Govee IP fields (System panel) ────────────────────────────────────────────
+function buildGoveeIPGrid() {
+  const grid = document.getElementById('govee-ip-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  SLOT_DEFS.forEach(def => {
+    const row = document.createElement('div');
+    row.className = 'govee-ip-row';
+    row.innerHTML = `<label>${def.label}</label><input class="raw-input" id="gip-${def.key}" placeholder="192.168.1.x"/>`;
+    grid.appendChild(row);
+  });
+}
 function saveGoveeIPs() {
-  [
-    { key: 'graveyard', name: 'Graveyard Pair', slot: 'graveyard' },
-    { key: 'witch',     name: 'Witch Pair',     slot: 'witch'     },
-    { key: 'skeleton',  name: 'Skeleton',       slot: 'skeleton'  },
-    { key: 'tree',      name: 'Tree Pair',       slot: 'tree'      },
-  ].forEach(({ key, name, slot }) => {
+  SLOT_DEFS.forEach(({ key, label }) => {
     const ip = document.getElementById(`gip-${key}`)?.value?.trim();
-    if (ip) api('/api/govee/add', { ip, name, slot });
+    if (ip) api('/api/govee/add', { ip, name: label.replace(/^[^ ]+ /, ''), slot: key });
   });
-  appendLog('Govee IPs saved', 'LIGHT');
+  appendLog('Govee slot IPs saved', 'LIGHT');
+  setTimeout(loadSlots, 800);
 }
 function testAllGovee() {
   api('/api/govee/lightning', { duration: 500, style: 'single' });
   appendLog('Testing all Govee lights — flash sent', 'LIGHT');
+}
+
+// ── AtmosFX ───────────────────────────────────────────────────────────────────
+async function loadAtmosfxList() {
+  const box = document.getElementById('atmosfx-list');
+  const r = await apiGet('/api/atmosfx/list');
+  box.innerHTML = '';
+  const files = r?.files || [];
+  if (!files.length) {
+    box.innerHTML = '<div class="clip-item"><span class="clip-icon">📁</span><span class="clip-name">No files — ATMOSFX folder empty or missing</span></div>';
+    return;
+  }
+  files.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'clip-item';
+    row.innerHTML = `<span class="clip-icon">🎬</span><span class="clip-name">${f}</span>`;
+    const play = document.createElement('button');
+    play.className = 'btn btn-green btn-sm';
+    play.textContent = '▶';
+    play.onclick = () => {
+      const display = document.getElementById('atmosfx-display').value;
+      api('/api/atmosfx/play', { filename: f, display });
+    };
+    const stop = document.createElement('button');
+    stop.className = 'btn btn-red btn-sm';
+    stop.textContent = '■';
+    stop.onclick = () => api('/api/atmosfx/stop');
+    row.appendChild(play);
+    row.appendChild(stop);
+    box.appendChild(row);
+  });
+}
+
+// ── Haunt sounds ──────────────────────────────────────────────────────────────
+async function loadSounds() {
+  const grid = document.getElementById('sounds-grid');
+  const r = await apiGet('/api/sounds/list');
+  const files = r?.files || [];
+  grid.innerHTML = '';
+  if (!files.length) {
+    grid.innerHTML = '<button class="btn btn-amber btn-sm" disabled>No files found</button>';
+    return;
+  }
+  files.forEach(f => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-amber btn-sm';
+    b.textContent = '🔊 ' + f.replace(/\.[^.]+$/, '').toUpperCase().slice(0, 16);
+    b.onclick = () => api('/api/sounds/play', { filename: f });
+    grid.appendChild(b);
+  });
+}
+
+// ── Storm clip test buttons ───────────────────────────────────────────────────
+function buildStormClipGrid() {
+  const grid = document.getElementById('storm-clips-grid');
+  if (!grid) return;
+  STORM_CLIP_FILES.forEach(({ file, label }) => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-blue btn-sm';
+    b.textContent = label;
+    b.onclick = () => api('/api/storm/clip', { file });
+    grid.appendChild(b);
+  });
+}
+
+// ── System info / media lists ─────────────────────────────────────────────────
+async function refreshSystemInfo() {
+  const r = await apiGet('/api/system/info');
+  if (!r?.ok) return;
+  const up = Math.floor(r.uptime);
+  const h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60), s = up % 60;
+  document.getElementById('sys-uptime').textContent = `${h}h ${m}m ${s}s`;
+  document.getElementById('sys-mem').textContent = (r.memoryRss / 1048576).toFixed(1) + ' MB';
+  document.getElementById('sys-clients').textContent = r.clients;
+}
+async function loadMediaLists() {
+  const box = document.getElementById('media-lists');
+  const r = await apiGet('/api/media/lists');
+  if (!r?.ok) return;
+  box.innerHTML = '';
+  Object.entries(r.lists || {}).forEach(([name, files]) => {
+    const div = document.createElement('div');
+    div.className = 'info-row';
+    div.innerHTML = `<span class="info-key">${name}</span><span class="info-val" style="color:var(--dim2);font-size:.9em">${files.length ? files.join(', ') : '(empty / missing)'}</span>`;
+    box.appendChild(div);
+  });
+}
+function sendRawISCP() {
+  const cmd = document.getElementById('raw-iscp').value.trim();
+  if (cmd) api('/api/onkyo/command', { command: cmd });
 }
 
 // ── Config / settings ─────────────────────────────────────────────────────────
@@ -2023,8 +1865,8 @@ async function runShutdown() {
   await step(2, 'Timers stopped', async () => {
     // timers stopped server-side by /api/shutdown
   });
-  await step(3, 'Projectors stopped', async () => {
-    await api('/api/onkyo/command', { command: 'NTCSTOP' });
+  await step(3, 'Projections stopped', async () => {
+    await api('/api/atmosfx/stop');
   });
   await step(4, 'Lights off', async () => {
     await api('/api/govee/power', { on: false });
@@ -2051,12 +1893,20 @@ function appendLog(msg, category = 'SYSTEM') {
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
+let testTabLoaded = false;
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(`pane-${tab.dataset.pane}`)?.classList.add('active');
+    if (tab.dataset.pane === 'test' && !testTabLoaded) {
+      testTabLoaded = true;
+      loadSlots();
+      loadAtmosfxList();
+      loadSounds();
+      refreshSystemInfo();
+    }
   });
 });
 
@@ -2071,41 +1921,26 @@ setInterval(updateClock, 1000);
 // ── Countdown refresh ─────────────────────────────────────────────────────────
 setInterval(() => {
   if (appState.stormActive) updateStormCountdown(appState);
-  if (appState.autoScare?.active && appState.autoScare.nextAt) {
-    document.getElementById('autoscare-status').textContent =
-      `Next in ${countdown(appState.autoScare.nextAt)}`;
-  }
-  if (appState.witchTimer?.active && appState.witchTimer.nextAt) {
-    document.getElementById('witch-status').textContent =
-      `Next in ${countdown(appState.witchTimer.nextAt)}`;
-  }
   if (appState.fogAutoActive && appState.fogAutoNextAt) {
     document.getElementById('fog-auto-status').textContent =
       `Next in ${countdown(appState.fogAutoNextAt)}`;
-  }
-  if (appState.graveyardCycle?.active && appState.graveyardCycle.nextAt) {
-    document.getElementById('cycle-status').textContent =
-      `Next in ${countdown(appState.graveyardCycle.nextAt)}`;
   }
 }, 1000);
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
-  if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
   switch(e.key) {
-    case '1': fireChar('grimreaper');       break;
-    case '2': fireChar('headlesshorseman'); break;
-    case '3': fireChar('pumpkinking');      break;
     case 'f': case 'F': api('/api/fog/fire', { duration:5000 }); break;
-    case 'l': case 'L': api('/api/govee/lightning', { duration:400, style:flashStyle }); break;
-    case 'k': case 'K': setScene('kids');   break;
-    case 'n': case 'N': setScene('normal'); break;
+    case 'l': case 'L': api('/api/govee/lightning', { duration:400, style:'single' }); break;
     case ' ': e.preventDefault(); api('/api/pause'); break;
     case 'Escape': openShutdown(); break;
   }
 });
 
-// ── Init log ──────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
+buildGoveeIPGrid();
+buildStormClipGrid();
 appendLog(DEMO ? 'HAUNT CTRL v3 — DEMO MODE' : 'HAUNT CTRL v3 online', 'SYSTEM');
 if (DEMO) appendLog('All buttons functional — API calls logged here', 'SYSTEM');
 </script>

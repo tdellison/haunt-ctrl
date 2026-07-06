@@ -12,7 +12,7 @@ if not exist "C:\Users\tdell\OneDrive\Desktop\SKELETON\skeleton-left.wav" (
   echo  Generating test voices...
   powershell -ExecutionPolicy Bypass -File "%~dp0make-skeleton-voices.ps1"
 )
-if not exist "C:\Users\tdell\OneDrive\Desktop\WITCH\witch1-right.wav" (
+if not exist "C:\Users\tdell\OneDrive\Desktop\WITCH\witch-main-left.wav" (
   echo  Generating witch test voices...
   powershell -ExecutionPolicy Bypass -File "%~dp0make-skeleton-voices.ps1"
 )
