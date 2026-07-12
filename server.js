@@ -220,7 +220,12 @@ function skelFireTick(side) {
     const c = FIRE_PALETTE[Math.floor(Math.random() * FIRE_PALETTE.length)];
     let bri;
     const roll = Math.random();
-    if (effects.skelTalking[side]) {
+    // If only one skeleton slot is assigned (tethered pair on one controller),
+    // that light brightens when EITHER skeleton talks.
+    const otherSide = side === 'left' ? 'right' : 'left';
+    const otherAssigned = getSlotIds(side === 'left' ? 'skel_right' : 'skel_left').length > 0;
+    const talking = effects.skelTalking[side] || (!otherAssigned && effects.skelTalking[otherSide]);
+    if (talking) {
       bri = Math.round(randBetween(45, 65)); // talking — fire burns brighter
     } else if (roll < 0.10) {
       bri = Math.round(randBetween(55, 70)); // bright flare
