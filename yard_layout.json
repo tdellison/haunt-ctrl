@@ -45,12 +45,11 @@
       "notes": "Host table at the garage front by the driveway apron. Measured 22 ft from witch. No Govee lighting — owner may add standalone bluetooth lights. All Govee pairs are staged in the graveyard zone."
     },
     {
-      "id": "rear_projection_screen",
-      "name": "Rear Ghost Projection Screen",
-      "position": { "x": 40, "y": 30 },
+      "id": "projection",
+      "name": "AtmosFX Projection (side of house)",
       "zone": "z2",
       "govee_slot": "graveyard",
-      "notes": "Deep back-right area of the yard, 46 ft diagonal from the witch, ~29 ft from the jamboree table. Exact spot flexible pending projector throw testing."
+      "notes": "Projector now aims at the side of the house — no rear projection screen. Tombstone bluetooth lights are static hellish red/orange, set via app, not server-controlled."
     }
   ],
   "lighting_plan": {

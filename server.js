@@ -178,6 +178,137 @@ async function applyShowScheme() {
     await goveeSetBrightness(base.bri, ids).catch(() => {});
   }
   broadcastLog('Lights: show scheme applied', 'LIGHT');
+  // Scheme button = show look + living effects
+  startEffects();
+}
+
+// ─── Living lighting effects engine ──────────────────────────────────────────
+// Recursive setTimeout loops give each fixture organic, never-repeating motion:
+//  - skel_left/skel_right: flickering fire illusion (independent loops)
+//  - witch_main/witch_second: slow purple breathing pulse (shared loop)
+//  - cauldron: slow rolling boil (green) / faster red pulse during a spell
+// moonlights are steady (set once by applyShowScheme); storm slots are driven
+// by flashLights. Loops only touch slots with assigned IDs and skip their
+// goveeSend while effects.suspended (e.g. during the Overhead white blast),
+// but keep rescheduling so they resume seamlessly.
+const effects = {
+  running: false,
+  suspended: false,
+  timers: {},
+  skelTalking: { left: false, right: false },
+  cauldronMode: 'green',
+};
+
+const FIRE_PALETTE = [
+  { r: 255, g:  80, b:  0 },
+  { r: 255, g:  40, b:  0 },
+  { r: 200, g:  30, b:  0 },
+  { r: 255, g: 120, b:  0 },
+  { r: 255, g: 160, b: 20 },
+];
+
+function randBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+// Skeleton fire illusion — one independent loop per side
+function skelFireTick(side) {
+  if (!effects.running) return;
+  const slot = side === 'left' ? 'skel_left' : 'skel_right';
+  const ids = getSlotIds(slot);
+  if (ids.length && !effects.suspended) {
+    const c = FIRE_PALETTE[Math.floor(Math.random() * FIRE_PALETTE.length)];
+    let bri;
+    const roll = Math.random();
+    if (effects.skelTalking[side]) {
+      bri = Math.round(randBetween(45, 65)); // talking — fire burns brighter
+    } else if (roll < 0.10) {
+      bri = Math.round(randBetween(55, 70)); // bright flare
+    } else if (roll < 0.20) {
+      bri = Math.round(randBetween(8, 14));  // dim smolder
+    } else {
+      bri = Math.round(randBetween(18, 35)); // normal flicker
+    }
+    goveeSetColor(c.r, c.g, c.b, ids).catch(() => {});
+    goveeSetBrightness(bri, ids).catch(() => {});
+  }
+  const delay = Math.round(randBetween(250, 1400));
+  effects.timers[`skel_${side}`] = setTimeout(() => skelFireTick(side), delay);
+}
+
+// Witch breathing pulse — one shared loop over both witch slots.
+// Sine-like brightness wave 18–42 over a ~8s cycle, stepping every ~800ms.
+const BREATH_LEVELS = [18, 22, 28, 35, 40, 42, 40, 35, 28, 22];
+let breathPhase = 0;
+
+function witchBreathTick() {
+  if (!effects.running) return;
+  const ids = getSlotIds('witch_main', 'witch_second');
+  if (ids.length && !effects.suspended) {
+    const bri = BREATH_LEVELS[breathPhase % BREATH_LEVELS.length];
+    goveeSetColor(100, 0, 180, ids).catch(() => {});
+    goveeSetBrightness(bri, ids).catch(() => {});
+  }
+  breathPhase++;
+  effects.timers.witchBreath = setTimeout(witchBreathTick, 800);
+}
+
+// Cauldron organic boil — slow rolling green boil, deep red pulse during spell
+let boilPhase = 0;
+
+function cauldronBoilTick() {
+  if (!effects.running) return;
+  const ids = getSlotIds('cauldron');
+  const spell = effects.cauldronMode === 'spell';
+  if (ids.length && !effects.suspended) {
+    let bri;
+    if (spell) {
+      // Deep red spell pulse — NO WHITE, ever
+      bri = Math.round(randBetween(50, 90));
+      goveeSetColor(180, 0, 0, ids).catch(() => {});
+    } else {
+      // Slow rolling boil — brightness drifts in slow waves 25–60,
+      // occasional flare to 80
+      const wave = (Math.sin(boilPhase * 0.6) + 1) / 2; // 0..1
+      bri = Math.round(25 + wave * 35 + randBetween(-4, 4));
+      bri = Math.max(25, Math.min(60, bri));
+      if (Math.random() < 0.08) bri = 80; // flare
+      goveeSetColor(0, 180, 0, ids).catch(() => {});
+    }
+    goveeSetBrightness(bri, ids).catch(() => {});
+  }
+  boilPhase++;
+  const delay = spell
+    ? Math.round(randBetween(300, 900))
+    : Math.round(randBetween(600, 1800));
+  effects.timers.cauldron = setTimeout(cauldronBoilTick, delay);
+}
+
+function startEffects() {
+  if (effects.running) return;
+  effects.running = true;
+  effects.suspended = false;
+  skelFireTick('left');
+  skelFireTick('right');
+  witchBreathTick();
+  cauldronBoilTick();
+  broadcastLog('Living effects ON — skeleton fire, witch breathing, cauldron boil', 'LIGHT');
+  broadcastState();
+}
+
+function stopEffects() {
+  if (!effects.running && !Object.keys(effects.timers).length) return;
+  effects.running = false;
+  effects.suspended = false;
+  for (const key of Object.keys(effects.timers)) {
+    clearTimeout(effects.timers[key]);
+    delete effects.timers[key];
+  }
+  effects.skelTalking.left = false;
+  effects.skelTalking.right = false;
+  effects.cauldronMode = 'green';
+  broadcastLog('Living effects OFF', 'LIGHT');
+  broadcastState();
 }
 
 // Storm lighting per progression stage (0-4).
@@ -206,20 +337,24 @@ async function flashLights(stage) {
   } else if (stage === 3) {
     await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds);
   } else {
-    // Overhead — full white blast on every configured slot (or all lights if no slots).
-    // Cauldron excluded: it never goes white, stays green/red only.
-    let allIds = getSlotIds(...Object.keys(SLOT_BASES).filter(s => s !== 'cauldron'));
+    // Overhead — full white blast on every configured slot (or all lights if
+    // no slots). ALL 9 slots including cauldron — owner spec: "no exceptions".
+    let allIds = getSlotIds(...Object.keys(SLOT_BASES));
     const usingSlots = allIds.length > 0;
     if (!usingSlots) {
       if (!goveeDevices.length) return;
       allIds = undefined; // all devices
     }
     const snapshot = usingSlots ? null : goveeDevices.map(d => ({ id: d.id, color: {...d.color}, brightness: d.brightness }));
+    // Suspend effect loops so they don't fight the blast — they keep
+    // rescheduling and resume on their next tick after the restore.
+    effects.suspended = true;
     await goveeSetColor(255, 255, 255, allIds);
     await goveeSetBrightness(100, allIds);
     setTimeout(async () => {
       if (usingSlots) {
-        applyShowScheme().catch(() => {});
+        await applyShowScheme().catch(() => {});
+        effects.suspended = false;
       } else {
         // No slots configured — restore each light to what it was before the blast
         for (const snap of snapshot) {
@@ -231,6 +366,7 @@ async function flashLights(stage) {
           dev.brightness = snap.brightness;
         }
         broadcastGovee();
+        effects.suspended = false;
       }
     }, 600);
   }
@@ -397,6 +533,7 @@ function stateSnapshot() {
     ambientActive:    ambientSystem.active,
     vlcActive:        anyVlcRunning(),
     goveeSlotsConfigured: Object.values(GOVEE_SLOT_IDS).filter(Boolean).length,
+    effectsRunning:   effects.running,
   };
 }
 
@@ -570,28 +707,53 @@ const SPELL_COLORS = {
   seance:       { r: 160, g:   0, b: 220 },  // purple
 };
 
-// Spell-cast: cauldron bulb erupts white, flickers, then holds DEEP RED
-// RGB(180,0,0), pulsing back to its green base after 20 seconds.
-// Witch slots stay purple throughout.
+// Spell-cast: 3s "build" phase of intensified green flicker, then the boil
+// loop switches to deep red pulse mode for 20s, then back to green.
+// NO WHITE anywhere in the spell sequence. Witch slots stay purple throughout.
 function castSpellLights(clip) {
   const ids = getSlotIds('cauldron');
   if (!ids.length) return;
 
-  // No white — cauldron flickers green→red→green→red then holds red for the spell
-  goveeSetColor(180, 0, 0, ids).catch(() => {});
-  goveeSetBrightness(100, ids).catch(() => {});
-  setTimeout(() => { goveeSetColor(0, 180, 0, ids).catch(() => {}); }, 350);
-  setTimeout(() => {
-    goveeSetColor(180, 0, 0, ids).catch(() => {});
-    goveeSetBrightness(85, ids).catch(() => {});
-  }, 700);
+  // Build phase — force a few brighter green steps over 3s while the boil
+  // loop keeps running in green mode underneath
+  effects.cauldronMode = 'green';
+  const buildSteps = [
+    { at:    0, bri: 65 },
+    { at:  800, bri: 75 },
+    { at: 1600, bri: 70 },
+    { at: 2400, bri: 85 },
+  ];
+  for (const step of buildSteps) {
+    setTimeout(() => {
+      if (effects.cauldronMode !== 'green') return;
+      goveeSetColor(0, 180, 0, ids).catch(() => {});
+      goveeSetBrightness(step.bri, ids).catch(() => {});
+    }, step.at);
+  }
 
-  // Pulse back to green base after 20 seconds
+  // Spell erupts — boil loop takes over with deep red pulse
   setTimeout(() => {
-    const base = SLOT_BASES.cauldron;
-    goveeSetColor(base.color.r, base.color.g, base.color.b, ids).catch(() => {});
-    goveeSetBrightness(base.bri, ids).catch(() => {});
-  }, 20000);
+    effects.cauldronMode = 'spell';
+    broadcastLog('Cauldron: SPELL — deep red pulse', 'LIGHT');
+    // If the effects loop isn't running, set the red directly so the spell
+    // still reads
+    if (!effects.running) {
+      goveeSetColor(180, 0, 0, ids).catch(() => {});
+      goveeSetBrightness(85, ids).catch(() => {});
+    }
+  }, 3000);
+
+  // Back to green boil after 20s of spell
+  setTimeout(() => {
+    effects.cauldronMode = 'green';
+    broadcastLog('Cauldron: spell fades — back to green boil', 'LIGHT');
+    // If the effects loop isn't running, at least restore the base look
+    if (!effects.running) {
+      const base = SLOT_BASES.cauldron;
+      goveeSetColor(base.color.r, base.color.g, base.color.b, ids).catch(() => {});
+      goveeSetBrightness(base.bri, ids).catch(() => {});
+    }
+  }, 23000);
 }
 
 async function fireWitch(clip) {
@@ -783,25 +945,10 @@ function fireSkeleton(side) {
   skeletonProcess.unref();
   skeletonProcess.on('exit', () => { skeletonProcess = null; });
 
-  // Subtle talk pulse on that side's dedicated Govee slot only — brightness
-  // eases up, no color change. Skeletons stay dim shapes in the dark.
-  const slot = side === 'left' ? 'skel_left' : 'skel_right';
-  const ids = getSlotIds(slot);
-  if (ids.length) {
-    const prev = goveeDevices
-      .filter(d => ids.includes(d.id))
-      .map(d => ({ id: d.id, brightness: d.brightness }));
-    goveeSetBrightness(45, ids).catch(() => {});
-    setTimeout(async () => {
-      for (const snap of prev) {
-        const dev = goveeDevices.find(d => d.id === snap.id);
-        if (!dev) continue;
-        await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
-        dev.brightness = snap.brightness;
-      }
-      broadcastGovee();
-    }, 8000);
-  }
+  // Talking flag: while set, that side's fire-illusion loop burns brighter
+  // (45–65 brightness, still fire colors). Cleared after 8s.
+  effects.skelTalking[side] = true;
+  setTimeout(() => { effects.skelTalking[side] = false; }, 8000);
   return true;
 }
 
@@ -983,6 +1130,7 @@ app.post('/api/fog/kill', async (req, res) => {
 
 app.post('/api/allstop', async (req, res) => {
   broadcastLog('ALL STOP', 'SYSTEM');
+  stopEffects();
   state.paused = false;
   state.stormActive = false;
   strikeIndex = 0;
@@ -1013,6 +1161,7 @@ app.post('/api/allstop', async (req, res) => {
 
 app.post('/api/shutdown', async (req, res) => {
   broadcastLog('Shutdown sequence initiated', 'SYSTEM');
+  stopEffects();
   stopFogAuto();
   stopWitch();
   stopAmbientSystem();
@@ -1469,6 +1618,13 @@ app.post('/api/lights/scheme', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Living effects toggle — fire illusion / breathing pulse / cauldron boil
+app.post('/api/effects/toggle', (req, res) => {
+  if (effects.running) stopEffects();
+  else startEffects();
+  res.json({ ok: true, running: effects.running });
+});
+
 // ─── Sensors (groundwork — ESP32 not yet installed) ───────────────────────────
 app.post('/api/sensor/trigger', (req, res) => {
   const { zone, cooldownOverride } = req.body;
@@ -1504,7 +1660,8 @@ app.get('/api/system/info', (req, res) => {
 
 app.post('/api/strikedown', async (req, res) => {
   broadcastLog('STRIKE DOWN — lights to white, all else stopping', 'SYSTEM');
-  // Stop all timers
+  // Stop all timers (effects first so loops don't fight the final white)
+  stopEffects();
   state.stormActive = false;
   strikeIndex = 0;
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }

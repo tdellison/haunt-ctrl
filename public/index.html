@@ -927,6 +927,11 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-red btn-sm" onclick="api('/api/govee/power',{on:false})">⬛ ALL OFF</button>
       <button class="btn btn-orange btn-sm" onclick="api('/api/lights/scheme')">🎃 RESET TO SHOW SCHEME</button>
     </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
+      <span style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">✨ LIVING EFFECTS</span>
+      <button class="btn btn-green btn-sm" id="effects-btn" onclick="api('/api/effects/toggle')">▶ Start Effects</button>
+      <span style="font-size:.68em;color:var(--dim2)">fire / breathing / cauldron boil</span>
+    </div>
     <div style="margin-top:14px">
       <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Storm stage step-through (lights only):</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1379,6 +1384,13 @@ function applyState(s) {
   // Sound preset buttons
   document.getElementById('preset-normal')?.classList.toggle('active', s.soundPreset === 'normal');
   document.getElementById('preset-boost')?.classList.toggle('active', s.soundPreset === 'boost');
+
+  // Living effects toggle
+  const eb = document.getElementById('effects-btn');
+  if (eb && s.effectsRunning !== undefined) {
+    eb.classList.toggle('active', !!s.effectsRunning);
+    eb.textContent = s.effectsRunning ? '■ Stop Effects' : '▶ Start Effects';
+  }
 
   // Health indicators
   const hg = document.getElementById('health-govee');
