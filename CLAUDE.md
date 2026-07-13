@@ -55,8 +55,8 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **Mic** for reactive main witch (hardware TBD).
 - **PIR/ESP32 sensors** for zone triggers (hardware TBD; `/api/sensor/trigger` simulation route + Test tab panel exist).
 - **AI conductor**: Claude runs the whole show via the existing API routes; indoor test planned first.
-- **Smart plug** integration pending (brand TBD from owner).
 - Owner will report dialed-in brightness values after outdoor testing → lock into SLOT_BASES.
+- Smart plugs: DROPPED — owner controls them via their own app (background fire glow or other colors), not server-controlled.
 
 ## Known gotchas
 - Dell IP was 192.168.1.8, now **192.168.1.11** (bat + docs reference it).
