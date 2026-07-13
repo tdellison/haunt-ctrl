@@ -27,29 +27,15 @@ let settings = {
 };
 
 // ─── Govee Devices ────────────────────────────────────────────────────────────
-// Slot roles:
-//  1. skel_left    — orange/red base, brightens when the LEFT skeleton talks
-//  2. skel_right   — orange/red base, brightens when the RIGHT skeleton talks
-//  3. witch_main   — deep purple base (main witch, left RCA)
-//  4. witch_second — deep purple base (second witch, right RCA)
-//  5. moon_left    — cool blue, consistent, white flash on Overhead only
-//  6. moon_right   — same
-//  7. storm_left   — cold blue, tracks storm progression dim → electric
-//  8. storm_right  — same
-//  9. cauldron     — separate A19 bulb, green base RGB(0,180,0), deep red
-//                    RGB(180,0,0) on spell trigger, pulses back to green after 20s
+// Slot roles (one slot per zone — each zone is a tethered pair on ONE controller IP):
+//  1. skeleton — orange/red base, brightens when EITHER skeleton talks
+//  2. witch    — deep purple base (both witches)
+//  3. moon     — cool blue, consistent, white flash on Overhead only
+//  4. storm    — cold blue, tracks storm progression dim → electric
+//  5. cauldron — separate A19 bulb, green base RGB(0,180,0), deep red
+//                RGB(180,0,0) on spell trigger, pulses back to green after 20s
 let goveeDevices = [];
-const GOVEE_IPS = {
-  skel_left:    '',
-  skel_right:   '',
-  witch_main:   '',
-  witch_second: '',
-  moon_left:    '',
-  moon_right:   '',
-  storm_left:   '',
-  storm_right:  '',
-  cauldron:     '',
-};
+const GOVEE_IPS = { skeleton:'', witch:'', moon:'', storm:'', cauldron:'' };
 const GOVEE_SLOT_IDS = {};
 
 const GOVEE_CMD_PORT    = 4003;
@@ -153,15 +139,11 @@ const GOVEE_COLORS = {
 
 // Base show scheme — every slot's resting color + brightness
 const SLOT_BASES = {
-  skel_left:    { color: { r:255, g: 80, b:  0 }, bri: 25 },
-  skel_right:   { color: { r:255, g: 80, b:  0 }, bri: 25 },
-  witch_main:   { color: { r:100, g:  0, b:180 }, bri: 30 },
-  witch_second: { color: { r:100, g:  0, b:180 }, bri: 30 },
-  moon_left:    { color: { r: 60, g:120, b:255 }, bri: 40 },
-  moon_right:   { color: { r: 60, g:120, b:255 }, bri: 40 },
-  storm_left:   { color: { r: 30, g:120, b:255 }, bri: 15 },
-  storm_right:  { color: { r: 30, g:120, b:255 }, bri: 15 },
-  cauldron:     { color: { r:  0, g:180, b:  0 }, bri: 60 },
+  skeleton: { color: { r:255, g: 80, b:  0 }, bri: 25 }, // orange/red fire base
+  witch:    { color: { r:100, g:  0, b:180 }, bri: 30 }, // deep purple
+  moon:     { color: { r: 60, g:120, b:255 }, bri: 40 }, // cool steady blue
+  storm:    { color: { r: 30, g:120, b:255 }, bri: 15 }, // cold blue, storm-driven
+  cauldron: { color: { r:  0, g:180, b:  0 }, bri: 60 }, // green boil
 };
 
 // Return Govee device IDs for named slots
@@ -184,8 +166,8 @@ async function applyShowScheme() {
 
 // ─── Living lighting effects engine ──────────────────────────────────────────
 // Recursive setTimeout loops give each fixture organic, never-repeating motion:
-//  - skel_left/skel_right: flickering fire illusion (independent loops)
-//  - witch_main/witch_second: slow purple breathing pulse (shared loop)
+//  - skeleton: flickering fire illusion (single loop, tethered pair)
+//  - witch: slow purple breathing pulse
 //  - cauldron: slow rolling boil (green) / faster red pulse during a spell
 // moonlights are steady (set once by applyShowScheme); storm slots are driven
 // by flashLights. Loops only touch slots with assigned IDs and skip their
@@ -211,20 +193,16 @@ function randBetween(min, max) {
   return min + Math.random() * (max - min);
 }
 
-// Skeleton fire illusion — one independent loop per side
-function skelFireTick(side) {
+// Skeleton fire illusion — ONE loop for the tethered pair. The fire burns
+// brighter while EITHER skeleton is talking (audio still has left/right sides).
+function skelFireTick() {
   if (!effects.running) return;
-  const slot = side === 'left' ? 'skel_left' : 'skel_right';
-  const ids = getSlotIds(slot);
+  const ids = getSlotIds('skeleton');
   if (ids.length && !effects.suspended) {
     const c = FIRE_PALETTE[Math.floor(Math.random() * FIRE_PALETTE.length)];
     let bri;
     const roll = Math.random();
-    // If only one skeleton slot is assigned (tethered pair on one controller),
-    // that light brightens when EITHER skeleton talks.
-    const otherSide = side === 'left' ? 'right' : 'left';
-    const otherAssigned = getSlotIds(side === 'left' ? 'skel_right' : 'skel_left').length > 0;
-    const talking = effects.skelTalking[side] || (!otherAssigned && effects.skelTalking[otherSide]);
+    const talking = effects.skelTalking.left || effects.skelTalking.right;
     if (talking) {
       bri = Math.round(randBetween(45, 65)); // talking — fire burns brighter
     } else if (roll < 0.10) {
@@ -238,17 +216,17 @@ function skelFireTick(side) {
     goveeSetBrightness(bri, ids).catch(() => {});
   }
   const delay = Math.round(randBetween(250, 1400));
-  effects.timers[`skel_${side}`] = setTimeout(() => skelFireTick(side), delay);
+  effects.timers.skeleton = setTimeout(skelFireTick, delay);
 }
 
-// Witch breathing pulse — one shared loop over both witch slots.
+// Witch breathing pulse — one loop for the witch slot (tethered pair).
 // Sine-like brightness wave 18–42 over a ~8s cycle, stepping every ~800ms.
 const BREATH_LEVELS = [18, 22, 28, 35, 40, 42, 40, 35, 28, 22];
 let breathPhase = 0;
 
 function witchBreathTick() {
   if (!effects.running) return;
-  const ids = getSlotIds('witch_main', 'witch_second');
+  const ids = getSlotIds('witch');
   if (ids.length && !effects.suspended) {
     const bri = BREATH_LEVELS[breathPhase % BREATH_LEVELS.length];
     goveeSetColor(100, 0, 180, ids).catch(() => {});
@@ -293,8 +271,7 @@ function startEffects() {
   if (effects.running) return;
   effects.running = true;
   effects.suspended = false;
-  skelFireTick('left');
-  skelFireTick('right');
+  skelFireTick();
   witchBreathTick();
   cauldronBoilTick();
   broadcastLog('Living effects ON — skeleton fire, witch breathing, cauldron boil', 'LIGHT');
@@ -317,17 +294,17 @@ function stopEffects() {
 }
 
 // Storm lighting per progression stage (0-4).
-// 0 Distant:        storm slots cold blue 15%
-// 1 Getting Closer: storm slots cold blue 30%
-// 2 Close:          storm slots brighter cold blue 50%
-// 3 Very Close:     storm slots bright electric blue 75%
-// 4 Overhead:       ALL 9 slots full white blast, back to base after 600ms
+// 0 Distant:        storm slot cold blue 15%
+// 1 Getting Closer: storm slot cold blue 30%
+// 2 Close:          storm slot brighter cold blue 50%
+// 3 Very Close:     storm slot bright electric blue 75%
+// 4 Overhead:       ALL slots full white blast, back to base after 600ms
 async function flashLights(stage) {
-  // Fallback: if no lights are assigned to storm slots yet, flash ALL lights so
-  // testing works before slot setup. Assign storm_left/storm_right for show behavior.
-  let stormIds = getSlotIds('storm_left', 'storm_right');
+  // Fallback: if no light is assigned to the storm slot yet, flash ALL lights so
+  // testing works before slot setup. Assign the Storm slot for show behavior.
+  let stormIds = getSlotIds('storm');
   if (!stormIds.length && goveeDevices.length) {
-    broadcastLog('Storm flash: no storm slots assigned — flashing all lights (assign Storm L/R slots in Test tab)', 'LIGHT');
+    broadcastLog('Storm flash: no storm slot assigned — flashing all lights (assign Storm slot in Test tab)', 'LIGHT');
     stormIds = undefined; // undefined targets all devices in goveeSetColor/Brightness
   } else if (!stormIds.length) {
     broadcastLog('Storm flash: no Govee lights connected', 'LIGHT');
@@ -343,7 +320,7 @@ async function flashLights(stage) {
     await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds);
   } else {
     // Overhead — full white blast on every configured slot (or all lights if
-    // no slots). ALL 9 slots including cauldron — owner spec: "no exceptions".
+    // no slots). ALL slots including cauldron — owner spec: "no exceptions".
     let allIds = getSlotIds(...Object.keys(SLOT_BASES));
     const usingSlots = allIds.length > 0;
     if (!usingSlots) {
@@ -496,6 +473,35 @@ function loadShowState() {
   } catch(_) {}
 }
 
+// ─── Govee slot IP persistence ────────────────────────────────────────────────
+const SLOTS_FILE = path.join(__dirname, 'govee-slots.json');
+const SLOT_LABELS = { skeleton:'Skeleton', witch:'Witches', moon:'Moonlight', storm:'Storm', cauldron:'Cauldron' };
+function saveSlotIPs() {
+  try {
+    fs.writeFileSync(SLOTS_FILE, JSON.stringify(GOVEE_IPS), 'utf8');
+  } catch(_) {}
+}
+function loadSlotIPs() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(SLOTS_FILE, 'utf8'));
+    for (const slot of Object.keys(GOVEE_IPS)) {
+      const ip = saved?.[slot];
+      if (!ip) continue;
+      let dev = goveeDevices.find(d => d.ip === ip);
+      if (!dev) {
+        dev = {
+          id: `govee-${slot}`, name: SLOT_LABELS[slot] || slot,
+          ip, model: 'Manual', on: true, color: { r:255, g:98, b:0 }, brightness: 100,
+        };
+        goveeDevices.push(dev);
+      }
+      GOVEE_IPS[slot] = ip;
+      GOVEE_SLOT_IDS[slot] = dev.id;
+    }
+    console.log('[HAUNT] Govee slot IPs restored from disk');
+  } catch(_) {}
+}
+
 // ─── Broadcast ────────────────────────────────────────────────────────────────
 function broadcast(obj) {
   const payload = JSON.stringify(obj);
@@ -543,6 +549,7 @@ function stateSnapshot() {
 }
 
 loadShowState();
+loadSlotIPs();
 
 wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'state',    data: stateSnapshot() }));
@@ -1514,6 +1521,7 @@ app.post('/api/govee/add', (req, res) => {
     if (slot && GOVEE_IPS.hasOwnProperty(slot)) {
       GOVEE_IPS[slot] = ip;
       GOVEE_SLOT_IDS[slot] = existing.id;
+      saveSlotIPs();
     }
     broadcastState();
     return res.json({ ok: true, device: existing });
@@ -1526,6 +1534,7 @@ app.post('/api/govee/add', (req, res) => {
     ip, model: 'Manual', on: true, color: { r:255, g:98, b:0 }, brightness: 100,
   };
   if (slot) GOVEE_SLOT_IDS[slot] = dev.id;
+  saveSlotIPs();
   goveeDevices.push(dev);
   broadcastLog(`Govee: added ${dev.name} @ ${ip}`, 'LIGHT');
   broadcastGovee();
@@ -1537,8 +1546,12 @@ app.post('/api/govee/remove', (req, res) => {
   const { id } = req.body;
   goveeDevices = goveeDevices.filter(d => d.id !== id);
   for (const slot of Object.keys(GOVEE_SLOT_IDS)) {
-    if (GOVEE_SLOT_IDS[slot] === id) delete GOVEE_SLOT_IDS[slot];
+    if (GOVEE_SLOT_IDS[slot] === id) {
+      delete GOVEE_SLOT_IDS[slot];
+      if (GOVEE_IPS.hasOwnProperty(slot)) GOVEE_IPS[slot] = '';
+    }
   }
+  saveSlotIPs();
   broadcastGovee();
   broadcastState();
   res.json({ ok: true });
