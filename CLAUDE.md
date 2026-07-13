@@ -53,7 +53,7 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 ## October plan (not yet built)
 - **ElevenLabs**: owner starting on free tier (static clips, stock voices — leaning Southern-drawl voices for skeleton banter). October: paid tier + `/api/witch/speak` becomes real (placeholder route exists, needs ELEVENLABS_API_KEY). Recommended: ElevenLabs Agents for the witch conversation loop with tool calls into this server's API.
 - **Mic** for reactive main witch (hardware TBD).
-- **PIR/ESP32 sensors**: owner HAS 5 PIR sensors + 2 ESP32s. Plan: ESP32s on WiFi POST to `/api/sensor/trigger` (simulation route + Test tab panel already exist). Suggested split: ESP32 #1 covers graveyard/witch approach PIRs, ESP32 #2 covers skeleton/driveway PIRs. Firmware sketch + real per-zone trigger logic still to build.
+- **PIR/ESP32 sensors**: owner HAS 5 PIR sensors + 2 ESP32s. Plan: ONE ESP32 handles all show PIRs, on WiFi POSTing to `/api/sensor/trigger` (simulation route + Test tab panel already exist). The 2nd ESP32 is RESERVED — owner has a future update in mind for it; do not assign it. Firmware sketch + real per-zone trigger logic still to build.
 - **AI conductor**: Claude runs the whole show via the existing API routes; indoor test planned first.
 - Owner will report dialed-in brightness values after outdoor testing → lock into SLOT_BASES.
 - Smart plugs: DROPPED — owner controls them via their own app (background fire glow or other colors), not server-controlled.
