@@ -1387,6 +1387,28 @@ app.post('/api/atmosfx/stop', (req, res) => {
   res.json({ ok: true });
 });
 
+// Show-night projection: clips come ONLY from the "side of the house" subfolder,
+// randomly selected (never repeats the previous clip back-to-back).
+const ATMOSFX_SHOW_SUBDIR = 'side of the house';
+let lastAtmosfxClip = null;
+app.post('/api/atmosfx/random', (req, res) => {
+  const { display } = req.body || {};
+  let files = [];
+  try {
+    files = fs.readdirSync(path.join(ATMOSFX_DIR, ATMOSFX_SHOW_SUBDIR))
+      .filter(f => /\.(mp4|mov|m4v|avi|mkv)$/i.test(f));
+  } catch (_) {}
+  if (!files.length) {
+    broadcastLog(`AtmosFX random: no clips found in "${ATMOSFX_SHOW_SUBDIR}" folder`, 'VIDEO');
+    return res.status(404).json({ error: `no clips in ${ATMOSFX_SHOW_SUBDIR}` });
+  }
+  let pool = files.length > 1 ? files.filter(f => f !== lastAtmosfxClip) : files;
+  const file = pool[Math.floor(Math.random() * pool.length)];
+  lastAtmosfxClip = file;
+  playAtmosfx(path.join(ATMOSFX_SHOW_SUBDIR, file), display);
+  res.json({ ok: true, file });
+});
+
 // Placeholder — projection test pattern (requires files, coming later)
 app.post('/api/atmosfx/pattern', (req, res) => {
   broadcastLog('AtmosFX test pattern requested — requires files (not yet installed)', 'VIDEO');

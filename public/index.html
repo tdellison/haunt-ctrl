@@ -963,6 +963,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-blue btn-sm" onclick="loadAtmosfxList()">↻ REFRESH</button>
       <button class="btn btn-red btn-sm" onclick="api('/api/atmosfx/stop')">■ STOP</button>
       <button class="btn btn-amber btn-sm" onclick="api('/api/atmosfx/pattern')">🔲 TEST PATTERN</button>
+      <button class="btn btn-green btn-sm" onclick="api('/api/atmosfx/random',{display:document.getElementById('atmosfx-display').value})">🎲 RANDOM SHOW CLIP</button>
     </div>
     <p style="font-size:.68em;color:var(--dim2);letter-spacing:1px;margin-bottom:10px">Test pattern requires files — AtmosFX library not yet installed.</p>
     <div class="clip-list" id="atmosfx-list">
