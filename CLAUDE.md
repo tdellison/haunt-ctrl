@@ -45,11 +45,12 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 `storm`, `graveyard ambient`, `WITCH`, `SKELETON`, `HAUNT SOUNDS` (overlay FX). ATMOSFX_DIR is now `Desktop\side of the house` — `/api/atmosfx/random` picks randomly straight from it (video files only, no back-to-back repeats); this is the route the AI conductor uses for projections. `/api/atmosfx/play` defaults to display 4 when none passed. Skeleton test files: `skeleton-left.wav`/`skeleton-right.wav` (stereo, hard-panned). Witch: `witch-main-left.wav`/`witch2-right.wav`. `make-skeleton-voices.ps1` generates them via Windows TTS. JACKOLANTERN and LEGENDS ATMOS folders are orphaned (jamboree + character systems removed) — owner may delete.
 
 ## Characters & spells
-Story: **The Hollow Storm** — 300 years ago a great ritual failed on this ground, tearing a hollow in the sky; the storm returns every year, circling closer until it breaks overhead. The four spirits bound to the yard are remnants of that ritual, each with their own belief about the storm.
-- **Evelina** — main witch (z3 LEFT): commanding ritual leader; wants guests' voices to finish the ritual.
-- **Lenora** — second witch (z3 RIGHT): eerie, melancholic conscience; warns guests what it may cost.
-- **Jasper** — left skeleton (z1 FL): wisecracking Southern greeter; can't remember his own name.
-- **Edgar** — right skeleton (z1 FR): deadpan philosopher; convinced the storm is alive and listening.
+Story: **The Hollow Storm** — 300 years ago witches Evelina Crowe and Lenora Thorn tried to harness it; the ritual failed, they became bound to it, the dead rose (Jasper and Edgar were caught in the disaster). Every Halloween the storm returns, Evelina tries to complete the ritual, Lenora warns her not to; guests are caught in the middle. Nobody knows what the storm is (Evelina: power to harness; Lenora: living force, uncontrollable; Jasper: it's watching everyone; Edgar: everyone's overreacting) — the mystery is intentional.
+- **Evelina Crowe** — main witch (z3 LEFT, mic): curious, charming, overconfident; drives the action; genuinely likes guests.
+- **Lenora Thorn** — second witch (z3 RIGHT): wise, dry, patient; warns and provides lore; "I know."
+- **Jasper Bones** — left skeleton (z1 FL, passive mic later): nervous, superstitious; notices every effect first; builds suspense.
+- **Edgar Rattle** — right skeleton (z1 FR): sarcastic, lazy comedy relief; denies ever being worried; arc = indifference erodes as storm builds, never admits it.
+Grand Ritual ends the night: Lenora "Well?" / Evelina "Almost." / Jasper "We're doomed." / Edgar "See everyone next Halloween."
 
 Spells (cauldron light sequences, 3s green build → 20s spell → back to green boil, NO white ever):
 - Spell of Binding — deep blue pulse {0,40,200}
