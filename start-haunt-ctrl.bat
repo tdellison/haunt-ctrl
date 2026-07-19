@@ -19,10 +19,10 @@ if not exist "C:\Users\tdell\OneDrive\Desktop\WITCH\witch-main-left.wav" (
 echo.
 echo  ============================================
 echo   HAUNT CTRL v3 — SERVER STARTING...
-echo   Open on iPhone: http://192.168.1.11:3000
+echo   Open on iPhone: http://192.168.1.17:3000
 echo  ============================================
 echo.
-start http://192.168.1.11:3000
+start http://192.168.1.17:3000
 node server.js
 echo.
 echo  ============================================
