@@ -179,6 +179,7 @@ const effects = {
   timers: {},
   skelTalking: { left: false, right: false },
   cauldronMode: 'green',
+  spellSeq: null, // { seq, colors, idx } while a named spell runs on the cauldron
 };
 
 const FIRE_PALETTE = [
@@ -245,8 +246,33 @@ function cauldronBoilTick() {
   const spell = effects.cauldronMode === 'spell';
   if (ids.length && !effects.suspended) {
     let bri;
-    if (spell) {
-      // Deep red spell pulse — NO WHITE, ever
+    if (spell && effects.spellSeq) {
+      // Named spell sequence — NO WHITE, ever
+      const sq = effects.spellSeq;
+      let c = sq.colors[0];
+      switch (sq.seq) {
+        case 'pulse': { // single color brightness wave 40–90
+          const wave = (Math.sin(sq.idx * 0.7) + 1) / 2;
+          bri = Math.round(40 + wave * 50);
+          break;
+        }
+        case 'flash': // sharp bright hits then dips
+          bri = (sq.idx % 2 === 0) ? 90 : 30;
+          break;
+        case 'hold': // steady-ish organic
+          bri = Math.round(randBetween(55, 75));
+          break;
+        case 'cycle': // advance through colors each tick
+          c = sq.colors[sq.idx % sq.colors.length];
+          bri = Math.round(randBetween(60, 90));
+          break;
+        default:
+          bri = Math.round(randBetween(50, 90));
+      }
+      sq.idx++;
+      goveeSetColor(c.r, c.g, c.b, ids).catch(() => {});
+    } else if (spell) {
+      // Spell mode with no sequence (legacy) — deep red pulse, NO WHITE
       bri = Math.round(randBetween(50, 90));
       goveeSetColor(180, 0, 0, ids).catch(() => {});
     } else {
@@ -261,9 +287,16 @@ function cauldronBoilTick() {
     goveeSetBrightness(bri, ids).catch(() => {});
   }
   boilPhase++;
-  const delay = spell
-    ? Math.round(randBetween(300, 900))
-    : Math.round(randBetween(600, 1800));
+  let delay;
+  if (spell && effects.spellSeq) {
+    const ranges = { pulse: [400, 800], flash: [250, 600], hold: [400, 900], cycle: [200, 500] };
+    const [lo, hi] = ranges[effects.spellSeq.seq] || [300, 900];
+    delay = Math.round(randBetween(lo, hi));
+  } else if (spell) {
+    delay = Math.round(randBetween(300, 900));
+  } else {
+    delay = Math.round(randBetween(600, 1800));
+  }
   effects.timers.cauldron = setTimeout(cauldronBoilTick, delay);
 }
 
@@ -289,6 +322,7 @@ function stopEffects() {
   effects.skelTalking.left = false;
   effects.skelTalking.right = false;
   effects.cauldronMode = 'green';
+  effects.spellSeq = null;
   broadcastLog('Living effects OFF', 'LIGHT');
   broadcastState();
 }
@@ -545,7 +579,20 @@ function stateSnapshot() {
     vlcActive:        anyVlcRunning(),
     goveeSlotsConfigured: Object.values(GOVEE_SLOT_IDS).filter(Boolean).length,
     effectsRunning:   effects.running,
+    hostContext:      hostContext.text,
   };
+}
+
+// ─── Show host context field ──────────────────────────────────────────────────
+// Free-text note from the host about who's at the yard right now. The AI
+// conductor uses it for exactly ONE interaction, then calls markContextUsed()
+// to expire it (enforcement lands in the AI conductor phase).
+let hostContext = { text: '', setAt: null, used: false };
+
+function markContextUsed() {
+  hostContext.used = true;
+  hostContext.text = '';
+  broadcastState();
 }
 
 loadShowState();
@@ -711,24 +758,180 @@ function scheduleNextStrike() {
   }, STRIKE_INTERVAL_MS);
 }
 
-// Spell colors per witch clip — used for the cast-flash on her light pair
-const SPELL_COLORS = {
-  witchinghour: { r:   0, g: 200, b:  40 },  // green
-  catcrow:      { r: 255, g: 120, b:   0 },  // amber
-  spellbound:   { r:  40, g: 120, b: 255 },  // blue
-  seance:       { r: 160, g:   0, b: 220 },  // purple
+// ─── Named spell system ───────────────────────────────────────────────────────
+// Evelina's spells — each drives the cauldron slot with its own color/sequence.
+// grandritual is NEVER picked randomly; explicit request only (Overhead / AI).
+const SPELLS = {
+  binding:    { name: 'Spell of Binding',    seq: 'pulse', colors: [{ r: 0,   g: 40,  b: 200 }] },                 // deep blue pulse
+  calling:    { name: 'Spell of Calling',    seq: 'flash', colors: [{ r: 255, g: 170, b: 0   }] },                 // amber/gold flash
+  unraveling: { name: 'Spell of Unraveling', seq: 'cycle', colors: [{ r: 0, g: 180, b: 0 }, { r: 140, g: 0, b: 200 }] }, // rapid green↔purple
+  memory:     { name: 'Spell of Memory',     seq: 'hold',  colors: [{ r: 150, g: 0, b: 30 }] },                    // deep crimson
+  grandritual: { name: 'Grand Ritual',       seq: 'cycle', colors: [
+    { r: 0, g: 40, b: 200 }, { r: 255, g: 170, b: 0 }, { r: 0, g: 180, b: 0 },
+    { r: 140, g: 0, b: 200 }, { r: 150, g: 0, b: 30 },
+  ] }, // all spell colors, rapid
 };
 
-// Spell-cast: 3s "build" phase of intensified green flicker, then the boil
-// loop switches to deep red pulse mode for 20s, then back to green.
-// NO WHITE anywhere in the spell sequence. Witch slots stay purple throughout.
-function castSpellLights(clip) {
+let lastSpell = null;
+
+// ─── Character bible ──────────────────────────────────────────────────────────
+// The full story/character reference for the show — consumed by the future AI
+// conductor via GET /api/character-bible.
+const CHARACTER_BIBLE = {
+  story: {
+    title: 'The Hollow Storm',
+    summary: 'Three hundred years ago, a great ritual was attempted on this ground and failed. ' +
+      'The failure tore a hollow in the sky — the Hollow Storm — that returns every year, ' +
+      'circling closer through the night until it breaks directly overhead. The four spirits ' +
+      'bound to this yard — two witches and two skeletons — are remnants of that failed ritual, ' +
+      'unable to leave, each carrying their own piece of the story and their own belief about ' +
+      'what the storm really is.',
+    hollowStormBeliefs: {
+      evelina: 'Knows the truth: the storm is the wound left by the failed ritual, and only completing the ritual can close it.',
+      lenora: 'Believes the storm is a judgment that returns to punish them, and that it should be endured, not challenged.',
+      jasper: 'Insists the storm is just weather and everyone is overreacting — his denial is a coping mechanism.',
+      edgar: 'Is convinced the storm is alive and listening, and that talking about it too loudly draws it closer.',
+    },
+  },
+  characters: {
+    evelina: {
+      role: 'Main witch',
+      position: 'Front-left corner of the yard, at the cauldron',
+      zone: 'z3', speaker: 'LEFT RCA (future mic-reactive)',
+      personality: 'Commanding, theatrical, dry-witted. The ritual leader. Speaks with authority and a hint of weariness from 300 years of trying.',
+      goal: 'Complete the failed ritual before the Hollow Storm breaks overhead — she needs willing voices (guests) to do it.',
+      whyTalksToGuests: 'Every guest is a potential ritual participant; living voices are the ingredient the original ritual lacked.',
+      showFunction: 'Primary interactive character. Casts the named spells at the cauldron; anchors the show narrative and the storm arc.',
+      speechStyle: 'Formal but sly; archaic turns of phrase; addresses guests directly; builds anticipation before each spell.',
+      relationships: 'Older sister figure to Lenora (protective, sometimes exasperated); regards Jasper and Edgar as useful fools she is fond of despite herself.',
+      arc: 'Grows more urgent as the storm nears; the Grand Ritual at Overhead is her climactic moment.',
+    },
+    lenora: {
+      role: 'Second witch',
+      position: 'Beside Evelina at the front-left corner',
+      zone: 'z3', speaker: 'RIGHT RCA',
+      personality: 'Quieter, eerie, melancholic. The conscience of the pair. Sees omens in everything.',
+      goal: 'Keep Evelina from repeating the mistake that caused the storm in the first place.',
+      whyTalksToGuests: 'Warns them — gently, sadly — about what participating might cost.',
+      showFunction: 'Counterpoint voice; echoes and undercuts Evelina; deepens the spell moments with warnings and laments.',
+      speechStyle: 'Soft, sing-song, trailing sentences; speaks in omens and memories.',
+      relationships: 'Devoted to Evelina but afraid of her ambition; finds the skeletons comforting in their simplicity.',
+      arc: 'Slowly comes around to helping the ritual as the storm proves worse than the risk.',
+    },
+    jasper: {
+      role: 'Left skeleton',
+      position: 'Skeleton/host table at the garage front, left side',
+      zone: 'z1', speaker: 'Front Left (gets passive mic later)',
+      personality: 'Wisecracking, stubborn, self-appointed greeter. Southern drawl. Thinks he runs the place.',
+      goal: 'Be remembered — he cannot recall his own name from life and covers it with bravado.',
+      whyTalksToGuests: 'Greets everyone who comes up the driveway; guests are his audience and he is starved for one.',
+      showFunction: 'Comic relief and crowd greeter; banters and argues with Edgar; reacts to spells and storm from a distance.',
+      speechStyle: 'Fast, folksy, interrupting; picks fights with Edgar he cannot win.',
+      relationships: 'Eternal bickering partnership with Edgar; slightly scared of Evelina; sweet on Lenora in a hopeless way.',
+    },
+    edgar: {
+      role: 'Right skeleton',
+      position: 'Skeleton/host table at the garage front, right side',
+      zone: 'z1', speaker: 'Front Right',
+      personality: 'Dry, deadpan, morbidly philosophical. The straight man to Jasper. The white skeleton to Jasper\'s brown, rotting one.',
+      goal: 'Figure out what the storm actually is before it takes them — he watches and records everything.',
+      whyTalksToGuests: 'Interrogates them politely for clues; treats every guest as a witness.',
+      showFunction: 'Comic counterpoint; delivers the creepy one-liners; his storm dread pays off the storm stages.',
+      speechStyle: 'Slow, precise, understated; devastating punchlines delivered flat.',
+      relationships: 'Bickers with Jasper constantly but would fall apart without him; the only one Lenora confides in.',
+    },
+  },
+  spells: {
+    binding: {
+      cauldron: 'Deep blue pulse {0,40,200}',
+      reactions: {
+        evelina: 'Solemn, focused — this is the spell that holds the yard together.',
+        lenora: 'Approves; hums along softly.',
+        jasper: 'Complains he can feel his joints tightening.',
+        edgar: 'Notes that being bound here is the whole problem.',
+      },
+      crowdParticipation: 'Guests asked to stand very still and hold their breath while it takes.',
+    },
+    calling: {
+      cauldron: 'Amber/gold flash {255,170,0}',
+      reactions: {
+        evelina: 'Bright, inviting — her recruiting spell for new voices.',
+        lenora: 'Uneasy; warns something else might answer the call.',
+        jasper: 'Loves it — attention is coming.',
+        edgar: 'Asks pointedly WHAT is being called.',
+      },
+      crowdParticipation: 'Guests asked to call out or repeat a word so the spell can find them.',
+    },
+    unraveling: {
+      cauldron: 'Rapid green/purple cycle {0,180,0} ↔ {140,0,200}',
+      reactions: {
+        evelina: 'Dangerous glee — picking apart old magic, including the failed ritual itself.',
+        lenora: 'Frightened; this is the spell that went wrong 300 years ago.',
+        jasper: 'Swears a bone came loose last time.',
+        edgar: 'Quietly fascinated; wants to see what is underneath.',
+      },
+      crowdParticipation: 'Guests asked to wave their hands to help stir the threads apart.',
+    },
+    memory: {
+      cauldron: 'Deep crimson hold {150,0,30}',
+      reactions: {
+        evelina: 'Softens — the one spell she casts for herself.',
+        lenora: 'Weeps; remembers the night of the ritual.',
+        jasper: 'Goes uncharacteristically quiet — hopes to remember his name.',
+        edgar: 'Recites what little he remembers, like evidence.',
+      },
+      crowdParticipation: 'Guests asked to think of someone they miss; the cauldron holds the color while they do.',
+    },
+    grandritual: {
+      cauldron: 'All spell colors cycling rapidly — blue, amber, green, purple, crimson',
+      reactions: {
+        evelina: 'Her moment — commands the whole yard; every voice, every light.',
+        lenora: 'Finally joins in fully.',
+        jasper: 'Panics, then commits — hollers along.',
+        edgar: 'Announces that the storm has noticed.',
+      },
+      crowdParticipation: 'Whole crowd chants together; reserved for the Overhead strike or explicit AI cue — never random.',
+    },
+  },
+  showProgression: {
+    beginning: 'Storm distant. Characters are playful and welcoming — Jasper and Edgar banter and greet, Evelina teases the crowd with small spells, Lenora drops the first omens.',
+    middle: 'Storm closing in. Spells get bigger, banter gets nervous, Lenora\'s warnings sharpen, Evelina starts recruiting guests for the ritual in earnest.',
+    end: 'Storm overhead. The Grand Ritual — all characters, all lights, full crowd participation — then the strike, and a hushed, changed yard afterward.',
+  },
+  crowdParticipationRules: [
+    'Participation is always invited, never demanded — shy guests get a gentler variant.',
+    'Kids are addressed at their level; nothing aimed to genuinely frighten small children (kid mode exists).',
+    'One clear, simple action per spell (stand still, call out, wave, remember) — never multi-step.',
+    'Characters acknowledge the crowd\'s participation afterward so it feels like it mattered.',
+  ],
+  hostContextField: {
+    behavior: 'The host (owner) can send a short free-text note from the SHOW tab — e.g. "tiny Elsa costume · shy kid · group of teens". ' +
+      'The AI conductor weaves it into the very next character interaction (a compliment, a callout, a tailored bit), ' +
+      'then the context expires — it is used for exactly ONE interaction and cleared.',
+    notes: 'Max 200 chars. Stored in hostContext on the server; markContextUsed() clears it after consumption (enforced in the AI conductor phase).',
+  },
+  crossCharacterAwareness: [
+    'Characters hear each other: skeletons react to Evelina\'s spells from 22 ft away; witches comment on skeleton arguments.',
+    'Never talk over one another — one character speaks at a time; others react after.',
+    'Shared history is consistent: all four remember the failed ritual, each through their own belief about the storm.',
+    'Storm stage is common knowledge — everyone\'s tone tracks it (playful → nervous → urgent).',
+    'Callbacks are encouraged: a bit started by one character can be finished by another later in the night.',
+  ],
+};
+
+// Spell-cast: 3s green "build" phase, then the cauldron boil loop switches to
+// spell mode driven by the spell's own sequence/colors for 20s, then back to
+// green boil. NO WHITE anywhere in any spell sequence.
+function castSpellLights(spellKey) {
+  const spell = SPELLS[spellKey];
+  if (!spell) return;
   const ids = getSlotIds('cauldron');
   if (!ids.length) return;
 
   // Build phase — force a few brighter green steps over 3s while the boil
   // loop keeps running in green mode underneath
   effects.cauldronMode = 'green';
+  effects.spellSeq = null;
   const buildSteps = [
     { at:    0, bri: 65 },
     { at:  800, bri: 75 },
@@ -743,14 +946,16 @@ function castSpellLights(clip) {
     }, step.at);
   }
 
-  // Spell erupts — boil loop takes over with deep red pulse
+  // Spell erupts — boil loop takes over with the spell's sequence
   setTimeout(() => {
     effects.cauldronMode = 'spell';
-    broadcastLog('Cauldron: SPELL — deep red pulse', 'LIGHT');
-    // If the effects loop isn't running, set the red directly so the spell
-    // still reads
+    effects.spellSeq = { seq: spell.seq, colors: spell.colors, idx: 0 };
+    broadcastLog(`Cauldron: ${spell.name} — ${spell.seq} sequence`, 'LIGHT');
+    // If the effects loop isn't running, set the first color directly so the
+    // spell still reads
     if (!effects.running) {
-      goveeSetColor(180, 0, 0, ids).catch(() => {});
+      const c = spell.colors[0];
+      goveeSetColor(c.r, c.g, c.b, ids).catch(() => {});
       goveeSetBrightness(85, ids).catch(() => {});
     }
   }, 3000);
@@ -758,7 +963,8 @@ function castSpellLights(clip) {
   // Back to green boil after 20s of spell
   setTimeout(() => {
     effects.cauldronMode = 'green';
-    broadcastLog('Cauldron: spell fades — back to green boil', 'LIGHT');
+    effects.spellSeq = null;
+    broadcastLog(`Cauldron: ${spell.name} fades — back to green boil`, 'LIGHT');
     // If the effects loop isn't running, at least restore the base look
     if (!effects.running) {
       const base = SLOT_BASES.cauldron;
@@ -768,10 +974,18 @@ function castSpellLights(clip) {
   }, 23000);
 }
 
-async function fireWitch(clip) {
-  broadcastLog(`Witch: ${clip}`, 'WITCH');
+function pickRandomSpell() {
+  const keys = Object.keys(SPELLS).filter(k => k !== 'grandritual' && k !== lastSpell);
+  return keys[Math.floor(Math.random() * keys.length)];
+}
+
+async function fireWitch(clip, spellKey) {
+  broadcastLog(`Evelina: ${clip}`, 'WITCH');
   playWitchClip(clip);
-  castSpellLights(clip);
+  const key = (spellKey && SPELLS[spellKey]) ? spellKey : pickRandomSpell();
+  lastSpell = key;
+  castSpellLights(key);
+  broadcastLog(`Evelina casts ${SPELLS[key].name}`, 'WITCH');
   try {
     const currentZ3 = state.volumes.z3;
     const boost = clampVol('z3', currentZ3 + 8);
@@ -793,7 +1007,7 @@ const STORM_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
 const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
 const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
-const ATMOSFX_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\ATMOSFX';
+const ATMOSFX_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\side of the house';
 const HAUNT_SOUNDS_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\HAUNT SOUNDS';
 
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
@@ -1347,9 +1561,19 @@ app.post('/api/witch/side', (req, res) => {
 });
 
 app.post('/api/witch/fire', async (req, res) => {
-  const { clip = 'manual' } = req.body;
-  await fireWitch(clip);
+  const { clip = 'manual', spell } = req.body;
+  if (spell && !SPELLS[spell]) return res.status(400).json({ error: 'unknown spell' });
+  await fireWitch(clip, spell);
   res.json({ ok: true });
+});
+
+// Spell lights only (no audio) — for the Test tab
+app.post('/api/spell/test', (req, res) => {
+  const { spell } = req.body || {};
+  if (!spell || !SPELLS[spell]) return res.status(400).json({ error: 'unknown spell' });
+  broadcastLog(`Spell test: ${SPELLS[spell].name}`, 'LIGHT');
+  castSpellLights(spell);
+  res.json({ ok: true, spell });
 });
 
 // TODO (October): ElevenLabs integration — synthesize `text` with the main
@@ -1365,6 +1589,24 @@ app.post('/api/witch/speak', (req, res) => {
   res.json({ ok: false, error: 'ElevenLabs not configured yet' });
 });
 
+// Character bible — for the AI conductor
+app.get('/api/character-bible', (req, res) => {
+  res.json({ ok: true, bible: CHARACTER_BIBLE });
+});
+
+// ─── Host context routes ──────────────────────────────────────────────────────
+app.post('/api/context', (req, res) => {
+  const text = String((req.body || {}).text || '').trim().slice(0, 200);
+  hostContext = { text, setAt: Date.now(), used: false };
+  broadcastLog(`Host context: "${text}"`, 'SYSTEM');
+  broadcastState();
+  res.json({ ok: true, hostContext });
+});
+
+app.get('/api/context', (req, res) => {
+  res.json({ ok: true, hostContext });
+});
+
 // ─── AtmosFX routes ───────────────────────────────────────────────────────────
 app.get('/api/atmosfx/list', (req, res) => {
   try {
@@ -1378,8 +1620,9 @@ app.get('/api/atmosfx/list', (req, res) => {
 app.post('/api/atmosfx/play', (req, res) => {
   const { filename, display } = req.body;
   if (!filename) return res.status(400).json({ error: 'filename required' });
-  playAtmosfx(filename, display);
-  res.json({ ok: true, filename, display: display ?? null });
+  const disp = (display === undefined || display === null || display === '') ? 4 : display;
+  playAtmosfx(filename, disp);
+  res.json({ ok: true, filename, display: disp });
 });
 
 app.post('/api/atmosfx/stop', (req, res) => {
@@ -1387,25 +1630,24 @@ app.post('/api/atmosfx/stop', (req, res) => {
   res.json({ ok: true });
 });
 
-// Show-night projection: clips come ONLY from the "side of the house" subfolder,
-// randomly selected (never repeats the previous clip back-to-back).
-const ATMOSFX_SHOW_SUBDIR = 'side of the house';
+// Show-night projection: clips come straight from ATMOSFX_DIR ("side of the
+// house"), randomly selected (never repeats the previous clip back-to-back).
 let lastAtmosfxClip = null;
 app.post('/api/atmosfx/random', (req, res) => {
   const { display } = req.body || {};
   let files = [];
   try {
-    files = fs.readdirSync(path.join(ATMOSFX_DIR, ATMOSFX_SHOW_SUBDIR))
+    files = fs.readdirSync(ATMOSFX_DIR)
       .filter(f => /\.(mp4|mov|m4v|avi|mkv)$/i.test(f));
   } catch (_) {}
   if (!files.length) {
-    broadcastLog(`AtmosFX random: no clips found in "${ATMOSFX_SHOW_SUBDIR}" folder`, 'VIDEO');
-    return res.status(404).json({ error: `no clips in ${ATMOSFX_SHOW_SUBDIR}` });
+    broadcastLog('AtmosFX random: no clips found in "side of the house" folder', 'VIDEO');
+    return res.status(404).json({ error: 'no clips in side of the house' });
   }
   let pool = files.length > 1 ? files.filter(f => f !== lastAtmosfxClip) : files;
   const file = pool[Math.floor(Math.random() * pool.length)];
   lastAtmosfxClip = file;
-  playAtmosfx(path.join(ATMOSFX_SHOW_SUBDIR, file), display);
+  playAtmosfx(file, display);
   res.json({ ok: true, file });
 });
 

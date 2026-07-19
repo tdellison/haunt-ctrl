@@ -892,6 +892,16 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
   </div>
 
+  <!-- Host context -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎭</span>Host Context</div>
+    <div class="field-row">
+      <input id="host-context-input" placeholder='e.g. "tiny Elsa costume · shy kid · group of teens"' maxlength="200"/>
+      <button class="btn btn-purple btn-sm" onclick="sendHostContext()">SEND</button>
+    </div>
+    <div id="host-context-current" style="font-size:.68em;color:var(--dim2);letter-spacing:1px;margin-top:6px">Active: none</div>
+  </div>
+
   <!-- Show health -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">❤️</span>Show Health</div>
@@ -975,13 +985,23 @@ body::before { animation:scanlines 10s linear infinite; }
   <div class="panel panel-witch">
     <div class="panel-title"><span class="pt-icon">🧙</span>Witches</div>
     <div class="field-row">
-      <label>Main line</label>
-      <input id="witch-line" placeholder="Type a line for the main witch…"/>
+      <label>Evelina line (ElevenLabs)</label>
+      <input id="witch-line" placeholder="Type a line for Evelina…"/>
       <button class="btn btn-purple btn-sm" onclick="witchSpeak()">🗣 FIRE LINE</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'left'})">🧙 MAIN WITCH · L</button>
-      <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'right'})">🧙 WITCH 2 · R</button>
+      <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'left'})">🧙 EVELINA · L</button>
+      <button class="btn btn-purple btn-lg" onclick="api('/api/witch/side',{side:'right'})">🧙 LENORA · R</button>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Spell Tests</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-purple btn-sm" onclick="api('/api/spell/test',{spell:'binding'})">BINDING</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/spell/test',{spell:'calling'})">CALLING</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/spell/test',{spell:'unraveling'})">UNRAVELING</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/spell/test',{spell:'memory'})">MEMORY</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/spell/test',{spell:'grandritual'})">GRAND RITUAL</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'witchinghour'})">🌙 WITCHING HOUR</button>
@@ -1005,11 +1025,11 @@ body::before { animation:scanlines 10s linear infinite; }
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🦴</span>Skeletons</div>
     <div class="grid2" style="margin-bottom:12px">
-      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'left'})">🦴 LEFT LINE</button>
-      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'right'})">🦴 RIGHT LINE</button>
+      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'left'})">🦴 JASPER · LEFT</button>
+      <button class="btn btn-orange btn-xl btn-full" onclick="api('/api/skeleton/fire',{side:'right'})">🦴 EDGAR · RIGHT</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-amber btn-sm" onclick="api('/api/skeleton/argument')">🗯 ARGUMENT SEQUENCE</button>
+      <button class="btn btn-amber btn-sm" onclick="api('/api/skeleton/argument')">🗯 JASPER vs EDGAR ARGUMENT</button>
       <button class="btn btn-blue btn-sm" onclick="api('/api/skeleton/balance')">🔀 L/R BALANCE TEST</button>
       <button class="btn btn-red btn-sm" onclick="api('/api/skeleton/stop')">■ STOP</button>
     </div>
@@ -1396,6 +1416,12 @@ function applyState(s) {
     eb.textContent = s.effectsRunning ? '■ Stop Effects' : '▶ Start Effects';
   }
 
+  // Host context
+  const hc = document.getElementById('host-context-current');
+  if (hc && s.hostContext !== undefined) {
+    hc.textContent = s.hostContext ? `Active: ${s.hostContext}` : 'Active: none';
+  }
+
   // Health indicators
   const hg = document.getElementById('health-govee');
   if (hg && s.goveeSlotsConfigured !== undefined) {
@@ -1617,6 +1643,14 @@ async function witchSpeak() {
   if (!text) { appendLog('Type a line for the witch first', 'WITCH'); return; }
   const r = await api('/api/witch/speak', { text });
   if (r && r.ok === false && r.error) appendLog(`Witch speak: ${r.error}`, 'WITCH');
+}
+
+async function sendHostContext() {
+  const input = document.getElementById('host-context-input');
+  const text = input.value.trim();
+  if (!text) return;
+  await api('/api/context', { text });
+  input.value = '';
 }
 
 // ── Mic test (client-side only) ───────────────────────────────────────────────

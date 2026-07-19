@@ -20,9 +20,9 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - **Displays**: Laptop + 2 projectors (DP→HDMI) + receiver HDMI (shows as a 4th phantom display named ONKYO — normal).
 
 ## Zones (final layout)
-- **Zone 1 (z1/MVL) — SKELETONS**: Front L/R + Center terminals. Left skeleton = FL speaker, right = FR, center between them. Skeletons ~7–8 ft apart, tucked into island trees. One is white, one brown/rotting.
+- **Zone 1 (z1/MVL) — SKELETONS**: Front L/R + Center terminals. **Jasper = left skeleton = FL speaker, Edgar = right = FR**, center between them. Skeletons ~7–8 ft apart, tucked into island trees. One is white (Edgar), one brown/rotting (Jasper). Jasper gets a passive mic later.
 - **Zone 2 (z2/ZVL) — GRAVEYARD**: ambient bed + AtmosFX projection audio ducking.
-- **Zone 3 (z3/Z3L) — WITCHES**: RCA pre-out to class-D amp. **Main witch = LEFT RCA** (future mic-reactive), witch 2 = RIGHT.
+- **Zone 3 (z3/Z3L) — WITCHES**: RCA pre-out to class-D amp. **Evelina (main witch) = LEFT RCA** (future mic-reactive), **Lenora (witch 2) = RIGHT**.
 - Witch fire ducks z1 by 8 for 30s (skeletons 22 ft from witch mic — bleed).
 - Sound presets: normal (30/28/26) / boost (40/38/36); storm volumes are locked and never affected.
 
@@ -42,7 +42,23 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 5-stage progressive cycle, 2-min intervals, auto-repeats: Distant → Getting Closer → Close → Very Close → Overhead. Random clip from `STORM_FILES` for stages 1–4; **Overhead always plays `646912__alexdarek__lightning-strike-2.wav`** (never randomized). Overhead also fires fog burst. Manual controls live in the Test tab (FIRE STRIKE NOW, per-stage light tests, per-clip audio tests).
 
 ## Media folders (Desktop, OneDrive)
-`storm`, `graveyard ambient`, `WITCH`, `SKELETON`, `ATMOSFX` (files coming), `HAUNT SOUNDS` (overlay FX). Show-night projection clips live ONLY in `ATMOSFX\side of the house\` — `/api/atmosfx/random` picks randomly from that subfolder (no back-to-back repeats); this is the route the AI conductor uses for projections. Skeleton test files: `skeleton-left.wav`/`skeleton-right.wav` (stereo, hard-panned). Witch: `witch-main-left.wav`/`witch2-right.wav`. `make-skeleton-voices.ps1` generates them via Windows TTS. JACKOLANTERN and LEGENDS ATMOS folders are orphaned (jamboree + character systems removed) — owner may delete.
+`storm`, `graveyard ambient`, `WITCH`, `SKELETON`, `HAUNT SOUNDS` (overlay FX). ATMOSFX_DIR is now `Desktop\side of the house` — `/api/atmosfx/random` picks randomly straight from it (video files only, no back-to-back repeats); this is the route the AI conductor uses for projections. `/api/atmosfx/play` defaults to display 4 when none passed. Skeleton test files: `skeleton-left.wav`/`skeleton-right.wav` (stereo, hard-panned). Witch: `witch-main-left.wav`/`witch2-right.wav`. `make-skeleton-voices.ps1` generates them via Windows TTS. JACKOLANTERN and LEGENDS ATMOS folders are orphaned (jamboree + character systems removed) — owner may delete.
+
+## Characters & spells
+Story: **The Hollow Storm** — 300 years ago a great ritual failed on this ground, tearing a hollow in the sky; the storm returns every year, circling closer until it breaks overhead. The four spirits bound to the yard are remnants of that ritual, each with their own belief about the storm.
+- **Evelina** — main witch (z3 LEFT): commanding ritual leader; wants guests' voices to finish the ritual.
+- **Lenora** — second witch (z3 RIGHT): eerie, melancholic conscience; warns guests what it may cost.
+- **Jasper** — left skeleton (z1 FL): wisecracking Southern greeter; can't remember his own name.
+- **Edgar** — right skeleton (z1 FR): deadpan philosopher; convinced the storm is alive and listening.
+
+Spells (cauldron light sequences, 3s green build → 20s spell → back to green boil, NO white ever):
+- Spell of Binding — deep blue pulse {0,40,200}
+- Spell of Calling — amber/gold flash {255,170,0}
+- Spell of Unraveling — rapid green↔purple cycle {0,180,0}/{140,0,200}
+- Spell of Memory — deep crimson hold {150,0,30}
+- Grand Ritual — all colors rapid cycle; NEVER random, explicit only (Overhead/AI)
+
+`/api/witch/fire` takes optional `spell`; otherwise picks a random spell (never grandritual, never same twice). `POST /api/spell/test {spell}` = lights only. Full `CHARACTER_BIBLE` lives in server.js, served at `GET /api/character-bible` for the AI conductor. **Host context field** on the SHOW tab (`POST/GET /api/context`, 200 chars): host notes about current guests; expires after one interaction — enforcement in the AI conductor phase (`markContextUsed()`).
 
 ## UI (public/index.html)
 Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, STRIKE DOWN, health row, log), **🧪 TEST** (everything else; panels are collapsible — start folded, tap title), **SETUP**. Strike Down = teardown mode: stops everything but turns all lights warm white so owner can pack up in the dark.
