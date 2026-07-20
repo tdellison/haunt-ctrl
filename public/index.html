@@ -961,26 +961,6 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
   </div>
 
-  <!-- Projections -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">📽</span>Projections — AtmosFX</div>
-    <div class="field-row" style="margin-bottom:10px">
-      <label>Display</label>
-      <select class="raw-input" id="atmosfx-display">
-        <option value="1">1</option><option value="2">2</option>
-        <option value="3">3</option><option value="4">4</option>
-      </select>
-      <button class="btn btn-blue btn-sm" onclick="loadAtmosfxList()">↻ REFRESH</button>
-      <button class="btn btn-red btn-sm" onclick="api('/api/atmosfx/stop')">■ STOP</button>
-      <button class="btn btn-amber btn-sm" onclick="api('/api/atmosfx/pattern')">🔲 TEST PATTERN</button>
-      <button class="btn btn-green btn-sm" onclick="api('/api/atmosfx/random',{display:document.getElementById('atmosfx-display').value})">🎲 RANDOM SHOW CLIP</button>
-    </div>
-    <p style="font-size:.68em;color:var(--dim2);letter-spacing:1px;margin-bottom:10px">Test pattern requires files — AtmosFX library not yet installed.</p>
-    <div class="clip-list" id="atmosfx-list">
-      <div class="clip-item"><span class="clip-icon">⏳</span><span class="clip-name">Loading…</span></div>
-    </div>
-  </div>
-
   <!-- Witches -->
   <div class="panel panel-witch">
     <div class="panel-title"><span class="pt-icon">🧙</span>Witches</div>
@@ -1256,7 +1236,7 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
     <div class="shutdown-step" id="step-3">
       <span class="step-icon">🎬</span>
-      <span>Stopping projections</span>
+      <span>Stopping media playback</span>
       <span class="step-status" id="step-3-status"></span>
     </div>
     <div class="shutdown-step" id="step-4">
@@ -1770,37 +1750,6 @@ function testAllGovee() {
   appendLog('Testing all Govee lights — flash sent', 'LIGHT');
 }
 
-// ── AtmosFX ───────────────────────────────────────────────────────────────────
-async function loadAtmosfxList() {
-  const box = document.getElementById('atmosfx-list');
-  const r = await apiGet('/api/atmosfx/list');
-  box.innerHTML = '';
-  const files = r?.files || [];
-  if (!files.length) {
-    box.innerHTML = '<div class="clip-item"><span class="clip-icon">📁</span><span class="clip-name">No files — ATMOSFX folder empty or missing</span></div>';
-    return;
-  }
-  files.forEach(f => {
-    const row = document.createElement('div');
-    row.className = 'clip-item';
-    row.innerHTML = `<span class="clip-icon">🎬</span><span class="clip-name">${f}</span>`;
-    const play = document.createElement('button');
-    play.className = 'btn btn-green btn-sm';
-    play.textContent = '▶';
-    play.onclick = () => {
-      const display = document.getElementById('atmosfx-display').value;
-      api('/api/atmosfx/play', { filename: f, display });
-    };
-    const stop = document.createElement('button');
-    stop.className = 'btn btn-red btn-sm';
-    stop.textContent = '■';
-    stop.onclick = () => api('/api/atmosfx/stop');
-    row.appendChild(play);
-    row.appendChild(stop);
-    box.appendChild(row);
-  });
-}
-
 // ── Haunt sounds ──────────────────────────────────────────────────────────────
 async function loadSounds() {
   const grid = document.getElementById('sounds-grid');
@@ -1915,8 +1864,8 @@ async function runShutdown() {
   await step(2, 'Timers stopped', async () => {
     // timers stopped server-side by /api/shutdown
   });
-  await step(3, 'Projections stopped', async () => {
-    await api('/api/atmosfx/stop');
+  await step(3, 'Media stopped', async () => {
+    await api('/api/fx/stop');
   });
   await step(4, 'Lights off', async () => {
     await api('/api/govee/power', { on: false });
@@ -1960,7 +1909,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.pane === 'test' && !testTabLoaded) {
       testTabLoaded = true;
       loadSlots();
-      loadAtmosfxList();
       loadSounds();
       refreshSystemInfo();
     }

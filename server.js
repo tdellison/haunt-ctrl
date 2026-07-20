@@ -588,7 +588,7 @@ function broadcastLog(msg, category = 'SYSTEM') {
 
 function anyVlcRunning() {
   return !!(stormProcess || skeletonProcess || witchProcess || witchSideProcess ||
-            ambientProcess || fxProcess || atmosfxProcess || soundProcess);
+            ambientProcess || fxProcess || soundProcess);
 }
 
 function stateSnapshot() {
@@ -1255,7 +1255,6 @@ const STORM_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
 const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
 const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
-const ATMOSFX_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\side of the house';
 const HAUNT_SOUNDS_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\HAUNT SOUNDS';
 
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
@@ -1277,7 +1276,6 @@ let witchProcess    = null;
 let ambientProcess  = null;
 let fxProcess       = null;
 let soundProcess    = null;
-let atmosfxProcess  = null;
 
 function playStormClip(overhead) {
   const file = overhead
@@ -1426,50 +1424,6 @@ function fireSkeleton(side) {
   return true;
 }
 
-// ─── AtmosFX projection system ────────────────────────────────────────────────
-function stopAtmosfx() {
-  if (atmosfxProcess) {
-    try { atmosfxProcess.kill(); } catch (_) {}
-    atmosfxProcess = null;
-    broadcastLog('AtmosFX stopped', 'VIDEO');
-  }
-}
-
-function playAtmosfx(filename, display) {
-  stopAtmosfx();
-  const args = [
-    path.join(ATMOSFX_DIR, filename),
-    '--play-and-exit', '--fullscreen', '--no-video-title-show', '--qt-start-minimized',
-  ];
-  if (display !== undefined && display !== null && display !== '') {
-    args.push(`--qt-fullscreen-screennumber=${parseInt(display, 10)}`);
-  }
-  broadcastLog(`AtmosFX: ${filename}${display ? ` on display ${display}` : ''}`, 'VIDEO');
-
-  // Duck graveyard zone to 60% of current for the clip duration
-  const origZ2 = state.volumes.z2;
-  const duckedZ2 = clampVol('z2', Math.floor(origZ2 * 0.6));
-  if (duckedZ2 !== origZ2) {
-    queueISCP(`${ZONE_CMD.z2}${volToHex(duckedZ2)}`)
-      .then(() => { state.volumes.z2 = duckedZ2; broadcastState(); })
-      .catch(() => {});
-  }
-
-  atmosfxProcess = spawn(VLC_PATH, args, { detached: true, stdio: 'ignore' });
-  atmosfxProcess.unref();
-  atmosfxProcess.on('error', (e) => broadcastLog(`AtmosFX VLC error: ${e.message}`, 'SYSTEM'));
-  atmosfxProcess.on('exit', () => {
-    atmosfxProcess = null;
-    broadcastState();
-    // Restore graveyard zone level on clip end
-    if (duckedZ2 !== origZ2) {
-      queueISCP(`${ZONE_CMD.z2}${volToHex(origZ2)}`)
-        .then(() => { state.volumes.z2 = origZ2; broadcastState(); })
-        .catch(() => {});
-    }
-  });
-}
-
 // ─── Clip maps ────────────────────────────────────────────────────────────────
 const WITCH_MAP = {
   witchinghour: 'WH_Song 1_WitchingHour_3DFX_H.mp4',
@@ -1612,7 +1566,6 @@ app.post('/api/allstop', async (req, res) => {
   stopFogAuto();
   stopWitch();
   stopAmbientSystem();
-  stopAtmosfx();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
   if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
@@ -1639,7 +1592,6 @@ app.post('/api/shutdown', async (req, res) => {
   stopFogAuto();
   stopWitch();
   stopAmbientSystem();
-  stopAtmosfx();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
   if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
@@ -1853,56 +1805,6 @@ app.post('/api/context', (req, res) => {
 
 app.get('/api/context', (req, res) => {
   res.json({ ok: true, hostContext });
-});
-
-// ─── AtmosFX routes ───────────────────────────────────────────────────────────
-app.get('/api/atmosfx/list', (req, res) => {
-  try {
-    const files = fs.readdirSync(ATMOSFX_DIR);
-    res.json({ ok: true, files });
-  } catch (_) {
-    res.json({ ok: true, files: [] });
-  }
-});
-
-app.post('/api/atmosfx/play', (req, res) => {
-  const { filename, display } = req.body;
-  if (!filename) return res.status(400).json({ error: 'filename required' });
-  const disp = (display === undefined || display === null || display === '') ? 4 : display;
-  playAtmosfx(filename, disp);
-  res.json({ ok: true, filename, display: disp });
-});
-
-app.post('/api/atmosfx/stop', (req, res) => {
-  stopAtmosfx();
-  res.json({ ok: true });
-});
-
-// Show-night projection: clips come straight from ATMOSFX_DIR ("side of the
-// house"), randomly selected (never repeats the previous clip back-to-back).
-let lastAtmosfxClip = null;
-app.post('/api/atmosfx/random', (req, res) => {
-  const { display } = req.body || {};
-  let files = [];
-  try {
-    files = fs.readdirSync(ATMOSFX_DIR)
-      .filter(f => /\.(mp4|mov|m4v|avi|mkv)$/i.test(f));
-  } catch (_) {}
-  if (!files.length) {
-    broadcastLog('AtmosFX random: no clips found in "side of the house" folder', 'VIDEO');
-    return res.status(404).json({ error: 'no clips in side of the house' });
-  }
-  let pool = files.length > 1 ? files.filter(f => f !== lastAtmosfxClip) : files;
-  const file = pool[Math.floor(Math.random() * pool.length)];
-  lastAtmosfxClip = file;
-  playAtmosfx(file, display);
-  res.json({ ok: true, file });
-});
-
-// Placeholder — projection test pattern (requires files, coming later)
-app.post('/api/atmosfx/pattern', (req, res) => {
-  broadcastLog('AtmosFX test pattern requested — requires files (not yet installed)', 'VIDEO');
-  res.json({ ok: true, placeholder: true });
 });
 
 // ─── Haunt sounds (short overlay FX: owl, crow, wolf, chains…) ────────────────
@@ -2169,7 +2071,6 @@ app.get('/api/media/lists', (req, res) => {
     ambient: AMBIENT_DIR,
     skeleton: SKELETON_DIR,
     witch: WITCH_DIR,
-    atmosfx: ATMOSFX_DIR,
     sounds: HAUNT_SOUNDS_DIR,
   };
   const lists = {};
@@ -2199,7 +2100,6 @@ app.post('/api/strikedown', async (req, res) => {
   stopFogAuto();
   stopWitch();
   stopAmbientSystem();
-  stopAtmosfx();
   if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
   if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
