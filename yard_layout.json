@@ -31,7 +31,10 @@
     {
       "id": "witch",
       "name": "Interactive Witch",
-      "position": { "x": 4, "y": 6 },
+      "position": {
+        "x": 4,
+        "y": 6
+      },
       "zone": "z3",
       "govee_slot": "witch",
       "notes": "Front-left sidewalk corner of the yard, first display visitors meet. Anchor point for the graveyard scene."
@@ -39,17 +42,13 @@
     {
       "id": "jamboree",
       "name": "Singing Pumpkins (Jamboree)",
-      "position": { "x": 25, "y": 4 },
+      "position": {
+        "x": 25,
+        "y": 4
+      },
       "zone": "z1",
       "govee_slot": null,
       "notes": "Host table at the garage front by the driveway apron. Measured 22 ft from witch. No Govee lighting — owner may add standalone bluetooth lights. All Govee pairs are staged in the graveyard zone."
-    },
-    {
-      "id": "projection",
-      "name": "AtmosFX Projection (side of house)",
-      "zone": "z2",
-      "govee_slot": "graveyard",
-      "notes": "Projector now aims at the side of the house — no rear projection screen. Tombstone bluetooth lights are static hellish red/orange, set via app, not server-controlled."
     }
   ],
   "lighting_plan": {
@@ -61,9 +60,8 @@
   },
   "measurements": {
     "witch_to_jamboree_ft": 22,
-    "jamboree_to_projection_screen_ft": 29,
-    "witch_to_projection_screen_ft": 46,
-    "consistency_check": "All three pairwise distances verified against surveyed 57x44 ft yard — positions triangulate within ~2 ft"
+    "consistency_check": "All three pairwise distances verified against surveyed 57x44 ft yard — positions triangulate within ~2 ft",
+    "note": "Projection system removed — projector not used this year."
   },
   "audio_analysis": {
     "witch_to_pumpkins_distance_ft": 22,
