@@ -45,6 +45,7 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 `storm`, `graveyard ambient`, `WITCH`, `SKELETON`, `HAUNT SOUNDS` (overlay FX). ATMOSFX_DIR is now `Desktop\side of the house` — `/api/atmosfx/random` picks randomly straight from it (video files only, no back-to-back repeats); this is the route the AI conductor uses for projections. `/api/atmosfx/play` defaults to display 4 when none passed. Skeleton test files: `skeleton-left.wav`/`skeleton-right.wav` (stereo, hard-panned). Witch: `witch-main-left.wav`/`witch2-right.wav`. `make-skeleton-voices.ps1` generates them via Windows TTS. JACKOLANTERN and LEGENDS ATMOS folders are orphaned (jamboree + character systems removed) — owner may delete.
 
 ## Characters & spells
+Show identity: **The Hollow Storm** at **Thornfield Cemetery, Est. 1724** — cemetery predates the ritual by decades; built/managed by the Thorn family before Evelina arrived (Lenora's family connection is never explicitly stated — lore for those who notice). Crypt prop carved "Thornfield Cemetery Est. 1724". Evelina references Thornfield casually, Lenora with personal weight.
 Story: **The Hollow Storm** — 300 years ago witches Evelina Crowe and Lenora Thorn tried to harness it; the ritual failed, they became bound to it, the dead rose (Jasper and Edgar were caught in the disaster). Every Halloween the storm returns, Evelina tries to complete the ritual, Lenora warns her not to; guests are caught in the middle. Nobody knows what the storm is (Evelina: power to harness; Lenora: living force, uncontrollable; Jasper: it's watching everyone; Edgar: everyone's overreacting) — the mystery is intentional.
 - **Evelina Crowe** — main witch (z3 LEFT, mic): curious, charming, overconfident; drives the action; genuinely likes guests.
 - **Lenora Thorn** — second witch (z3 RIGHT): wise, dry, patient; warns and provides lore; "I know."
@@ -52,14 +53,12 @@ Story: **The Hollow Storm** — 300 years ago witches Evelina Crowe and Lenora T
 - **Edgar Rattle** — right skeleton (z1 FR): sarcastic, lazy comedy relief; denies ever being worried; arc = indifference erodes as storm builds, never admits it.
 Grand Ritual ends the night: Lenora "Well?" / Evelina "Almost." / Jasper "We're doomed." / Edgar "See everyone next Halloween."
 
-Spells (cauldron light sequences, 3s green build → 20s spell → back to green boil, NO white ever):
-- Spell of Binding — deep blue pulse {0,40,200}
-- Spell of Calling — amber/gold flash {255,170,0}
-- Spell of Unraveling — rapid green↔purple cycle {0,180,0}/{140,0,200}
-- Spell of Memory — deep crimson hold {150,0,30}
-- Grand Ritual — all colors rapid cycle; NEVER random, explicit only (Overhead/AI)
+Spells (3s green build → spell window → back to green boil, NO white ever on the cauldron), tiered:
+- **MINOR** (cauldron only, frequent): Spell of Binding — deep blue pulse {0,40,200}; Spell of Calling — amber/gold flash {255,170,0}
+- **MAJOR** (full-yard lighting via `effects.spellYard`, max 1–2/hour): Spell of Unraveling — cauldron green↔purple cycle + witch lights go deep green pulse, skeleton fire faster/erratic, moon dims to ~28, snap back after 20s; Spell of Memory — cauldron+witch deep crimson {150,0,30}, skeleton fire near-out (4–10 bri), moon untouched, 30s window then SLOW 3-step fade back (never a snap)
+- **GRAND RITUAL** (once at end of night): full-yard build — storm slot electric blue→white, skeleton fire max, witch rapid purple↔bright alternation, cauldron all-colors cycle — into the Overhead white blast → applyShowScheme restore → final exchange. NEVER random, explicit only (Overhead/AI)
 
-`/api/witch/fire` takes optional `spell`; otherwise picks a random spell (never grandritual, never same twice). `POST /api/spell/test {spell}` = lights only. Full `CHARACTER_BIBLE` lives in server.js, served at `GET /api/character-bible` for the AI conductor. **Host context field** on the SHOW tab (`POST/GET /api/context`, 200 chars): host notes about current guests; expires after one interaction — enforcement in the AI conductor phase (`markContextUsed()`).
+`/api/witch/fire` takes optional `spell`; otherwise picks a random spell (never grandritual, never same twice; majors rate-limited via `lastMajorAt` — enforced in code, 30-min spacing, minors only otherwise). AI-conductor-phase behaviors documented in the bible: neighbor music detection (mic; z2/z3 volume bump max 1/30min, character quips 1-in-5 with 10–15min cooldown), ambient sound acknowledgments (1-in-3/4 of sounds get an in-character reaction, per-sound lines in bible), off-script callouts (host context worked examples + rules in bible). `POST /api/spell/test {spell}` = lights only. Full `CHARACTER_BIBLE` lives in server.js, served at `GET /api/character-bible` for the AI conductor. **Host context field** on the SHOW tab (`POST/GET /api/context`, 200 chars): host notes about current guests; expires after one interaction — enforcement in the AI conductor phase (`markContextUsed()`).
 
 ## UI (public/index.html)
 Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, STRIKE DOWN, health row, log), **🧪 TEST** (everything else; panels are collapsible — start folded, tap title), **SETUP**. Strike Down = teardown mode: stops everything but turns all lights warm white so owner can pack up in the dark.

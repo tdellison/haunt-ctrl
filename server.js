@@ -153,6 +153,7 @@ function getSlotIds(...slots) {
 
 // Set every configured slot to its base show look
 async function applyShowScheme() {
+  effects.spellYard = null; // any major-spell yard takeover ends on a full scheme restore
   for (const [slot, base] of Object.entries(SLOT_BASES)) {
     const ids = getSlotIds(slot);
     if (!ids.length) continue;
@@ -180,6 +181,8 @@ const effects = {
   skelTalking: { left: false, right: false },
   cauldronMode: 'green',
   spellSeq: null, // { seq, colors, idx } while a named spell runs on the cauldron
+  spellYard: null, // 'unraveling' | 'memory' | 'grandritual' while a MAJOR spell owns the yard
+  spellTimers: [], // timers spawned by castSpellLights (build/restore steps) — cleared by stopEffects
 };
 
 const FIRE_PALETTE = [
@@ -204,7 +207,11 @@ function skelFireTick() {
     let bri;
     const roll = Math.random();
     const talking = effects.skelTalking.left || effects.skelTalking.right;
-    if (talking) {
+    if (effects.spellYard === 'memory') {
+      bri = Math.round(randBetween(4, 10));  // Memory — fire drops very dim, almost out
+    } else if (effects.spellYard === 'grandritual') {
+      bri = Math.round(randBetween(70, 100)); // Grand Ritual — fire blazes maximum
+    } else if (talking) {
       bri = Math.round(randBetween(45, 65)); // talking — fire burns brighter
     } else if (roll < 0.10) {
       bri = Math.round(randBetween(55, 70)); // bright flare
@@ -216,7 +223,13 @@ function skelFireTick() {
     goveeSetColor(c.r, c.g, c.b, ids).catch(() => {});
     goveeSetBrightness(bri, ids).catch(() => {});
   }
-  const delay = Math.round(randBetween(250, 1400));
+  // Unraveling: faster, more erratic flicker — storm energy reaching the far
+  // end of the yard. Memory: slow, dim embers. Grand Ritual: fast blaze.
+  let delay;
+  if (effects.spellYard === 'unraveling') delay = Math.round(randBetween(120, 500));
+  else if (effects.spellYard === 'memory') delay = Math.round(randBetween(1000, 2000));
+  else if (effects.spellYard === 'grandritual') delay = Math.round(randBetween(120, 400));
+  else delay = Math.round(randBetween(250, 1400));
   effects.timers.skeleton = setTimeout(skelFireTick, delay);
 }
 
@@ -228,13 +241,31 @@ let breathPhase = 0;
 function witchBreathTick() {
   if (!effects.running) return;
   const ids = getSlotIds('witch');
+  let stepMs = 800;
   if (ids.length && !effects.suspended) {
     const bri = BREATH_LEVELS[breathPhase % BREATH_LEVELS.length];
-    goveeSetColor(100, 0, 180, ids).catch(() => {});
-    goveeSetBrightness(bri, ids).catch(() => {});
+    if (effects.spellYard === 'unraveling') {
+      // Unraveling — purple shifts to a deep unsettling green pulse, same timing
+      goveeSetColor(0, 180, 60, ids).catch(() => {});
+      goveeSetBrightness(bri, ids).catch(() => {});
+    } else if (effects.spellYard === 'memory') {
+      // Memory — deep crimson hold, two witches connected by the same color
+      goveeSetColor(150, 0, 30, ids).catch(() => {});
+      goveeSetBrightness(bri, ids).catch(() => {});
+    } else if (effects.spellYard === 'grandritual') {
+      // Grand Ritual — rapid purple ↔ bright white-ish alternation (never pure
+      // white on the witch until the Overhead strike itself)
+      stepMs = 300;
+      if (breathPhase % 2 === 0) goveeSetColor(100, 0, 180, ids).catch(() => {});
+      else goveeSetColor(200, 150, 255, ids).catch(() => {});
+      goveeSetBrightness(Math.round(randBetween(60, 90)), ids).catch(() => {});
+    } else {
+      goveeSetColor(100, 0, 180, ids).catch(() => {});
+      goveeSetBrightness(bri, ids).catch(() => {});
+    }
   }
   breathPhase++;
-  effects.timers.witchBreath = setTimeout(witchBreathTick, 800);
+  effects.timers.witchBreath = setTimeout(witchBreathTick, stepMs);
 }
 
 // Cauldron organic boil — slow rolling green boil, deep red pulse during spell
@@ -312,7 +343,7 @@ function startEffects() {
 }
 
 function stopEffects() {
-  if (!effects.running && !Object.keys(effects.timers).length) return;
+  if (!effects.running && !Object.keys(effects.timers).length && !effects.spellTimers.length) return;
   effects.running = false;
   effects.suspended = false;
   for (const key of Object.keys(effects.timers)) {
@@ -323,6 +354,9 @@ function stopEffects() {
   effects.skelTalking.right = false;
   effects.cauldronMode = 'green';
   effects.spellSeq = null;
+  effects.spellYard = null;
+  for (const t of effects.spellTimers) clearTimeout(t);
+  effects.spellTimers = [];
   broadcastLog('Living effects OFF', 'LIGHT');
   broadcastState();
 }
@@ -761,23 +795,37 @@ function scheduleNextStrike() {
 // ─── Named spell system ───────────────────────────────────────────────────────
 // Evelina's spells — each drives the cauldron slot with its own color/sequence.
 // grandritual is NEVER picked randomly; explicit request only (Overhead / AI).
+// Tiers: minor = cauldron only, frequent. major = full-yard lighting via
+// effects.spellYard, max once per 30 min in random picks. ritual = grandritual,
+// explicit only (Overhead / AI).
 const SPELLS = {
-  binding:    { name: 'Spell of Binding',    seq: 'pulse', colors: [{ r: 0,   g: 40,  b: 200 }] },                 // deep blue pulse
-  calling:    { name: 'Spell of Calling',    seq: 'flash', colors: [{ r: 255, g: 170, b: 0   }] },                 // amber/gold flash
-  unraveling: { name: 'Spell of Unraveling', seq: 'cycle', colors: [{ r: 0, g: 180, b: 0 }, { r: 140, g: 0, b: 200 }] }, // rapid green↔purple
-  memory:     { name: 'Spell of Memory',     seq: 'hold',  colors: [{ r: 150, g: 0, b: 30 }] },                    // deep crimson
-  grandritual: { name: 'Grand Ritual',       seq: 'cycle', colors: [
+  binding:    { name: 'Spell of Binding',    tier: 'minor', seq: 'pulse', colors: [{ r: 0,   g: 40,  b: 200 }] },                 // deep blue pulse
+  calling:    { name: 'Spell of Calling',    tier: 'minor', seq: 'flash', colors: [{ r: 255, g: 170, b: 0   }] },                 // amber/gold flash
+  unraveling: { name: 'Spell of Unraveling', tier: 'major', seq: 'cycle', colors: [{ r: 0, g: 180, b: 0 }, { r: 140, g: 0, b: 200 }] }, // rapid green↔purple
+  memory:     { name: 'Spell of Memory',     tier: 'major', seq: 'hold',  colors: [{ r: 150, g: 0, b: 30 }] },                    // deep crimson
+  grandritual: { name: 'Grand Ritual',       tier: 'ritual', seq: 'cycle', colors: [
     { r: 0, g: 40, b: 200 }, { r: 255, g: 170, b: 0 }, { r: 0, g: 180, b: 0 },
     { r: 140, g: 0, b: 200 }, { r: 150, g: 0, b: 30 },
   ] }, // all spell colors, rapid
 };
 
 let lastSpell = null;
+let lastMajorAt = 0; // timestamp of last major spell — majors max once per 30 min
 
 // ─── Character bible ──────────────────────────────────────────────────────────
 // The full story/character reference for the show — consumed by the future AI
 // conductor via GET /api/character-bible.
 const CHARACTER_BIBLE = {
+  showIdentity: {
+    showName: 'The Hollow Storm',
+    location: 'Thornfield Cemetery',
+    established: '1724 — predates the ritual by decades',
+    lore: 'The Thorn family built and managed Thornfield Cemetery before Evelina arrived with her ideas ' +
+      'about the storm. Lenora\'s family connection to the cemetery is never explicitly stated — it exists ' +
+      'in the lore for those who notice.',
+    physicalElements: 'Crypt carved with "Thornfield Cemetery Est. 1724", tombstone props with period appropriate names.',
+    usage: 'Characters may reference Thornfield by name — Evelina casually, Lenora with personal weight.',
+  },
   story: {
     title: 'The Hollow Storm',
     summary: 'Three hundred years ago, witches Evelina Crowe and Lenora Thorn attempted to harness an ' +
@@ -828,7 +876,7 @@ const CHARACTER_BIBLE = {
       whyTalksToGuests: 'Constantly seeking confirmation. "Did you hear that thunder? It\'s getting closer isn\'t it?"',
       showFunction: 'Reacts to every environmental effect. Every thunder sound, every lightning flash, every fog burst — Jasper notices it first. His nervousness builds suspense.',
       speechStyle: 'Higher pitch, anxious energy, words slightly rushed. Never full sentences when alarmed.',
-      relationships: { edgar: 'Comedy duo. Jasper worries, Edgar teases.' },
+      relationships: { edgar: 'Comedy duo. Jasper worries, Edgar teases. Banter: "The storm is angry." / "The storm doesn\'t even know who you are."' },
       arc: 'Gets progressively more nervous as storm escalates. By Overhead his warnings become genuine.',
     },
     edgar: {
@@ -839,14 +887,18 @@ const CHARACTER_BIBLE = {
       whyTalksToGuests: 'Entertainment. Boredom. Guests are the most interesting thing that happens all year.',
       showFunction: 'Breaks tension. Comedy relief. Every time things get serious Edgar undercuts it.',
       speechStyle: 'Low, sardonic, unhurried. Everything is an effort not worth making. Pauses for comic effect.',
-      relationships: { jasper: 'Running gag: denies ever being worried. Jasper catches him paying attention. Edgar deflects.' },
+      relationships: { jasper: 'Running gag: denies ever being worried. Jasper catches him paying attention. Edgar deflects. Banter: Jasper: "The storm is angry." Edgar: "The storm doesn\'t even know who you are."' },
       arc: 'Starts completely indifferent. Gradually pays more attention as storm builds. By Overhead he\'s watching — but will never admit it.',
     },
   },
-  spellRules: 'Claude picks spells based on storm progression and crowd state. Never the same spell twice in a row. Large crowd gets Spell of Calling (group participation), individuals get more intimate spells. Grand Ritual only on Overhead.',
+  spellRules: 'Minor spells affect the cauldron only and happen more frequently. Major spells expand ' +
+    'lighting across the whole yard — maximum once or twice per hour. Claude picks spells based on storm ' +
+    'progression and crowd state. Never the same spell twice in a row. Large crowd gets Spell of Calling ' +
+    '(group participation), individuals get more intimate spells. Grand Ritual only on Overhead.',
   spells: {
     binding: {
-      cauldron: 'Deep blue pulse',
+      tier: 'minor',
+      cauldron: 'Deep blue pulse only',
       evelinaAsks: '"Hold still — don\'t break the circle"',
       reactions: {
         lenora: '"That won\'t work either"',
@@ -855,7 +907,8 @@ const CHARACTER_BIBLE = {
       },
     },
     calling: {
-      cauldron: 'Amber/gold flash',
+      tier: 'minor',
+      cauldron: 'Amber/gold flash only',
       evelinaAsks: 'Calls the storm by name, asks guests: "Say it with me"',
       reactions: {
         lenora: '"You cannot call what is already here"',
@@ -864,16 +917,25 @@ const CHARACTER_BIBLE = {
       },
     },
     unraveling: {
+      tier: 'major',
       cauldron: 'Cycles green to purple rapidly',
+      yardLighting: 'Witch lights shift from purple to a deep unsettling green pulse; skeleton fire ' +
+        'flickers faster and more erratic — storm energy reaching the far end of the yard; moonlight dims ' +
+        'slightly — something pulling energy from it; all returns to base after 20 seconds.',
       evelinaAsks: '"Reach toward it"',
       reactions: {
-        lenora: 'Genuinely concerned: "Evelina — not that one"',
+        lenora: 'Genuinely concerned: "Evelina — not that one" — she knows this one actually does something.',
         jasper: 'Panicking.',
-        edgar: 'Sitting up slightly, paying attention but won\'t admit it.',
+        edgar: 'Sitting up, paying attention, won\'t admit it.',
       },
     },
     memory: {
+      tier: 'major',
       cauldron: 'Deep crimson',
+      yardLighting: 'Witch lights shift to deep crimson matching the cauldron — two witches connected by ' +
+        'the same color; skeleton lights drop to very dim, almost out — memory pulling energy from ' +
+        'everything; moonlight stays steady — this spell reaches inward not outward; slow fade back to ' +
+        'base over 30 seconds — not a snap back, something heavy just happened.',
       evelinaAsks: '"Remember something lost"',
       reactions: {
         lenora: 'Quiet, sad: "I remember everything"',
@@ -882,12 +944,17 @@ const CHARACTER_BIBLE = {
       },
     },
     grandritual: {
-      cauldron: 'All colors cycle rapidly through cauldron',
-      trigger: 'Overhead strike only',
+      tier: 'ritual',
+      trigger: 'Overhead strike only — fires once at the end of the night',
+      cauldron: 'Cycles all colors rapidly',
+      yardLighting: 'All lights cycle through spell colors simultaneously — the whole yard is part of the ' +
+        'ritual; storm trackers full electric blue then white; skeleton fire blazes maximum brightness; ' +
+        'witch lights pulse rapidly between purple and white; everything building toward the overhead ' +
+        'strike; lightning fires — full white blast — everything returns to base.',
       evelinaAsks: '"Give me what you have — all of it"',
       reactions: {
         all: 'All characters respond simultaneously. Lightning crash follows.',
-        finalExchange: 'Lenora: "Well?" / Evelina: "Almost." / Jasper: "We\'re doomed." / Edgar: "See everyone next Halloween." Thunder crashes. Show ends.',
+        finalExchange: 'In the quiet after: Lenora: "Well?" / Evelina: "Almost." / Jasper: "We\'re doomed." / Edgar: "See everyone next Halloween." Thunder crashes. Show ends.',
       },
     },
   },
@@ -916,6 +983,105 @@ const CHARACTER_BIBLE = {
     },
     notes: 'Max 200 chars. Stored in hostContext; markContextUsed() clears after one use (enforced in the AI conductor phase).',
   },
+  offScriptCallouts: {
+    // Extends hostContextField — worked examples of host context → in-character callouts.
+    examples: [
+      {
+        context: 'teenager in black hoodie',
+        evelina: 'Charming: "You there — the one in black. You dress like someone who already knows the storm. Come closer."',
+        lenora: 'Dry: "Leave that one be. Some people wear the dark because it suits them."',
+        jasper: '"Why is he dressed like that... does he KNOW something about the storm?"',
+        edgar: '"Nice hoodie. Very mysterious. Very original."',
+      },
+      {
+        context: 'tiny fairy',
+        evelina: 'Delighted: "A fairy! The little fairy — the storm has never met one of your kind. Wave your wand for me."',
+        lenora: '"Careful, little one. Fairies were always braver than they were wise."',
+        jasper: '"Even the fairy can feel it... right? RIGHT?"',
+        edgar: '"Three hundred years and NOW we get a fairy. Where were you when we needed one."',
+      },
+      {
+        context: 'loud teenagers',
+        evelina: '"So much energy! The storm FEEDS on voices like yours — keep shouting, by all means."',
+        lenora: '"They laughed like that in 1724 too. Briefly."',
+        jasper: '"Please stop yelling, you\'re going to make it ANGRY."',
+        edgar: '"Oh good. Volume. That\'s exactly what this graveyard was missing."',
+      },
+      {
+        context: 'dad with baby',
+        evelina: 'Warm: "A new soul — the youngest visitor Thornfield has seen in centuries. The storm is gentle with the small ones."',
+        lenora: '"Keep that one close tonight. Not everything here remembers how to be careful."',
+        jasper: '"A BABY? Nobody said anything about a baby, what if the storm—"',
+        edgar: '"Relax Jasper. The baby is handling this better than you are."',
+      },
+    ],
+    rules: [
+      'Context expires after ONE interaction — never lingers',
+      'Weave it in organically — never announce it or make it obvious',
+      'Character reacts in their own established voice',
+      'Direct address to the specific guest whenever possible — "you there", "the one in black", "the little fairy"',
+      'If multiple characters react they do so in sequence naturally, not simultaneously',
+    ],
+  },
+  neighborMusicDetection: {
+    volumeCompensation: 'Claude detects persistent loud background noise via the mic and bumps Zone 2 and ' +
+      'Zone 3 up to compensate. Maximum one volume adjustment per 30 minutes — no volume war. Hard ' +
+      'ceiling at Boost preset maximum.',
+    characterReactions: {
+      chance: '1 in 5 random chance, 10–15 minute cooldown between music comments.',
+      evelina: '"Someone nearby thinks their noise rivals MY thunder. How quaint." — dramatically offended, sees it as competition.',
+      lenora: '"Three centuries in a cursed graveyard and we still cannot escape mortal music." — dry acknowledgment of the irony.',
+      jasper: 'Convinced the music is angering the storm, gets more nervous.',
+      edgar: 'The one thing that gets his attention. If Whisper catches lyrics he may comment on the song ' +
+        'specifically: "Is that... is that what they listen to now? No wonder the storm is angry."',
+    },
+    songRecognition: 'If Whisper catches enough lyrics, identify the song and make the reaction ' +
+      'song-specific; fall back to a genre comment. Never reference music more than once per 10–15 ' +
+      'minutes regardless of how long it plays.',
+  },
+  ambientSoundAcknowledgment: {
+    rule: '1 in 3 or 1 in 4 random sounds get a character acknowledgment — never every sound, never ' +
+      'predictable. Random character reacts based on current show state and who last spoke. Never ' +
+      'announce what the sound was — react as if it is real. Edgar\'s reactions to genuinely unsettling ' +
+      'sounds are his arc in miniature — use sparingly. Lenora saying nothing is sometimes the best ' +
+      'reaction — reads as more ominous than any line.',
+    sounds: {
+      wolfHowl: {
+        jasper: '"Did you hear that... something is out there"',
+        edgar: '"It\'s just a wolf Jasper, we\'ve been through this"',
+        evelina: '"The storm calls its creatures... they sense what\'s coming"',
+        lenora: 'Quiet: "They\'ve been getting closer"',
+      },
+      crowCaw: {
+        jasper: '"The crows know... they always know first"',
+        edgar: '"It\'s a bird Jasper"',
+        evelina: '"My messengers"',
+        lenora: 'Says nothing, which is somehow worse.',
+      },
+      demonLaughOrVoice: {
+        jasper: 'Genuinely terrified: "WHAT WAS THAT"',
+        edgar: 'Long pause: "...okay that one was a little unsettling"',
+        evelina: 'Delighted: "Old friends"',
+        lenora: '"Don\'t ask"',
+      },
+      evilLaughter: {
+        edgar: '"That wasn\'t me" — breaking his indifference slightly.',
+        jasper: '"IT\'S IN THE STORM"',
+        evelina: '"YES" — delighted.',
+        lenora: 'Dry: "It never is"',
+      },
+      chains: {
+        jasper: '"They\'re restless tonight"',
+        edgar: '"They\'re always restless, you just never listen"',
+        evelina: '"The bound ones feel the ritual approaching"',
+      },
+      owlHoot: {
+        jasper: '"Even the owls are watching"',
+        edgar: '"The owl is watching YOU specifically Jasper"',
+        lenora: '"The old ones send their regards"',
+      },
+    },
+  },
   crossCharacterAwareness: [
     'When Evelina casts a spell, all other characters react in character.',
     'When Jasper notices storm effects, Evelina takes it as encouragement.',
@@ -935,6 +1101,13 @@ function castSpellLights(spellKey) {
   const ids = getSlotIds('cauldron');
   if (!ids.length) return;
 
+  // Track every timer this cast spawns so allstop/strikedown/stopEffects can
+  // kill mid-spell restores cleanly.
+  const track = (fn, ms) => { const t = setTimeout(fn, ms); effects.spellTimers.push(t); return t; };
+
+  // Spell window: minors 20s; Memory holds 30s (its fade back is slow — see below)
+  const durMs = spellKey === 'memory' ? 30000 : 20000;
+
   // Build phase — force a few brighter green steps over 3s while the boil
   // loop keeps running in green mode underneath
   effects.cauldronMode = 'green';
@@ -946,7 +1119,7 @@ function castSpellLights(spellKey) {
     { at: 2400, bri: 85 },
   ];
   for (const step of buildSteps) {
-    setTimeout(() => {
+    track(() => {
       if (effects.cauldronMode !== 'green') return;
       goveeSetColor(0, 180, 0, ids).catch(() => {});
       goveeSetBrightness(step.bri, ids).catch(() => {});
@@ -954,7 +1127,7 @@ function castSpellLights(spellKey) {
   }
 
   // Spell erupts — boil loop takes over with the spell's sequence
-  setTimeout(() => {
+  track(() => {
     effects.cauldronMode = 'spell';
     effects.spellSeq = { seq: spell.seq, colors: spell.colors, idx: 0 };
     broadcastLog(`Cauldron: ${spell.name} — ${spell.seq} sequence`, 'LIGHT');
@@ -965,10 +1138,36 @@ function castSpellLights(spellKey) {
       goveeSetColor(c.r, c.g, c.b, ids).catch(() => {});
       goveeSetBrightness(85, ids).catch(() => {});
     }
+
+    // MAJOR spells take over the whole yard — the existing skeleton/witch loops
+    // consult effects.spellYard (no duplicate loops spawned).
+    if (spell.tier === 'major' || spell.tier === 'ritual') {
+      effects.spellYard = spellKey;
+      broadcastLog(`${spell.name}: full-yard lighting takeover`, 'LIGHT');
+      if (spellKey === 'unraveling') {
+        // Moonlight dims slightly — something pulling energy from it (one-time)
+        const moonIds = getSlotIds('moon');
+        if (moonIds.length) goveeSetBrightness(28, moonIds).catch(() => {});
+      } else if (spellKey === 'grandritual') {
+        // Pre-Overhead build: storm trackers full electric blue then white.
+        // The Overhead white blast + base restore come from flashLights stage 4.
+        const stormIds = getSlotIds('storm');
+        if (stormIds.length) {
+          goveeSetColor(80, 180, 255, stormIds).catch(() => {});
+          goveeSetBrightness(100, stormIds).catch(() => {});
+          track(() => {
+            if (effects.spellYard !== 'grandritual') return;
+            goveeSetColor(255, 255, 255, stormIds).catch(() => {});
+            goveeSetBrightness(100, stormIds).catch(() => {});
+          }, Math.round(durMs / 2));
+        }
+      }
+    }
   }, 3000);
 
-  // Back to green boil after 20s of spell
-  setTimeout(() => {
+  // End of spell window — back to green boil (grandritual's restore comes from
+  // the Overhead blast in flashLights instead)
+  track(() => {
     effects.cauldronMode = 'green';
     effects.spellSeq = null;
     broadcastLog(`Cauldron: ${spell.name} fades — back to green boil`, 'LIGHT');
@@ -978,11 +1177,52 @@ function castSpellLights(spellKey) {
       goveeSetColor(base.color.r, base.color.g, base.color.b, ids).catch(() => {});
       goveeSetBrightness(base.bri, ids).catch(() => {});
     }
-  }, 23000);
+
+    if (spellKey === 'unraveling') {
+      // Snap back: release the yard and restore the moon to base
+      effects.spellYard = null;
+      const moonIds = getSlotIds('moon');
+      if (moonIds.length) {
+        const m = SLOT_BASES.moon;
+        goveeSetColor(m.color.r, m.color.g, m.color.b, moonIds).catch(() => {});
+        goveeSetBrightness(m.bri, moonIds).catch(() => {});
+      }
+    } else if (spellKey === 'memory') {
+      // SLOW fade back over ~3 staged steps — not a snap. Something heavy just
+      // happened; the yard exhales rather than flipping a switch.
+      const witchIds = getSlotIds('witch');
+      const skelIds = getSlotIds('skeleton');
+      effects.suspended = true; // loops keep rescheduling but stay quiet during the fade
+      track(() => { // step 1: crimson dims further on the witches
+        if (witchIds.length) { goveeSetColor(150, 0, 30, witchIds).catch(() => {}); goveeSetBrightness(12, witchIds).catch(() => {}); }
+      }, 0);
+      track(() => { // step 2: base colors return, still dim
+        const w = SLOT_BASES.witch, s = SLOT_BASES.skeleton;
+        if (witchIds.length) { goveeSetColor(w.color.r, w.color.g, w.color.b, witchIds).catch(() => {}); goveeSetBrightness(15, witchIds).catch(() => {}); }
+        if (skelIds.length) { goveeSetColor(s.color.r, s.color.g, s.color.b, skelIds).catch(() => {}); goveeSetBrightness(12, skelIds).catch(() => {}); }
+      }, 1000);
+      track(() => { // step 3: full base brightness, loops resume normal on next tick
+        effects.spellYard = null;
+        effects.suspended = false;
+        const w = SLOT_BASES.witch, s = SLOT_BASES.skeleton;
+        if (witchIds.length) goveeSetBrightness(w.bri, witchIds).catch(() => {});
+        if (skelIds.length) goveeSetBrightness(s.bri, skelIds).catch(() => {});
+      }, 2000);
+    }
+    // grandritual: spellYard stays set until the Overhead blast's
+    // applyShowScheme clears it and restores every slot to base.
+  }, 3000 + durMs);
 }
 
+// Random picker: never grandritual, never the same spell twice in a row.
+// Majors are rate-limited to once per 30 min — otherwise minors only.
 function pickRandomSpell() {
-  const keys = Object.keys(SPELLS).filter(k => k !== 'grandritual' && k !== lastSpell);
+  const majorAllowed = (Date.now() - lastMajorAt) >= 30 * 60 * 1000;
+  let keys = Object.keys(SPELLS).filter(k =>
+    SPELLS[k].tier !== 'ritual' &&
+    k !== lastSpell &&
+    (majorAllowed || SPELLS[k].tier === 'minor'));
+  if (!keys.length) keys = Object.keys(SPELLS).filter(k => SPELLS[k].tier === 'minor');
   return keys[Math.floor(Math.random() * keys.length)];
 }
 
@@ -991,6 +1231,7 @@ async function fireWitch(clip, spellKey) {
   playWitchClip(clip);
   const key = (spellKey && SPELLS[spellKey]) ? spellKey : pickRandomSpell();
   lastSpell = key;
+  if (SPELLS[key].tier === 'major') lastMajorAt = Date.now();
   castSpellLights(key);
   broadcastLog(`Evelina casts ${SPELLS[key].name}`, 'WITCH');
   try {
