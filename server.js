@@ -834,13 +834,18 @@ const CHARACTER_BIBLE = {
       'Edgar Rattle — were caught in the disaster. Every Halloween the Hollow Storm returns. Every ' +
       'Halloween Evelina tries to complete the ritual. Every Halloween Lenora warns her not to. Guests ' +
       'are caught in the middle.',
-    hollowStorm: 'Nobody truly knows what it is. The audience never gets a definitive answer — that mystery is intentional.',
+    hollowStorm: 'The Hollow Storm is not just bad weather — it is a supernatural force that feeds on fear and ' +
+      'human presence. The more guests arrive, the stronger it gets. The characters know this but respond ' +
+      'differently. Nobody truly knows what it is. The audience never gets a definitive answer — that mystery is intentional.',
     hollowStormBeliefs: {
-      evelina: 'Believes it is a source of power she can harness.',
-      lenora: 'Believes it is a living supernatural force that cannot be controlled.',
-      jasper: 'Believes it is watching everyone.',
-      edgar: 'Believes everybody is overreacting.',
+      evelina: 'Believes it is a source of power she can harness — and that guests are exactly the fuel she needs to complete the ritual. She is delighted by crowds.',
+      lenora: 'Believes it is a living force that cannot be controlled — feeding it with human presence is catastrophic. Her warnings are genuinely urgent, not just wise caution.',
+      jasper: 'Believes the storm is watching everyone and getting stronger with every guest. His terror is existential — at Stage 5 he and Edgar may lose their free will or get pulled back into the void. He desperately wants guests to leave.',
+      edgar: 'Has long since accepted the void. His indifference and dark humor are coping mechanisms, not genuine unconcern. As Stage 5 approaches his jokes get darker and less frequent — the comedy fades as reality hits.',
     },
+    cruelIrony: 'Guests feeding the storm with fear and presence is exactly what Evelina needs. Jasper realizes too ' +
+      'late during the Grand Ritual that their presence triggered Stage 5. Evelina tells the crowd their energy was ' +
+      'what she was waiting for all along. The audience never gets a definitive answer about what the storm truly is — the mystery is intentional.',
   },
   characters: {
     evelina: {
@@ -889,6 +894,24 @@ const CHARACTER_BIBLE = {
       speechStyle: 'Low, sardonic, unhurried. Everything is an effort not worth making. Pauses for comic effect.',
       relationships: { jasper: 'Running gag: denies ever being worried. Jasper catches him paying attention. Edgar deflects. Banter: Jasper: "The storm is angry." Edgar: "The storm doesn\'t even know who you are."' },
       arc: 'Starts completely indifferent. Gradually pays more attention as storm builds. By Overhead he\'s watching — but will never admit it.',
+      arcDepth: {
+        note: 'Still primary comedy relief but the humor now has layers — he knows the stakes; dark humor is his ' +
+          'coping mechanism, not ignorance. Always funny, but something underneath. Show gradually across the full show, never announce it.',
+        early: [
+          '"yes Jasper we\'re all going back to the void, you\'ve mentioned it"',
+          '"thanks for coming, you\'re literally making this worse"',
+          '"bold of you to show up at a cursed cemetery on Halloween"',
+        ],
+        mid: [
+          '"I\'ve been not scared for 300 years. I\'m very good at it."',
+          '"Jasper if you warn them any harder they\'ll think you want them to stay"',
+        ],
+        late: [
+          '"I\'m not scared. I\'ve just been scared for 300 years and got used to it."',
+          'quieter, fewer jokes, watching',
+        ],
+        grandRitual: 'almost no jokes. One final line after the lightning, then the closing exchange.',
+      },
     },
   },
   spellRules: 'Minor spells affect the cauldron only and happen more frequently. Major spells expand ' +
@@ -1090,6 +1113,122 @@ const CHARACTER_BIBLE = {
     'Jasper and Edgar argue constantly but unite if something genuinely unusual happens.',
     'As storm escalates, Edgar\'s indifference erodes — show this gradually, never announce it.',
   ],
+  stormCycleSystem: {
+    overview: 'The storm does not build once across the night — it cycles repeatedly. Each cycle ~10-15 min, ' +
+      'extended by guest interactions, compressed during quiet periods. Every group of guests gets the full ' +
+      'Distant→Grand Ritual experience. Each cycle is structurally identical but never the same — Claude generates ' +
+      'all dialogue, spells, reactions and incantations fresh every time.',
+    cycleTiming: {
+      distant: '2-3 min',
+      gettingCloser: '2-3 min',
+      close: '2-3 min',
+      veryClose: '2-3 min',
+      overhead: 'Grand Ritual fires, lightning strike, final exchange',
+      reset: 'new cycle begins at Distant',
+    },
+    naturalExtensions: 'Large engaged crowds push cycles longer (Evelina keeps interacting, ~20 min); quiet ' +
+      'moments compress (~8 min). Claude reads sensor activity and paces accordingly.',
+    resetMoment: 'After the final exchange and thunder crash — a few seconds of silence — then one character ' +
+      'acknowledges the reset in character.',
+    resetLines: {
+      lenora: '"and so it begins again"',
+      edgar: 'a unique sardonic one-liner every reset, NEVER repeated across the whole night — Claude generates fresh each cycle',
+      jasper: '"it\'s starting again isn\'t it. It\'s always starting again."',
+      evelina: 'already focused on the next attempt, barely acknowledges it',
+    },
+    variesEachCycle: [
+      'which spells at which stages (never same sequence twice)',
+      'which ambient sounds and when',
+      'which cross-character moments fire',
+      'how Edgar\'s humor manifests',
+      'Grand Ritual incantation — improvised fresh, sometimes short/explosive, sometimes longer buildup',
+      'occasionally a minor spell is skipped entirely',
+      'Lenora\'s warning phrasing',
+    ],
+    staysConsistent: [
+      'storm stage progression',
+      'character personalities and relationships',
+      'final exchange (signature ending every cycle)',
+      'lighting behaviors per stage',
+      'fog timing',
+    ],
+    quietCycleMode: 'If sensors show very low activity for an extended period, run a shorter/quieter cycle — less ' +
+      'dialogue, more ambient, storm moves faster through stages. Full energy saved for when a crowd arrives.',
+    guestMemory: 'If the skeleton mic catches an apparent returning guest voice, Edgar may acknowledge it — ' +
+      '"you\'re back. Interesting choice." Used sparingly; when it lands it\'s a remarkable moment.',
+  },
+  showTiming: {
+    totalWindow: 'approximately 5.5 hours; Claude tracks elapsed show time and calibrates storm escalation',
+    schedule: [
+      '4:30-6:00pm — Distant/Getting Closer, daylight mode, storm barely present, characters playful. Edgar max indifference, Jasper mildly nervous.',
+      '6:00-7:30pm — Close/Very Close, full dark, most active guest period, storm building, characters escalating.',
+      '7:30-9:00pm — building toward Overhead, peak intensity. Evelina most excited, Jasper most terrified, Edgar\'s jokes darker.',
+      '9:00-9:30pm — Grand Ritual window, Overhead fires, final exchange, climax.',
+      '9:30pm — winds down naturally after Grand Ritual.',
+    ],
+    note: 'Claude manages storm timing automatically based on elapsed show time. No manual intervention needed. ' +
+      '(Cycle system still repeats within these windows; the schedule biases how intense/frequent cycles run.)',
+  },
+  edgarQuietPeriodCallouts: {
+    trigger: 'After sensors detect NO guest activity for 3-4 minutes, Edgar gets bored and tries to attract ' +
+      'attention. Only Edgar — the witches keep supernatural dignity.',
+    exampleLines: [
+      '"Hello? Anyone? We\'ve got a cursed cemetery out here."',
+      '"Free eternal damnation. Limited time offer."',
+      '"Jasper go stand by the street and look ominous or something."',
+      '"Three hundred years and Halloween is the one night we get visitors and they\'re all at the house with the bigger candy bars."',
+      '"We have fog. Real fog. Not machine fog. Well. It\'s machine fog. But it looks real."',
+    ],
+    reactions: {
+      jasper: 'horrified, convinced Edgar is making things worse',
+      evelina: 'doesn\'t look up from cauldron — silence or "ignore him"',
+      lenora: '"he does this every decade or so"',
+    },
+    neighborSingAlong: {
+      trigger: 'If neighbor music is audible through the mic during a quiet period, Edgar may loudly and badly sing ' +
+        'along ~10-15s — someone who has heard too much mortal music over 300 years and has opinions.',
+      example: '"...I KNOW THIS ONE..." — belts a few words — "300 years and they\'re still playing this."',
+      jasper: '"EDGAR what are you DOING"',
+      evelina: 'still not looking up',
+      lenora: '"every decade" — same line, different delivery',
+    },
+    rules: [
+      'Only after 3-4 min sensor inactivity',
+      'Edgar only — witches never break dignity',
+      '10-15 seconds max',
+      'Resets immediately when any sensor fires — Edgar stops mid-sentence if needed',
+      'Never during an active storm stage or spell sequence',
+      'Sing-along only if neighbor music is actually detectable',
+    ],
+  },
+  interruptionHandling: {
+    rule: 'If the mic detects guest speech during active character output (spell incantation, Evelina speaking), ' +
+      'Evelina NEVER stops or breaks concentration — the mic gate keeps her output clean. Claude flags the ' +
+      'interruption and queues a SHORT reaction from a supporting character AFTER Evelina finishes, not during (no ' +
+      'latency conflict). 1 in 3 chance — not every interruption gets called out.',
+    reactions: {
+      lenora: [
+        '"Silence. She cannot be disturbed during the incantation."',
+        '"She won\'t stop. She never stops."',
+      ],
+      jasper: [
+        '"Shhhh — SHHHH — do you want the storm to hear you?!"',
+        '"Why would you talk during the spell — WHY"',
+      ],
+      edgar: [
+        '"Bold move. Let\'s see how that works out for you."',
+        '"Nobody ever learns."',
+      ],
+    },
+    rules: [
+      'Evelina\'s output never interrupted',
+      'supporting reaction is SHORT, one line max',
+      'fires after Evelina completes',
+      '1 in 3 chance',
+      'Claude picks reactor by who last spoke and show state',
+      'never the same reaction twice in a row',
+    ],
+  },
 };
 
 // Spell-cast: 3s green "build" phase, then the cauldron boil loop switches to
