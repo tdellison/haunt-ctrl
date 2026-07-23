@@ -78,6 +78,13 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - Owner will report dialed-in brightness values after outdoor testing → lock into SLOT_BASES.
 - Smart plugs: DROPPED — owner controls them via their own app (background fire glow or other colors), not server-controlled.
 
+## Phase 2 additions (built)
+- **Voice input on Host Context**: 🎤 button beside SEND on the SHOW tab, Web Speech API (Chrome/Safari only — button hidden + note shown when unsupported). Tap to record (button turns red), transcript fills the field live, tap again or 3s silence auto-sends via the existing `/api/context` path.
+- **Weather-aware fog auto-timer**: OpenWeatherMap via `weather` object; configured from env `OPENWEATHER_KEY`/`OPENWEATHER_ZIP` or at runtime via `POST /api/weather/config {zip, apiKey}` (persisted to gitignored `weather-config.json`, loaded on boot). `GET /api/weather` reads it; polls every 30 min + once at startup; degrades gracefully (keeps last known values, uses Node `https` not fetch). `fogGapFactor()` multiplies ONLY the AUTO fog interval — cold <45F ×1.3 (longer gaps), warm >65F ×0.8, windy >12mph ×0.85, clamped 0.6–1.6; manual bursts untouched. Test-tab System panel has a readout + refresh + zip/key save.
+- **One-tap Show Start** (`POST /api/show/start`): fog warmup → applyShowScheme + effects → ambient → sensors armed (`state.sensorsArmed`) → storm cycle reset to Distant → `state.showActive`/`state.showStartedAt` set (elapsed tracking). `POST /api/show/stop` marks inactive + stops storm cycle (NOT a teardown — that's ALL STOP/STRIKE DOWN). SHOW tab has a green ▶ START SHOW button that flips to red ■ END SHOW with a live elapsed readout.
+- **Lenora is a STATIC PROP** — voice only, no physical movement, never raises her voice (`characters.lenora.staging` in CHARACTER_BIBLE).
+- Onkyo receiver IP is still **192.168.1.190** pending the reserved-IP update the owner has in mind.
+
 ## Known gotchas
 - Dell IP was 192.168.1.8, now **192.168.1.17** (bat + docs reference it).
 - If site won't load: bat window shows the error above "SERVER STOPPED"; commonest cause historically was missing node_modules (now committed).

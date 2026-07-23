@@ -625,6 +625,8 @@ select.raw-input { width:auto; flex:0 0 auto; min-width:90px; }
 
 /* ── Zone level indicator tiles ── */
 .zone-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+#host-mic-btn.recording { background:#c0392b !important; border-color:#e74c3c !important; color:#fff !important; animation:micpulse 1s infinite; }
+@keyframes micpulse { 0%,100%{opacity:1} 50%{opacity:.55} }
 .zone-tile {
   background:rgba(0,0,0,.35); border:1px solid var(--border2); border-radius:3px;
   padding:16px 10px; text-align:center;
@@ -869,6 +871,12 @@ body::before { animation:scanlines 10s linear infinite; }
 <!-- ─── SHOW ─── -->
 <div class="pane active" id="pane-show">
 
+  <!-- One-tap Show Start -->
+  <div class="panel">
+    <button class="btn btn-green btn-full btn-lg" id="show-start-btn" onclick="toggleShow()">▶ START SHOW</button>
+    <div id="show-elapsed" style="font-size:.7em;color:var(--dim2);letter-spacing:1px;margin-top:8px;text-align:center;display:none"></div>
+  </div>
+
   <!-- Zone level indicators (read-only) -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🔊</span>Zone Levels</div>
@@ -897,8 +905,10 @@ body::before { animation:scanlines 10s linear infinite; }
     <div class="panel-title"><span class="pt-icon">🎭</span>Host Context</div>
     <div class="field-row">
       <input id="host-context-input" placeholder='e.g. "tiny Elsa costume · shy kid · group of teens"' maxlength="200"/>
+      <button class="btn btn-blue btn-sm" id="host-mic-btn" onclick="toggleHostMic()" style="min-width:44px;min-height:44px" title="Voice input">🎤</button>
       <button class="btn btn-purple btn-sm" onclick="sendHostContext()">SEND</button>
     </div>
+    <div id="host-mic-note" style="font-size:.62em;color:var(--dim2);letter-spacing:1px;margin-top:4px;display:none">Voice input needs Chrome or Safari</div>
     <div id="host-context-current" style="font-size:.68em;color:var(--dim2);letter-spacing:1px;margin-top:6px">Active: none</div>
   </div>
 
@@ -1137,6 +1147,13 @@ body::before { animation:scanlines 10s linear infinite; }
     <div class="info-row"><span class="info-key">Memory</span><span class="info-val" id="sys-mem">--</span></div>
     <div class="info-row" style="margin-bottom:12px"><span class="info-key">Clients</span><span class="info-val" id="sys-clients">--</span></div>
     <button class="btn btn-blue btn-sm" onclick="refreshSystemInfo()" style="margin-bottom:14px">↻ REFRESH INFO</button>
+
+    <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Weather (fog auto-timer):</div>
+    <div class="info-row"><span class="info-key">Conditions</span><span class="info-val" id="wx-readout">--</span></div>
+    <button class="btn btn-blue btn-sm" onclick="refreshWeather()" style="margin-bottom:10px">↻ REFRESH WEATHER</button>
+    <div class="field-row"><label>ZIP</label><input id="wx-zip" placeholder="e.g. 90210"/></div>
+    <div class="field-row"><label>API Key</label><input id="wx-key" placeholder="OpenWeatherMap key"/></div>
+    <button class="btn btn-orange btn-sm" onclick="saveWeatherConfig()" style="margin-bottom:14px">💾 SAVE WEATHER CONFIG</button>
 
     <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Media folders:</div>
     <div id="media-lists" style="margin-bottom:14px">
@@ -1445,6 +1462,45 @@ function applyState(s) {
     btn.className = s.ambientActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
   }
   if (dot) dot.classList.toggle('show', !!s.ambientActive);
+
+  // One-tap Show Start
+  const ssb = document.getElementById('show-start-btn');
+  if (ssb && s.showActive !== undefined) {
+    ssb.textContent = s.showActive ? '■ END SHOW' : '▶ START SHOW';
+    ssb.className = s.showActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
+  }
+  updateShowElapsed(s);
+
+  // Weather readout (System panel)
+  if (s.weather) updateWeatherReadout(s.weather);
+}
+
+function updateShowElapsed(s) {
+  const el = document.getElementById('show-elapsed');
+  if (!el) return;
+  if (s.showActive && s.showStartedAt) {
+    const secs = Math.max(0, Math.floor((Date.now() - s.showStartedAt) / 1000));
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+    el.textContent = `Show running — elapsed ${h}h ${m}m${s.sensorsArmed ? ' · sensors armed' : ''}`;
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function updateWeatherReadout(w) {
+  const el = document.getElementById('wx-readout');
+  if (!el) return;
+  if (w.updatedAt) {
+    const t = w.tempF != null ? `${Math.round(w.tempF)}°F` : '--';
+    const wind = w.windMph != null ? `${Math.round(w.windMph)}mph` : '--';
+    const upd = new Date(w.updatedAt).toLocaleTimeString('en-US', { hour12:false });
+    el.textContent = `${t} · wind ${wind} · ${w.desc || '--'} · ${upd}`;
+  } else {
+    el.textContent = w.zip ? 'Configured — awaiting fetch' : 'Not configured';
+  }
+  const zi = document.getElementById('wx-zip');
+  if (zi && !zi.value && w.zip) zi.value = w.zip;
 }
 
 function applyConfig(c) {
@@ -1631,6 +1687,75 @@ async function sendHostContext() {
   if (!text) return;
   await api('/api/context', { text });
   input.value = '';
+}
+
+// ── Voice input on Host Context (Web Speech API) ──────────────────────────────
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let hostRec = null, hostRecActive = false, hostSilenceTimer = null;
+(function initHostMic() {
+  const btn = document.getElementById('host-mic-btn');
+  if (!SpeechRec) {
+    if (btn) btn.style.display = 'none';
+    const note = document.getElementById('host-mic-note');
+    if (note) note.style.display = 'block';
+  }
+})();
+function stopHostMicState() {
+  hostRecActive = false;
+  if (hostSilenceTimer) { clearTimeout(hostSilenceTimer); hostSilenceTimer = null; }
+  const btn = document.getElementById('host-mic-btn');
+  if (btn) btn.classList.remove('recording');
+}
+function toggleHostMic() {
+  if (!SpeechRec) return;
+  if (hostRecActive) { // second tap → stop + auto-send
+    try { hostRec.stop(); } catch(_) {}
+    return;
+  }
+  const input = document.getElementById('host-context-input');
+  const btn = document.getElementById('host-mic-btn');
+  hostRec = new SpeechRec();
+  hostRec.lang = 'en-US';
+  hostRec.interimResults = true;
+  hostRec.continuous = false;
+  hostRecActive = true;
+  if (btn) btn.classList.add('recording');
+  const armSilence = () => {
+    if (hostSilenceTimer) clearTimeout(hostSilenceTimer);
+    hostSilenceTimer = setTimeout(() => { try { hostRec.stop(); } catch(_) {} }, 3000);
+  };
+  hostRec.onresult = (e) => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    input.value = txt.trim().slice(0, 200);
+    armSilence();
+  };
+  hostRec.onspeechend = armSilence;
+  hostRec.onerror = () => { stopHostMicState(); };
+  hostRec.onend = () => {
+    stopHostMicState();
+    if (input.value.trim()) sendHostContext(); // auto-send on stop
+  };
+  try { hostRec.start(); armSilence(); } catch(_) { stopHostMicState(); }
+}
+
+// ── Weather (System panel) ────────────────────────────────────────────────────
+async function refreshWeather() {
+  const r = await fetch('/api/weather').then(x => x.json()).catch(() => null);
+  if (r && r.weather) updateWeatherReadout(r.weather);
+}
+async function saveWeatherConfig() {
+  const zip = document.getElementById('wx-zip').value.trim();
+  const apiKey = document.getElementById('wx-key').value.trim();
+  await api('/api/weather/config', { zip, apiKey });
+  document.getElementById('wx-key').value = '';
+  setTimeout(refreshWeather, 1500);
+}
+
+// ── One-tap Show Start ────────────────────────────────────────────────────────
+async function toggleShow() {
+  if (appState.showActive) await api('/api/show/stop');
+  else await api('/api/show/start');
 }
 
 // ── Mic test (client-side only) ───────────────────────────────────────────────
@@ -1930,6 +2055,7 @@ setInterval(() => {
     document.getElementById('fog-auto-status').textContent =
       `Next in ${countdown(appState.fogAutoNextAt)}`;
   }
+  if (appState.showActive) updateShowElapsed(appState);
 }, 1000);
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────

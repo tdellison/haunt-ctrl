@@ -1,6 +1,7 @@
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const http = require('http');
+const https = require('https');
 const net = require('net');
 const dgram = require('dgram');
 const path = require('path');
@@ -435,6 +436,10 @@ let state = {
   sceneMode:   'normal',
   volumes:     { z1: 30, z2: 25, z3: 20, sub: 30 },
   mute:        { z1: false, z2: false, z3: false },
+  // Phase 2 — one-tap Show Start tracking
+  showActive:   false,
+  showStartedAt: null,
+  sensorsArmed: false,
 };
 
 // ─── Sound presets ────────────────────────────────────────────────────────────
@@ -570,6 +575,78 @@ function loadSlotIPs() {
   } catch(_) {}
 }
 
+// ─── Weather (OpenWeatherMap) — Phase 2 ───────────────────────────────────────
+// Non-blocking, degrades gracefully. Influences ONLY the fog auto-timer gap.
+let weather = { tempF: null, windMph: null, desc: null, updatedAt: null, zip: '', apiKey: '' };
+if (process.env.OPENWEATHER_KEY) weather.apiKey = process.env.OPENWEATHER_KEY;
+if (process.env.OPENWEATHER_ZIP) weather.zip = process.env.OPENWEATHER_ZIP;
+
+const WEATHER_CONFIG_FILE = path.join(__dirname, 'weather-config.json');
+function saveWeatherConfig() {
+  try {
+    fs.writeFileSync(WEATHER_CONFIG_FILE, JSON.stringify({ zip: weather.zip, apiKey: weather.apiKey }), 'utf8');
+  } catch(_) {}
+}
+function loadWeatherConfig() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(WEATHER_CONFIG_FILE, 'utf8'));
+    if (saved.zip)    weather.zip = saved.zip;
+    if (saved.apiKey) weather.apiKey = saved.apiKey;
+    console.log('[HAUNT] Weather config restored from disk');
+  } catch(_) {}
+}
+
+// GET current conditions via Node's built-in https (no global fetch guarantee).
+// On any failure keep the last known values so fog timing stays sane.
+async function fetchWeather() {
+  if (!weather.apiKey || !weather.zip) return; // not configured — stay silent
+  const url = `https://api.openweathermap.org/data/2.5/weather?zip=${encodeURIComponent(weather.zip)},us&units=imperial&appid=${encodeURIComponent(weather.apiKey)}`;
+  return new Promise((resolve) => {
+    try {
+      https.get(url, (r) => {
+        let body = '';
+        r.on('data', (c) => body += c);
+        r.on('end', () => {
+          try {
+            const d = JSON.parse(body);
+            if (d && d.main && typeof d.main.temp === 'number') {
+              weather.tempF     = d.main.temp;
+              weather.windMph   = d.wind ? d.wind.speed : null;
+              weather.desc      = (d.weather && d.weather[0]) ? d.weather[0].description : null;
+              weather.updatedAt = Date.now();
+              broadcastState();
+            } else {
+              broadcastLog(`Weather: unexpected response — keeping last known values`, 'SYSTEM');
+            }
+          } catch (e) {
+            broadcastLog(`Weather: parse failed — keeping last known values`, 'SYSTEM');
+          }
+          resolve();
+        });
+      }).on('error', (e) => {
+        broadcastLog(`Weather: fetch failed (${e.message}) — keeping last known values`, 'SYSTEM');
+        resolve();
+      });
+    } catch (e) {
+      broadcastLog(`Weather: fetch error (${e.message}) — keeping last known values`, 'SYSTEM');
+      resolve();
+    }
+  });
+}
+
+// Multiplier for the fog auto-timer interval. Cold = longer gaps, warm = shorter,
+// windy = shorter (fog blows off faster). Combined multiplicatively, clamped.
+function fogGapFactor() {
+  if (weather.tempF == null && weather.windMph == null) return 1.0; // no data
+  let f = 1.0;
+  if (weather.tempF != null) {
+    if (weather.tempF < 45) f *= 1.3;        // cold — space bursts out
+    else if (weather.tempF > 65) f *= 0.8;   // warm — more frequent
+  }
+  if (weather.windMph != null && weather.windMph > 12) f *= 0.85; // windy — fog dissipates
+  return Math.max(0.6, Math.min(1.6, f));
+}
+
 // ─── Broadcast ────────────────────────────────────────────────────────────────
 function broadcast(obj) {
   const payload = JSON.stringify(obj);
@@ -614,6 +691,10 @@ function stateSnapshot() {
     goveeSlotsConfigured: Object.values(GOVEE_SLOT_IDS).filter(Boolean).length,
     effectsRunning:   effects.running,
     hostContext:      hostContext.text,
+    weather,
+    showActive:       state.showActive,
+    showStartedAt:    state.showStartedAt,
+    sensorsArmed:     state.sensorsArmed,
   };
 }
 
@@ -631,6 +712,7 @@ function markContextUsed() {
 
 loadShowState();
 loadSlotIPs();
+loadWeatherConfig();
 
 wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'state',    data: stateSnapshot() }));
@@ -697,15 +779,19 @@ let fogAuto = {
 
 function scheduleFogBurst() {
   if (!fogAuto.active) return;
-  fogAuto.nextAt = Date.now() + fogAuto.intervalMs;
+  // Phase 2 — weather-aware gap: cold spaces bursts out, warm/windy tightens them.
+  // Only the AUTO timer gap is affected; manual bursts are untouched.
+  const gap = Math.round(fogAuto.intervalMs * fogGapFactor());
+  fogAuto.nextAt = Date.now() + gap;
   broadcastState();
-  broadcastLog('Fog Auto: next burst in 10:00', 'FOG');
+  const mm = Math.floor(gap / 60000), ss = Math.round((gap % 60000) / 1000);
+  broadcastLog(`Fog Auto: next burst in ${mm}:${String(ss).padStart(2,'0')} (weather factor ${fogGapFactor().toFixed(2)})`, 'FOG');
   fogAuto.timer = setTimeout(() => {
     if (!fogAuto.active) return;
     broadcastLog('Fog Auto: firing burst', 'FOG');
     fogBurst(fogAuto.burstMs);
     scheduleFogBurst();
-  }, fogAuto.intervalMs);
+  }, gap);
 }
 
 function startFogAuto() {
@@ -869,6 +955,7 @@ const CHARACTER_BIBLE = {
       whyTalksToGuests: 'Warns them. Asks their opinions. Provides context and lore.',
       showFunction: 'Explains the story, keeps Evelina grounded, provides wisdom when guests need context.',
       speechStyle: 'Measured, dry, slightly tired. Voice of someone who has seen this many times before.',
+      staging: 'STATIC PROP — voice only, no physical movement. Never raises her voice; her power is in stillness and restraint.',
       relationships: {
         evelina: '"I know." Said with the patience of 300 years.',
       },
@@ -1946,6 +2033,72 @@ app.get('/api/context', (req, res) => {
   res.json({ ok: true, hostContext });
 });
 
+// ─── Weather routes — Phase 2 ─────────────────────────────────────────────────
+app.get('/api/weather', (req, res) => {
+  res.json({ ok: true, weather });
+});
+
+app.post('/api/weather/config', async (req, res) => {
+  const { zip, apiKey } = req.body || {};
+  if (zip !== undefined)    weather.zip = String(zip).trim();
+  if (apiKey !== undefined) weather.apiKey = String(apiKey).trim();
+  saveWeatherConfig();
+  broadcastLog('Weather config updated', 'SYSTEM');
+  fetchWeather(); // fire an immediate refresh (non-blocking)
+  res.json({ ok: true, zip: weather.zip, hasKey: !!weather.apiKey });
+});
+
+// ─── One-tap Show Start / Stop — Phase 2 ──────────────────────────────────────
+app.post('/api/show/start', async (req, res) => {
+  broadcastLog('SHOW START sequence initiated', 'SYSTEM');
+
+  // 1. Fog machine warmup (4 min) — does NOT auto-burst until warmup completes.
+  if (!fogAuto.active) startFogAuto();
+  broadcastLog('Show Start 1/6: fog warmup started (4 min)', 'FOG');
+
+  // 2. Govee show scheme + effects engine.
+  await applyShowScheme().catch(() => {});
+  broadcastLog('Show Start 2/6: show scheme + effects applied', 'LIGHT');
+
+  // 3. Ambient loop across zones.
+  await startAmbientSystem().catch(() => {});
+  broadcastLog('Show Start 3/6: ambient loop started', 'AUDIO');
+
+  // 4. Arm sensors (sim route already exists — just flip the flag).
+  state.sensorsArmed = true;
+  broadcastLog('Show Start 4/6: sensors armed', 'SYSTEM');
+
+  // 5. Begin storm cycle at Distant.
+  if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
+  strikeIndex = 0;
+  state.stormActive = true;
+  scheduleNextStrike();
+  broadcastLog('Show Start 5/6: storm cycle begun at Distant', 'SYSTEM');
+
+  // 6. Mark show active + start elapsed-time tracking.
+  state.showActive = true;
+  state.showStartedAt = Date.now();
+  broadcastLog('Show Start 6/6: show marked active', 'SYSTEM');
+
+  broadcastState();
+  broadcastLog('SHOW STARTED', 'SYSTEM');
+  res.json({ ok: true, showActive: state.showActive, showStartedAt: state.showStartedAt });
+});
+
+app.post('/api/show/stop', (req, res) => {
+  // NOT a teardown — this only marks the show inactive and stops the storm cycle.
+  state.showActive = false;
+  state.showStartedAt = null;
+  state.sensorsArmed = false;
+  state.stormActive = false;
+  if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
+  state.stormNextAt = null;
+  strikeIndex = 0;
+  broadcastLog('SHOW ENDED — marked inactive, storm cycle stopped', 'SYSTEM');
+  broadcastState();
+  res.json({ ok: true, showActive: state.showActive });
+});
+
 // ─── Haunt sounds (short overlay FX: owl, crow, wolf, chains…) ────────────────
 app.get('/api/sounds/list', (req, res) => {
   try {
@@ -2324,4 +2477,8 @@ const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`[HAUNT] HAUNT CTRL v3 on http://localhost:${PORT}`);
   testConnection();
+  fetchWeather(); // once at startup (no-op if unconfigured)
 });
+
+// Poll weather every 30 min (only calls out if apiKey + zip are set).
+setInterval(fetchWeather, 30 * 60 * 1000);
