@@ -13,7 +13,8 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - Commit as `Claude <noreply@anthropic.com>`.
 
 ## Hardware
-- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.1.190:60128`. Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
+- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.1.190:60128`. Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic. ⚠️ NEW ROUTER (TP-Link Deco) moved everything to the `192.168.68.x` subnet — the `.1.190` here is STALE. Owner to reserve + report the new Onkyo IP; update `config.receiverIp` when known.
+- **Govee IPs**: also stale after the router swap — old `192.168.1.x` saved slots must be re-entered with new `192.168.68.x` addresses in Test → System (they persist to govee-slots.json).
 - **Fog machine**: fired via receiver 12V trigger commands (`TGA01`/`TGA00`), 4-min warmup, auto-timer exists.
 - **Playback**: VLC command line (`C:\Program Files\VideoLAN\VLC\vlc.exe`), audio clips `--intf dummy --play-and-exit --no-loop --no-repeat --no-video`.
 - **Lights**: Govee LAN API (UDP 4003 send / 4002 listen / 4001 scan). Each zone is a tethered pair on ONE controller IP.
