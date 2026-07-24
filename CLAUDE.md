@@ -13,7 +13,7 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - Commit as `Claude <noreply@anthropic.com>`.
 
 ## Hardware
-- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.1.190:60128`. Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic. ⚠️ NEW ROUTER (TP-Link Deco) moved everything to the `192.168.68.x` subnet — the `.1.190` here is STALE. Owner to reserve + report the new Onkyo IP; update `config.receiverIp` when known.
+- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.68.56:60128` (reserved on the Deco router). Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
 - **Govee IPs**: also stale after the router swap — old `192.168.1.x` saved slots must be re-entered with new `192.168.68.x` addresses in Test → System (they persist to govee-slots.json).
 - **Fog machine**: fired via receiver 12V trigger commands (`TGA01`/`TGA00`), 4-min warmup, auto-timer exists.
 - **Playback**: VLC command line (`C:\Program Files\VideoLAN\VLC\vlc.exe`), audio clips `--intf dummy --play-and-exit --no-loop --no-repeat --no-video`.
@@ -84,7 +84,7 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **Weather-aware fog auto-timer**: OpenWeatherMap via `weather` object; configured from env `OPENWEATHER_KEY`/`OPENWEATHER_ZIP` or at runtime via `POST /api/weather/config {zip, apiKey}` (persisted to gitignored `weather-config.json`, loaded on boot). `GET /api/weather` reads it; polls every 30 min + once at startup; degrades gracefully (keeps last known values, uses Node `https` not fetch). `fogGapFactor()` multiplies ONLY the AUTO fog interval — cold <45F ×1.3 (longer gaps), warm >65F ×0.8, windy >12mph ×0.85, clamped 0.6–1.6; manual bursts untouched. Test-tab System panel has a readout + refresh + zip/key save.
 - **One-tap Show Start** (`POST /api/show/start`): fog warmup → applyShowScheme + effects → ambient → sensors armed (`state.sensorsArmed`) → storm cycle reset to Distant → `state.showActive`/`state.showStartedAt` set (elapsed tracking). `POST /api/show/stop` marks inactive + stops storm cycle (NOT a teardown — that's ALL STOP/STRIKE DOWN). SHOW tab has a green ▶ START SHOW button that flips to red ■ END SHOW with a live elapsed readout.
 - **Lenora is a STATIC PROP** — voice only, no physical movement, never raises her voice (`characters.lenora.staging` in CHARACTER_BIBLE).
-- Onkyo receiver IP is still **192.168.1.190** pending the reserved-IP update the owner has in mind.
+- Onkyo receiver reserved at **192.168.68.56** on the Deco router (updated in config.receiverIp). Govee light IPs still need re-entering on the new .68.x subnet in Test → System.
 
 ## Known gotchas
 - Dell IP was 192.168.1.8, now **192.168.68.52** (bat + docs reference it).
