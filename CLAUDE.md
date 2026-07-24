@@ -1,6 +1,6 @@
 # HAUNT CTRL v3 — Project Memory
 
-Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on a Dell laptop at `C:\Users\tdell\haunt-ctrl-v3\`, controlled from iPhone at `http://192.168.1.17:3000`.
+Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on a Dell laptop at `C:\Users\tdell\haunt-ctrl-v3\`, controlled from iPhone at `http://192.168.68.52:3000`.
 
 ## Workflow (IMPORTANT)
 - **Make all changes directly to files. Never output code to chat. Never ask the user to copy/paste.**
@@ -86,7 +86,7 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - Onkyo receiver IP is still **192.168.1.190** pending the reserved-IP update the owner has in mind.
 
 ## Known gotchas
-- Dell IP was 192.168.1.8, now **192.168.1.17** (bat + docs reference it).
+- Dell IP was 192.168.1.8, now **192.168.68.52** (bat + docs reference it).
 - If site won't load: bat window shows the error above "SERVER STOPPED"; commonest cause historically was missing node_modules (now committed).
 - Stop-hook "Unverified commits" warnings are noise when commits are already authored as noreply@anthropic.com and pushed.
 - GitHub 403 from a session = that session's credentials died; a fresh session fixes it (owner already reconnected the integration).
