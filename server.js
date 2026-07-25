@@ -79,9 +79,25 @@ goveeSocket.on('message', (msg, rinfo) => {
   } catch (_) {}
 });
 
-function goveeSend(ip, cmdObj) {
+// ─── Govee UDP outbound queue (RISK 1) ────────────────────────────────────────
+// Govee LAN controllers drop packets when hit faster than ~20/sec. Every send is
+// funnelled through a PER-IP queue that enforces a minimum 50ms gap. Items carry
+// a priority so a storm flash can jump ahead of idle flicker traffic:
+//   0 = storm flash / Overhead blast (highest)
+//   1 = spell colors, calm phase, Edgar pulse
+//   2 = flicker + idle effect loops (lowest, default)
+// goveeSend still returns a Promise that resolves once the packet is on the wire,
+// so every existing caller works unchanged.
+const GOVEE_MIN_GAP_MS = 50;
+const goveeQueues = {}; // ip -> { q: [], busy: false, lastSent: 0 }
+
+function goveeQueueFor(ip) {
+  if (!goveeQueues[ip]) goveeQueues[ip] = { q: [], busy: false, lastSent: 0 };
+  return goveeQueues[ip];
+}
+
+function goveeRawSend(ip, cmdObj) {
   return new Promise((resolve, reject) => {
-    if (!ip) return resolve();
     const payload = Buffer.from(JSON.stringify({ msg: cmdObj }));
     goveeSocket.send(payload, 0, payload.length, GOVEE_CMD_PORT, ip, (err) => {
       err ? reject(err) : resolve();
@@ -89,23 +105,52 @@ function goveeSend(ip, cmdObj) {
   });
 }
 
-async function goveeSetColor(r, g, b, ids) {
+function goveeDrain(ip) {
+  const s = goveeQueueFor(ip);
+  if (s.busy) return;
+  if (!s.q.length) return;
+  s.busy = true;
+  const wait = Math.max(0, s.lastSent + GOVEE_MIN_GAP_MS - Date.now());
+  setTimeout(async () => {
+    const item = s.q.shift();
+    s.lastSent = Date.now();
+    try { await goveeRawSend(ip, item.cmdObj); item.resolve(); }
+    catch (e) { item.reject(e); }
+    s.busy = false;
+    if (s.q.length) goveeDrain(ip);
+  }, wait);
+}
+
+function goveeSend(ip, cmdObj, priority = 2) {
+  if (!ip) return Promise.resolve();
+  const p = Number.isFinite(priority) ? priority : 2;
+  return new Promise((resolve, reject) => {
+    const s = goveeQueueFor(ip);
+    // stable insert: place after all items of equal-or-higher priority
+    let i = s.q.length;
+    while (i > 0 && s.q[i - 1].priority > p) i--;
+    s.q.splice(i, 0, { cmdObj, priority: p, resolve, reject });
+    goveeDrain(ip);
+  });
+}
+
+async function goveeSetColor(r, g, b, ids, priority = 2) {
   const cmd = { cmd: 'colorwc', data: { color: { r, g, b }, colorTemInKelvin: 0 } };
   const targets = ids ? goveeDevices.filter(d => ids.includes(d.id)) : goveeDevices;
   await Promise.allSettled(targets.map(d => {
     d.color = { r, g, b };
-    return goveeSend(d.ip, cmd);
+    return goveeSend(d.ip, cmd, priority);
   }));
   broadcastGovee();
 }
 
-async function goveeSetBrightness(pct, ids) {
+async function goveeSetBrightness(pct, ids, priority = 2) {
   const val = Math.max(0, Math.min(100, pct));
   const cmd = { cmd: 'brightness', data: { value: val } };
   const targets = ids ? goveeDevices.filter(d => ids.includes(d.id)) : goveeDevices;
   await Promise.allSettled(targets.map(d => {
     d.brightness = val;
-    return goveeSend(d.ip, cmd);
+    return goveeSend(d.ip, cmd, priority);
   }));
   broadcastGovee();
 }
@@ -380,13 +425,13 @@ async function flashLights(stage) {
     return;
   }
   if (stage <= 0) {
-    await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(15, stormIds);
+    await goveeSetColor(30, 120, 255, stormIds, 0); await goveeSetBrightness(15, stormIds, 0);
   } else if (stage === 1) {
-    await goveeSetColor(30, 120, 255, stormIds); await goveeSetBrightness(30, stormIds);
+    await goveeSetColor(30, 120, 255, stormIds, 0); await goveeSetBrightness(30, stormIds, 0);
   } else if (stage === 2) {
-    await goveeSetColor(50, 140, 255, stormIds); await goveeSetBrightness(50, stormIds);
+    await goveeSetColor(50, 140, 255, stormIds, 0); await goveeSetBrightness(50, stormIds, 0);
   } else if (stage === 3) {
-    await goveeSetColor(80, 180, 255, stormIds); await goveeSetBrightness(75, stormIds);
+    await goveeSetColor(80, 180, 255, stormIds, 0); await goveeSetBrightness(75, stormIds, 0);
   } else {
     // Overhead — full white blast on every configured slot (or all lights if
     // no slots). ALL slots including cauldron — owner spec: "no exceptions".
@@ -400,8 +445,8 @@ async function flashLights(stage) {
     // Suspend effect loops so they don't fight the blast — they keep
     // rescheduling and resume on their next tick after the restore.
     effects.suspended = true;
-    await goveeSetColor(255, 255, 255, allIds);
-    await goveeSetBrightness(100, allIds);
+    await goveeSetColor(255, 255, 255, allIds, 0);
+    await goveeSetBrightness(100, allIds, 0);
     setTimeout(async () => {
       if (usingSlots) {
         await applyShowScheme().catch(() => {});
@@ -411,8 +456,8 @@ async function flashLights(stage) {
         for (const snap of snapshot) {
           const dev = goveeDevices.find(d => d.id === snap.id);
           if (!dev) continue;
-          await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }).catch(() => {});
-          await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }).catch(() => {});
+          await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
+          await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }, 0).catch(() => {});
           dev.color = snap.color;
           dev.brightness = snap.brightness;
         }
@@ -440,6 +485,10 @@ let state = {
   showActive:   false,
   showStartedAt: null,
   sensorsArmed: false,
+  // Phase 2 hardening — storm cycle drift stats (RISK 8). The AI conductor reads
+  // these to compress or extend stages so the Grand Ritual lands on the ~9pm
+  // target instead of slowly drifting off schedule across the night.
+  cycleStats: { cyclesCompleted: 0, lastCycleMs: null, avgCycleMs: null, cycleStartedAt: null },
 };
 
 // ─── Sound presets ────────────────────────────────────────────────────────────
@@ -647,6 +696,204 @@ function fogGapFactor() {
   return Math.max(0.6, Math.min(1.6, f));
 }
 
+// ─── Phase 2 hardening ────────────────────────────────────────────────────────
+
+// RISK 5 — sensor priority queue. Three PIRs can trip within the same second
+// (a group walking up the driveway past the graveyard toward the witch). Only
+// the highest-priority zone fires immediately; the rest are queued 3s apart so
+// the show never stacks three reactions on top of each other.
+const SENSOR_PRIORITY = { witch: 0, skeleton: 1, graveyard: 2 };
+const SENSOR_SPACING_MS = 3000;
+const SENSOR_BURST_MS = 2000; // arrivals inside this window are treated as one burst
+let sensorQueue = [];
+let sensorBusy = false;
+let lastSensorAt = 0;
+
+function fireSensorZone(zone, cooldownOverride) {
+  broadcastLog(`Sensor zone ${zone} firing${cooldownOverride ? ' (cooldown override)' : ''}`, 'SYSTEM');
+  // Real per-zone show reactions land here in the AI-conductor phase.
+}
+
+function drainSensorQueue() {
+  if (sensorBusy) return;
+  if (!sensorQueue.length) return;
+  sensorBusy = true;
+  // highest priority (lowest number) first, stable within equal priority
+  sensorQueue.sort((a, b) => a.priority - b.priority || a.at - b.at);
+  const item = sensorQueue.shift();
+  fireSensorZone(item.zone, item.cooldownOverride);
+  setTimeout(() => { sensorBusy = false; drainSensorQueue(); }, SENSOR_SPACING_MS);
+}
+
+function enqueueSensor(zone, cooldownOverride) {
+  const priority = SENSOR_PRIORITY[zone] !== undefined ? SENSOR_PRIORITY[zone] : 3;
+  const now = Date.now();
+  const burst = (now - lastSensorAt) < SENSOR_BURST_MS;
+  lastSensorAt = now;
+  sensorQueue.push({ zone, priority, cooldownOverride, at: now });
+  if (burst || sensorBusy) broadcastLog(`Sensor zone ${zone} queued`, 'SYSTEM');
+  drainSensorQueue();
+}
+
+// RISK 4 — ESP32 heartbeat. The board POSTs /api/sensor/heartbeat on a short
+// interval; 3 missed beats (>30s) marks it offline.
+// IMPORTANT: quiet mode must NEVER be entered on sensor inactivity alone — a dead
+// ESP32 looks exactly like an empty yard. The AI conductor must require
+// esp32.online === true before treating sensor inactivity as "nobody there".
+let esp32 = { lastHeartbeat: null, online: false };
+setInterval(() => {
+  if (!esp32.lastHeartbeat) return;
+  const stale = (Date.now() - esp32.lastHeartbeat) > 30000;
+  if (stale && esp32.online) {
+    esp32.online = false;
+    broadcastLog('ESP32 sensor board OFFLINE (3 missed heartbeats)', 'SYSTEM');
+    broadcastState();
+  }
+}, 10000);
+
+// RISK 10 — VLC ambient watchdog. If the ambient bed is supposed to be running
+// but the process vanished, restart it. Silence in the yard is the one failure
+// guests notice immediately.
+setInterval(() => {
+  if (ambientShouldRun && !ambientProcess) {
+    broadcastLog('VLC ambient crashed — restarting', 'SYSTEM');
+    try { startAmbientLoop(); } catch (e) { broadcastLog(`VLC restart failed: ${e.message}`, 'SYSTEM'); }
+  }
+}, 5000);
+
+// #18 — Model router. Routine orchestration (storm stage bookkeeping, ambient
+// choices, light cues, quiet-period filler) runs on Haiku; anything a guest
+// actually hears as dialogue runs on Sonnet.
+//   Haiku  → storm_stage, ambient_pick, light_cue, quiet_filler, sensor_react …
+//   Sonnet → guest_interaction, grand_ritual, edgar_reset, host_context
+const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET = 'claude-sonnet-4-6';
+const SONNET_TYPES = ['guest_interaction', 'grand_ritual', 'edgar_reset', 'host_context'];
+function getModel(requestType) {
+  return SONNET_TYPES.includes(requestType) ? MODEL_SONNET : MODEL_HAIKU;
+}
+
+// #19 — Nightly token budget. Rates are per million tokens; update here if
+// pricing changes.
+const TOKEN_RATES = {
+  [MODEL_HAIKU]:  { in: 1.00,  out: 5.00  },
+  [MODEL_SONNET]: { in: 3.00,  out: 15.00 },
+};
+let showBudget = {
+  nightlyCapUsd: 9.00,
+  spentUsd: 0,
+  haikuTokens: 0,
+  sonnetTokens: 0,
+  warnThreshold: 0.75,
+  exceeded: false,
+  mode: 'full',
+};
+
+function budgetMode(pct) {
+  if (pct >= 1.00) return 'cached_only';
+  if (pct >= 0.90) return 'cached_preferred';
+  if (pct >= 0.75) return 'haiku_only';
+  return 'full';
+}
+
+function trackTokens(model, inputTokens, outputTokens) {
+  const rates = TOKEN_RATES[model] || TOKEN_RATES[MODEL_HAIKU];
+  const inTok = Math.max(0, Number(inputTokens) || 0);
+  const outTok = Math.max(0, Number(outputTokens) || 0);
+  if (model === MODEL_SONNET) showBudget.sonnetTokens += inTok + outTok;
+  else showBudget.haikuTokens += inTok + outTok;
+  showBudget.spentUsd += (inTok / 1e6) * rates.in + (outTok / 1e6) * rates.out;
+  const pct = showBudget.spentUsd / showBudget.nightlyCapUsd;
+  const prev = showBudget.mode;
+  showBudget.mode = budgetMode(pct);
+  showBudget.exceeded = pct >= 1.00;
+  if (showBudget.mode !== prev) {
+    broadcastLog(`Budget: $${showBudget.spentUsd.toFixed(2)} of $${showBudget.nightlyCapUsd.toFixed(2)} — mode → ${showBudget.mode}`, 'SYSTEM');
+  }
+  broadcastState();
+  return showBudget;
+}
+
+// #13 — CALM AFTER THE STORM. Slow fade of every configured slot to a misty low
+// blue/grey, hold 60-90s, then warm back to the show scheme (Stage 1 look).
+// NOT auto-fired — the AI conductor calls this after the Grand Ritual; the Test
+// tab button and POST /api/calm exist for manual/rehearsal use.
+let calmActive = false;
+let calmTimers = [];
+async function calmPhase() {
+  if (calmActive) return { ok: false, reason: 'calm phase already running' };
+  const allIds = getSlotIds(...Object.keys(SLOT_BASES));
+  calmActive = true;
+  effects.suspended = true; // loops keep rescheduling but stay silent
+  broadcastLog('Calm after the storm: fading to mist', 'LIGHT');
+  broadcastState();
+
+  const ids = allIds.length ? allIds : undefined;
+  if (!allIds.length && !goveeDevices.length) {
+    calmActive = false; effects.suspended = false; broadcastState();
+    return { ok: false, reason: 'no Govee lights' };
+  }
+
+  // ~3s stepped fade down into the mist
+  const steps = [
+    { c: { r: 120, g: 140, b: 170 }, bri: 40, at: 0 },
+    { c: { r: 100, g: 125, b: 150 }, bri: 25, at: 1000 },
+    { c: { r:  90, g: 110, b: 130 }, bri: 18, at: 2000 },
+    { c: { r:  90, g: 110, b: 130 }, bri: 12, at: 3000 },
+  ];
+  for (const st of steps) {
+    calmTimers.push(setTimeout(() => {
+      goveeSetColor(st.c.r, st.c.g, st.c.b, ids, 1).catch(() => {});
+      goveeSetBrightness(st.bri, ids, 1).catch(() => {});
+    }, st.at));
+  }
+
+  const holdMs = Math.round(randBetween(60000, 90000));
+  calmTimers.push(setTimeout(async () => {
+    broadcastLog('Calm phase ending — warming back to Stage 1', 'LIGHT');
+    await applyShowScheme().catch(() => {});
+    effects.suspended = false;
+    calmActive = false;
+    calmTimers = [];
+    broadcastState();
+  }, 3000 + holdMs));
+
+  return { ok: true, holdMs };
+}
+
+// #15 — Edgar's annoyance threshold visual. Skeleton slot pulses angry red
+// between 30 and 90 brightness ~5 times over 10-15s, then back to the fire base.
+let edgarPulseActive = false;
+async function edgarAngryPulse() {
+  if (edgarPulseActive) return { ok: false, reason: 'already pulsing' };
+  const ids = getSlotIds('skeleton');
+  if (!ids.length) return { ok: false, reason: 'skeleton slot not assigned' };
+  edgarPulseActive = true;
+  effects.suspended = true; // hold the fire loop while Edgar loses his composure
+  broadcastLog('Edgar threshold: skeleton lights pulse angry red', 'LIGHT');
+
+  const pulses = 5;
+  const step = Math.round(randBetween(2000, 3000)); // 5 pulses ≈ 10-15s
+  await goveeSetColor(200, 0, 0, ids, 1).catch(() => {});
+  for (let i = 0; i < pulses; i++) {
+    setTimeout(() => {
+      goveeSetColor(200, 0, 0, ids, 1).catch(() => {});
+      goveeSetBrightness(90, ids, 1).catch(() => {});
+    }, i * step);
+    setTimeout(() => {
+      goveeSetBrightness(30, ids, 1).catch(() => {});
+    }, i * step + Math.round(step / 2));
+  }
+  setTimeout(async () => {
+    await applyShowScheme().catch(() => {});
+    effects.suspended = false;
+    edgarPulseActive = false;
+    broadcastState();
+  }, pulses * step + 400);
+
+  return { ok: true, pulses, durationMs: pulses * step };
+}
+
 // ─── Broadcast ────────────────────────────────────────────────────────────────
 function broadcast(obj) {
   const payload = JSON.stringify(obj);
@@ -695,6 +942,12 @@ function stateSnapshot() {
     showActive:       state.showActive,
     showStartedAt:    state.showStartedAt,
     sensorsArmed:     state.sensorsArmed,
+    // Phase 2 hardening
+    esp32,
+    vlcHealth:        { ambientRunning: !!ambientProcess },
+    cycleStats:       state.cycleStats,
+    calmActive,
+    budget:           { spentUsd: showBudget.spentUsd, cap: showBudget.nightlyCapUsd, mode: showBudget.mode },
   };
 }
 
@@ -874,6 +1127,25 @@ function scheduleNextStrike() {
     if (!state.stormActive || state.paused) return scheduleNextStrike();
     await fireStrike(strikeIndex);
     strikeIndex = (strikeIndex + 1) % STRIKE_SEQUENCE.length;
+    // RISK 8 — cycle drift. When the sequence wraps Overhead → Distant a full
+    // cycle just completed; record its wall-clock length and the running average.
+    // The conductor uses avgCycleMs to compress or extend stages so the Grand
+    // Ritual still lands on the ~9pm target.
+    if (strikeIndex === 0) {
+      const cs = state.cycleStats;
+      const now = Date.now();
+      if (cs.cycleStartedAt) {
+        cs.lastCycleMs = now - cs.cycleStartedAt;
+        cs.avgCycleMs = cs.avgCycleMs == null
+          ? cs.lastCycleMs
+          : Math.round((cs.avgCycleMs * cs.cyclesCompleted + cs.lastCycleMs) / (cs.cyclesCompleted + 1));
+        cs.cyclesCompleted += 1;
+        broadcastLog(`Storm cycle ${cs.cyclesCompleted} complete — ${Math.round(cs.lastCycleMs / 1000)}s (avg ${Math.round(cs.avgCycleMs / 1000)}s)`, 'SYSTEM');
+      }
+      cs.cycleStartedAt = now;
+    } else if (!state.cycleStats.cycleStartedAt) {
+      state.cycleStats.cycleStartedAt = Date.now();
+    }
     scheduleNextStrike();
   }, STRIKE_INTERVAL_MS);
 }
@@ -901,7 +1173,20 @@ let lastMajorAt = 0; // timestamp of last major spell — majors max once per 30
 // ─── Character bible ──────────────────────────────────────────────────────────
 // The full story/character reference for the show — consumed by the future AI
 // conductor via GET /api/character-bible.
+// #20 — Extensible character roster. Physical/technical facts only (the
+// personality lives in CHARACTER_BIBLE.characters). voiceId gets filled in once
+// the ElevenLabs voices are chosen.
+const CHARACTERS = [
+  { id:'evelina', name:'Evelina Crowe', zone:'z3', channel:'left',  hasMic:true,  isStatic:false, voiceId:null },
+  { id:'lenora',  name:'Lenora Thorn',  zone:'z3', channel:'right', hasMic:false, isStatic:true,  voiceId:null },
+  { id:'jasper',  name:'Jasper Bones',  zone:'z1', channel:'left',  hasMic:true,  isStatic:false, voiceId:null },
+  { id:'edgar',   name:'Edgar Rattle',  zone:'z1', channel:'right', hasMic:false, isStatic:false, voiceId:null },
+  // future 5th character: add an entry here + a CHARACTER_BIBLE.characters entry + voiceId. No structural changes needed.
+];
+
 const CHARACTER_BIBLE = {
+  vlcNote: 'VLC remains REQUIRED for all audio playback — ambient loop, storm clips, witch clips, ' +
+    'HAUNT SOUNDS effects. Only projection VLC code was removed.',
   showIdentity: {
     showName: 'The Hollow Storm',
     location: 'Thornfield Cemetery',
@@ -1145,6 +1430,23 @@ const CHARACTER_BIBLE = {
       edgar: 'The one thing that gets his attention. If Whisper catches lyrics he may comment on the song ' +
         'specifically: "Is that... is that what they listen to now? No wonder the storm is angry."',
     },
+    // #15 — Edgar's annoyance threshold. Three strikes across a cycle, then one
+    // big moment. Lighting is implemented as POST /api/edgar/annoyed.
+    edgarAnnoyanceThreshold: {
+      strike1: '"...I KNOW THIS ONE..." — belts a few words — "300 years and they\'re still playing this."',
+      strike2: '"Again. They\'re playing it again. Jasper are you hearing this." / Jasper: "I hear it Edgar please don\'t"',
+      strike3: 'THE THRESHOLD — "BLAST THAT DIGITAL LUTE I CANNOT THINK STRAIGHT"',
+      visualEffect: 'The skeleton-area Govee pulses angry red for 10-15 seconds, then returns to the fire base. ' +
+        '(Implemented as POST /api/edgar/annoyed.)',
+      otherReactions: {
+        jasper: '"Edgar don\'t — the storm will think that was for HIM"',
+        evelina: 'Looks up from the cauldron for the first time — "Edgar." — one word only, then returns to the cauldron.',
+        lenora: '"every decade" — perfectly timed, the same line she always says.',
+      },
+      afterThreshold: 'Edgar crosses his arms and REFUSES to acknowledge music for 30 minutes regardless of what ' +
+        'plays — a hard lockout. One big moment per night.',
+      counterReset: 'The strike counter resets at the start of each new storm cycle.',
+    },
     songRecognition: 'If Whisper catches enough lyrics, identify the song and make the reaction ' +
       'song-specific; fall back to a genre comment. Never reference music more than once per 10–15 ' +
       'minutes regardless of how long it plays.',
@@ -1288,34 +1590,103 @@ const CHARACTER_BIBLE = {
       'Sing-along only if neighbor music is actually detectable',
     ],
   },
-  interruptionHandling: {
-    rule: 'If the mic detects guest speech during active character output (spell incantation, Evelina speaking), ' +
-      'Evelina NEVER stops or breaks concentration — the mic gate keeps her output clean. Claude flags the ' +
-      'interruption and queues a SHORT reaction from a supporting character AFTER Evelina finishes, not during (no ' +
-      'latency conflict). 1 in 3 chance — not every interruption gets called out.',
-    reactions: {
-      lenora: [
-        '"Silence. She cannot be disturbed during the incantation."',
-        '"She won\'t stop. She never stops."',
-      ],
-      jasper: [
-        '"Shhhh — SHHHH — do you want the storm to hear you?!"',
-        '"Why would you talk during the spell — WHY"',
-      ],
-      edgar: [
-        '"Bold move. Let\'s see how that works out for you."',
-        '"Nobody ever learns."',
-      ],
-    },
+  // #5 — Reactive interruption detection was REMOVED and replaced by this.
+  proactiveDialogueWindows: {
+    rationale: 'Reactive interruption detection is REMOVED — ElevenLabs audio streams cannot be gracefully ' +
+      'stopped mid-sentence; detecting and reacting mid-stream causes glitches. Evelina deliberately creates ' +
+      'structured dialogue windows instead — she is in control, she chooses when to invite interaction.',
+    triggerLines: [
+      'Who dares whisper secrets while my cauldron stirs?!',
+      'You there — yes you — speak. The storm is listening.',
+      "I sense hesitation among you. Say what you're thinking.",
+      'The cauldron wants to know your name.',
+      'Tell me something true. The storm feeds on truth.',
+    ],
+    flow: [
+      '1. Evelina completes an audio block (never interrupted).',
+      '2. A window line plays and the mic opens.',
+      '3. Guests respond; Whisper transcribes.',
+      '4. Claude generates Evelina\'s response to what was actually said.',
+      '5. The next audio block plays; the mic closes again.',
+    ],
     rules: [
-      'Evelina\'s output never interrupted',
-      'supporting reaction is SHORT, one line max',
-      'fires after Evelina completes',
-      '1 in 3 chance',
-      'Claude picks reactor by who last spoke and show state',
-      'never the same reaction twice in a row',
+      'The mic is only open during designated windows, never during active output.',
+      'This eliminates mid-stream interruption risk entirely.',
+      'Evelina invites interaction rather than reacting to it.',
+      'Windows happen between spell attempts and stage transitions.',
+      'Supporting characters may react to what guests say.',
     ],
   },
+  // #13 — the breath after the Grand Ritual. Lighting is implemented in code as
+  // calmPhase() / POST /api/calm (manual-fire until the conductor drives it).
+  calmAfterTheStorm: {
+    overview: 'A 60-90 second phase after the Grand Ritual and before the cycle resets to Distant. The yard ' +
+      'exhales. Nobody is performing — this is the moment guests decide the show was real.',
+    lighting: 'Slow fade from the Overhead white blast to a misty low blue/grey on ALL slots (~{90,110,130} at ' +
+      'brightness 12), hold 60-90s, then gradually warm back to the Stage 1 show scheme. Never a snap.',
+    characters: {
+      evelina: 'Checks the cauldron, mutters to herself about what almost worked. Excited, not defeated — ' +
+        'she is already preparing the next attempt.',
+      lenora: 'Quietly assesses the damage, wrings out her cloak, offers one dry observation about the humidity ' +
+        'or the smell of ozone, then returns to watchful patience.',
+      jasper: 'Relieved for about four seconds, then immediately worried it is coming back. Counts the tombstones. ' +
+        'May sneeze. "Is everyone... are we all still here? Are we all still us?"',
+      edgar: '"Well. That happened." Then adjusts himself, one comment about the ozone or the sheer indignity of ' +
+        'being a skeleton in a thunderstorm — then silence.',
+    },
+    transition: 'Edgar\'s first Stage 1 line of the next cycle subtly acknowledges the reset without breaking character.',
+  },
+  // #14 — Host as Mythic Figure.
+  warden: {
+    overview: 'The host is The Warden of Thornfield. The characters know someone watches over the cemetery and ' +
+      'reference the presence obliquely — never naming them, never describing them, never fully breaking the ' +
+      'fourth wall.',
+    references: {
+      evelina: '"our Warden watches tonight... good." — treats Warden input as useful ritual intelligence.',
+      lenora: '"even the Warden of Thornfield cannot stop what she\'s attempting." — quiet respect.',
+      jasper: '"the Warden is still here right? They wouldn\'t leave us alone with Stage 5 coming?"',
+      edgar: '"the Warden. Sitting in a chair. Very helpful." — affectionate sarcasm, not disrespect.',
+    },
+    voiceMicNote: 'Host context input (typed or spoken via the SHOW tab mic) is treated as the Warden ' +
+      'communicating with the cemetery. Host says "little girl witch costume" → Evelina responds "the Warden ' +
+      'sees something interesting approaching..."',
+    rules: [
+      'Never name or physically describe the Warden.',
+      'Oblique, not direct.',
+      'Protective, not controlling.',
+      'Edgar teases but respects underneath.',
+      'Makes the host a character in the show without them saying a word out loud.',
+      'Maximum 2-3 Warden references per storm cycle.',
+    ],
+  },
+  // #10 — the 10 risk fixes: what lives in server.js now vs. what the AI
+  // conductor phase still owns.
+  technicalSafeguards: {
+    implementedInCode: {
+      risk1_goveeQueue: 'Per-IP Govee UDP queue enforcing a 50ms minimum gap, with priority: 0 storm flash, ' +
+        '1 spell/calm/Edgar colors, 2 flicker + idle loops. Higher priority jumps the queue.',
+      risk10_vlcWatchdog: '5s interval — if the ambient bed should be running but the VLC process is gone, log ' +
+        'and restart. vlcHealth.ambientRunning is in the state snapshot.',
+      risk5_sensorQueue: 'Sensor priority queue witch > skeleton > graveyard; simultaneous trips fire the ' +
+        'highest-priority zone immediately and space the rest 3s apart.',
+      risk4_esp32Heartbeat: 'POST /api/sensor/heartbeat; a 10s checker marks the board offline after 3 missed ' +
+        'beats (>30s). Quiet mode must require esp32.online — a dead board looks like an empty yard.',
+      risk8_cycleDrift: 'cycleStats (cyclesCompleted / lastCycleMs / avgCycleMs) recorded each time the storm ' +
+        'sequence wraps Overhead → Distant, so stages can be compressed or extended to hit the 9pm ritual.',
+      risk9_weatherFallback: 'POST /api/weather/manual {tempF, windMph} plus a Test-tab entry form; fogGapFactor ' +
+        'returns the documented 1.0 medium default when there is no data at all.',
+    },
+    conductorPhase: {
+      risk2_whisperGating: 'Require 80% transcription confidence and a 0.5s minimum utterance duration; suppress ' +
+        'the mic entirely during playback in a nearby zone.',
+      risk3_elevenLabsFallback: 'Pre-cache 10-15 lines per character as instant fallback audio if the API is slow ' +
+        'or down — the show never goes silent waiting on a network call.',
+      risk6_claudeApiQueue: 'Single in-flight Claude request; queue depth 3 and drop the oldest beyond that; fall ' +
+        'back to cached lines on failure.',
+      risk7_hostMicSuppression: 'Suppress the host phone mic for 3s after any Zone-1 character audio so the ' +
+        'skeletons never talk to themselves, with a UI indicator showing when the mic is hot.',
+    },
+  }
 };
 
 // Spell-cast: 3s green "build" phase, then the cauldron boil loop switches to
@@ -1347,8 +1718,8 @@ function castSpellLights(spellKey) {
   for (const step of buildSteps) {
     track(() => {
       if (effects.cauldronMode !== 'green') return;
-      goveeSetColor(0, 180, 0, ids).catch(() => {});
-      goveeSetBrightness(step.bri, ids).catch(() => {});
+      goveeSetColor(0, 180, 0, ids, 1).catch(() => {});
+      goveeSetBrightness(step.bri, ids, 1).catch(() => {});
     }, step.at);
   }
 
@@ -1361,8 +1732,8 @@ function castSpellLights(spellKey) {
     // spell still reads
     if (!effects.running) {
       const c = spell.colors[0];
-      goveeSetColor(c.r, c.g, c.b, ids).catch(() => {});
-      goveeSetBrightness(85, ids).catch(() => {});
+      goveeSetColor(c.r, c.g, c.b, ids, 1).catch(() => {});
+      goveeSetBrightness(85, ids, 1).catch(() => {});
     }
 
     // MAJOR spells take over the whole yard — the existing skeleton/witch loops
@@ -1373,18 +1744,18 @@ function castSpellLights(spellKey) {
       if (spellKey === 'unraveling') {
         // Moonlight dims slightly — something pulling energy from it (one-time)
         const moonIds = getSlotIds('moon');
-        if (moonIds.length) goveeSetBrightness(28, moonIds).catch(() => {});
+        if (moonIds.length) goveeSetBrightness(28, moonIds, 1).catch(() => {});
       } else if (spellKey === 'grandritual') {
         // Pre-Overhead build: storm trackers full electric blue then white.
         // The Overhead white blast + base restore come from flashLights stage 4.
         const stormIds = getSlotIds('storm');
         if (stormIds.length) {
-          goveeSetColor(80, 180, 255, stormIds).catch(() => {});
-          goveeSetBrightness(100, stormIds).catch(() => {});
+          goveeSetColor(80, 180, 255, stormIds, 1).catch(() => {});
+          goveeSetBrightness(100, stormIds, 1).catch(() => {});
           track(() => {
             if (effects.spellYard !== 'grandritual') return;
-            goveeSetColor(255, 255, 255, stormIds).catch(() => {});
-            goveeSetBrightness(100, stormIds).catch(() => {});
+            goveeSetColor(255, 255, 255, stormIds, 1).catch(() => {});
+            goveeSetBrightness(100, stormIds, 1).catch(() => {});
           }, Math.round(durMs / 2));
         }
       }
@@ -1400,8 +1771,8 @@ function castSpellLights(spellKey) {
     // If the effects loop isn't running, at least restore the base look
     if (!effects.running) {
       const base = SLOT_BASES.cauldron;
-      goveeSetColor(base.color.r, base.color.g, base.color.b, ids).catch(() => {});
-      goveeSetBrightness(base.bri, ids).catch(() => {});
+      goveeSetColor(base.color.r, base.color.g, base.color.b, ids, 1).catch(() => {});
+      goveeSetBrightness(base.bri, ids, 1).catch(() => {});
     }
 
     if (spellKey === 'unraveling') {
@@ -1410,8 +1781,8 @@ function castSpellLights(spellKey) {
       const moonIds = getSlotIds('moon');
       if (moonIds.length) {
         const m = SLOT_BASES.moon;
-        goveeSetColor(m.color.r, m.color.g, m.color.b, moonIds).catch(() => {});
-        goveeSetBrightness(m.bri, moonIds).catch(() => {});
+        goveeSetColor(m.color.r, m.color.g, m.color.b, moonIds, 1).catch(() => {});
+        goveeSetBrightness(m.bri, moonIds, 1).catch(() => {});
       }
     } else if (spellKey === 'memory') {
       // SLOW fade back over ~3 staged steps — not a snap. Something heavy just
@@ -1420,19 +1791,19 @@ function castSpellLights(spellKey) {
       const skelIds = getSlotIds('skeleton');
       effects.suspended = true; // loops keep rescheduling but stay quiet during the fade
       track(() => { // step 1: crimson dims further on the witches
-        if (witchIds.length) { goveeSetColor(150, 0, 30, witchIds).catch(() => {}); goveeSetBrightness(12, witchIds).catch(() => {}); }
+        if (witchIds.length) { goveeSetColor(150, 0, 30, witchIds, 1).catch(() => {}); goveeSetBrightness(12, witchIds, 1).catch(() => {}); }
       }, 0);
       track(() => { // step 2: base colors return, still dim
         const w = SLOT_BASES.witch, s = SLOT_BASES.skeleton;
-        if (witchIds.length) { goveeSetColor(w.color.r, w.color.g, w.color.b, witchIds).catch(() => {}); goveeSetBrightness(15, witchIds).catch(() => {}); }
-        if (skelIds.length) { goveeSetColor(s.color.r, s.color.g, s.color.b, skelIds).catch(() => {}); goveeSetBrightness(12, skelIds).catch(() => {}); }
+        if (witchIds.length) { goveeSetColor(w.color.r, w.color.g, w.color.b, witchIds, 1).catch(() => {}); goveeSetBrightness(15, witchIds, 1).catch(() => {}); }
+        if (skelIds.length) { goveeSetColor(s.color.r, s.color.g, s.color.b, skelIds, 1).catch(() => {}); goveeSetBrightness(12, skelIds, 1).catch(() => {}); }
       }, 1000);
       track(() => { // step 3: full base brightness, loops resume normal on next tick
         effects.spellYard = null;
         effects.suspended = false;
         const w = SLOT_BASES.witch, s = SLOT_BASES.skeleton;
-        if (witchIds.length) goveeSetBrightness(w.bri, witchIds).catch(() => {});
-        if (skelIds.length) goveeSetBrightness(s.bri, skelIds).catch(() => {});
+        if (witchIds.length) goveeSetBrightness(w.bri, witchIds, 1).catch(() => {});
+        if (skelIds.length) goveeSetBrightness(s.bri, skelIds, 1).catch(() => {});
       }, 2000);
     }
     // grandritual: spellYard stays set until the Overhead blast's
@@ -2020,6 +2391,51 @@ app.get('/api/character-bible', (req, res) => {
   res.json({ ok: true, bible: CHARACTER_BIBLE });
 });
 
+// #20 — technical character roster (zone/channel/mic/voiceId)
+app.get('/api/characters', (req, res) => {
+  res.json({ ok: true, characters: CHARACTERS });
+});
+
+// #18 — model router: which model the conductor should use for a request type
+app.get('/api/model', (req, res) => {
+  const type = String(req.query.type || '');
+  res.json({ ok: true, type, model: getModel(type), sonnetTypes: SONNET_TYPES });
+});
+
+// #19 — nightly token budget
+app.get('/api/budget', (req, res) => {
+  res.json({ ok: true, budget: showBudget });
+});
+
+app.post('/api/budget/track', (req, res) => {
+  const { model, inputTokens, outputTokens } = req.body || {};
+  const budget = trackTokens(String(model || MODEL_HAIKU), inputTokens, outputTokens);
+  res.json({ ok: true, budget });
+});
+
+app.post('/api/budget/reset', (req, res) => {
+  showBudget.spentUsd = 0;
+  showBudget.haikuTokens = 0;
+  showBudget.sonnetTokens = 0;
+  showBudget.exceeded = false;
+  showBudget.mode = 'full';
+  broadcastLog('Budget reset for a new show night', 'SYSTEM');
+  broadcastState();
+  res.json({ ok: true, budget: showBudget });
+});
+
+// #13 — calm after the storm (manual fire; the conductor calls this after the Grand Ritual)
+app.post('/api/calm', async (req, res) => {
+  const r = await calmPhase();
+  res.json({ ok: r.ok !== false, ...r });
+});
+
+// #15 — Edgar's annoyance threshold visual
+app.post('/api/edgar/annoyed', async (req, res) => {
+  const r = await edgarAngryPulse();
+  res.json({ ok: r.ok !== false, ...r });
+});
+
 // ─── Host context routes ──────────────────────────────────────────────────────
 app.post('/api/context', (req, res) => {
   const text = String((req.body || {}).text || '').trim().slice(0, 200);
@@ -2035,6 +2451,18 @@ app.get('/api/context', (req, res) => {
 
 // ─── Weather routes — Phase 2 ─────────────────────────────────────────────────
 app.get('/api/weather', (req, res) => {
+  res.json({ ok: true, weather });
+});
+
+// RISK 9 — manual weather entry when the API key/network is unavailable.
+app.post('/api/weather/manual', (req, res) => {
+  const { tempF, windMph } = req.body || {};
+  if (tempF !== undefined)   weather.tempF   = Number(tempF);
+  if (windMph !== undefined)  weather.windMph = Number(windMph);
+  weather.desc = 'manual entry';
+  weather.updatedAt = Date.now();
+  broadcastLog(`Weather set manually: ${weather.tempF}F / ${weather.windMph}mph (fog factor ${fogGapFactor().toFixed(2)})`, 'SYSTEM');
+  broadcastState();
   res.json({ ok: true, weather });
 });
 
@@ -2351,9 +2779,20 @@ app.post('/api/effects/toggle', (req, res) => {
 
 // ─── Sensors (groundwork — ESP32 not yet installed) ───────────────────────────
 app.post('/api/sensor/trigger', (req, res) => {
-  const { zone, cooldownOverride } = req.body;
-  broadcastLog(`Sensor zone ${zone} simulated trigger${cooldownOverride ? ' (cooldown override)' : ''}`, 'SYSTEM');
-  res.json({ ok: true, zone });
+  const { zone, cooldownOverride } = req.body || {};
+  // RISK 5 — everything routes through the priority queue.
+  enqueueSensor(String(zone || 'graveyard'), !!cooldownOverride);
+  res.json({ ok: true, zone, queued: sensorQueue.length });
+});
+
+// RISK 4 — ESP32 sensor board heartbeat.
+app.post('/api/sensor/heartbeat', (req, res) => {
+  const wasOnline = esp32.online;
+  esp32.lastHeartbeat = Date.now();
+  esp32.online = true;
+  if (!wasOnline) broadcastLog('ESP32 sensor board ONLINE', 'SYSTEM');
+  broadcastState();
+  res.json({ ok: true, esp32 });
 });
 
 // ─── Media / system info ──────────────────────────────────────────────────────

@@ -1,0 +1,4 @@
+[2026-07-25T01:20:44.274Z] [SYSTEM] Sensor zone witch firing
+[2026-07-25T01:20:44.286Z] [SYSTEM] ESP32 sensor board ONLINE
+[2026-07-25T01:20:44.297Z] [SYSTEM] Weather set manually: 40F / 20mph (fog factor 1.10)
+[2026-07-25T01:20:44.308Z] [LIGHT] Calm after the storm: fading to mist

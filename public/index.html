@@ -920,6 +920,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <div class="health-item"><span class="hi-name">ESP32</span><span class="hi-val bad" id="health-esp32">OFFLINE</span></div>
       <div class="health-item"><span class="hi-name">VLC</span><span class="hi-val" id="health-vlc">Idle</span></div>
       <div class="health-item"><span class="hi-name">Onkyo</span><span class="hi-val bad" id="health-onkyo">Down</span></div>
+      <div class="health-item"><span class="hi-name">Budget</span><span class="hi-val" id="health-budget">$0.00 / $9.00</span></div>
     </div>
   </div>
 
@@ -953,6 +954,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-green btn-sm" onclick="api('/api/govee/power',{on:true})">💡 ALL ON</button>
       <button class="btn btn-red btn-sm" onclick="api('/api/govee/power',{on:false})">⬛ ALL OFF</button>
       <button class="btn btn-orange btn-sm" onclick="api('/api/lights/scheme')">🎃 RESET TO SHOW SCHEME</button>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/calm')">🌫 CALM PHASE</button>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
       <span style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">✨ LIVING EFFECTS</span>
@@ -1022,6 +1024,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-amber btn-sm" onclick="api('/api/skeleton/argument')">🗯 JASPER vs EDGAR ARGUMENT</button>
       <button class="btn btn-blue btn-sm" onclick="api('/api/skeleton/balance')">🔀 L/R BALANCE TEST</button>
       <button class="btn btn-red btn-sm" onclick="api('/api/skeleton/stop')">■ STOP</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/edgar/annoyed')">😤 EDGAR THRESHOLD</button>
     </div>
   </div>
 
@@ -1154,6 +1157,9 @@ body::before { animation:scanlines 10s linear infinite; }
     <div class="field-row"><label>ZIP</label><input id="wx-zip" placeholder="e.g. 90210"/></div>
     <div class="field-row"><label>API Key</label><input id="wx-key" placeholder="OpenWeatherMap key"/></div>
     <button class="btn btn-orange btn-sm" onclick="saveWeatherConfig()" style="margin-bottom:14px">💾 SAVE WEATHER CONFIG</button>
+    <div class="field-row"><label>Temp °F</label><input id="wx-manual-temp" type="number" placeholder="e.g. 52"/></div>
+    <div class="field-row"><label>Wind mph</label><input id="wx-manual-wind" type="number" placeholder="e.g. 8"/></div>
+    <button class="btn btn-blue btn-sm" onclick="saveManualWeather()" style="margin-bottom:14px">✍ USE MANUAL WEATHER</button>
 
     <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Media folders:</div>
     <div id="media-lists" style="margin-bottom:14px">
@@ -1434,6 +1440,17 @@ function applyState(s) {
   if (ho) {
     ho.textContent = s.connected ? 'Connected' : 'Down';
     ho.className = 'hi-val ' + (s.connected ? 'good' : 'bad');
+  }
+  const he = document.getElementById('health-esp32');
+  if (he && s.esp32) {
+    he.textContent = s.esp32.online ? 'ONLINE' : 'OFFLINE';
+    he.className = 'hi-val ' + (s.esp32.online ? 'good' : 'bad');
+  }
+  const hb = document.getElementById('health-budget');
+  if (hb && s.budget) {
+    hb.textContent = `$${(s.budget.spentUsd || 0).toFixed(2)} / $${(s.budget.cap || 0).toFixed(2)}`;
+    hb.className = 'hi-val' + (s.budget.mode === 'full' ? ' good' : ' bad');
+    hb.title = 'budget mode: ' + s.budget.mode;
   }
 
   // Storm
@@ -1744,6 +1761,13 @@ async function refreshWeather() {
   const r = await fetch('/api/weather').then(x => x.json()).catch(() => null);
   if (r && r.weather) updateWeatherReadout(r.weather);
 }
+async function saveManualWeather() {
+  const tempF = document.getElementById('wx-manual-temp').value;
+  const windMph = document.getElementById('wx-manual-wind').value;
+  await api('/api/weather/manual', { tempF: Number(tempF), windMph: Number(windMph) });
+  setTimeout(refreshWeather, 400);
+}
+
 async function saveWeatherConfig() {
   const zip = document.getElementById('wx-zip').value.trim();
   const apiKey = document.getElementById('wx-key').value.trim();

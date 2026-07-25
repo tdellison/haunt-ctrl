@@ -86,6 +86,19 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **Lenora is a STATIC PROP** — voice only, no physical movement, never raises her voice (`characters.lenora.staging` in CHARACTER_BIBLE).
 - Onkyo receiver reserved at **192.168.68.56** on the Deco router (updated in config.receiverIp). Govee light IPs still need re-entering on the new .68.x subnet in Test → System.
 
+## Phase 2 hardening
+- **Govee UDP queue**: per-IP outbound queue, 50ms min gap, priority 0 storm flash / 1 spell+calm+Edgar / 2 flicker loops (default). `goveeSend(ip, cmd, priority)` still returns a Promise.
+- **VLC watchdog**: 5s interval restarts the ambient loop if `ambientShouldRun` but the process died. `vlcHealth.ambientRunning` in state.
+- **Sensor priority queue**: witch > skeleton > graveyard; simultaneous trips fire the top zone now, others 3s apart. All `/api/sensor/trigger` calls route through it.
+- **ESP32 heartbeat**: `POST /api/sensor/heartbeat`; offline after 3 missed beats (>30s). **Quiet mode requires `esp32.online`** — a dead board looks identical to an empty yard.
+- **Cycle drift stats**: `state.cycleStats` (cyclesCompleted / lastCycleMs / avgCycleMs) recorded on each Overhead→Distant wrap; conductor uses it to hit the ~9pm Grand Ritual.
+- **Weather manual fallback**: `POST /api/weather/manual {tempF, windMph}` + Test-tab inputs; `fogGapFactor()` returns 1.0 with no data.
+- **Model router**: `getModel(type)` — Haiku for routine orchestration, Sonnet for anything spoken to a guest (guest_interaction / grand_ritual / edgar_reset / host_context). `GET /api/model?type=`.
+- **Token budget**: $9.00 nightly cap, 4 modes (full / haiku_only / cached_preferred / cached_only), `GET /api/budget`, `POST /api/budget/track`, `POST /api/budget/reset`; readout in the SHOW tab health row.
+- **Extensible CHARACTERS array** (`GET /api/characters`): zone/channel/mic/static/voiceId. Add a 5th character with one entry + a bible entry.
+- **Calm phase** (`POST /api/calm`, Test→Lights "🌫 CALM PHASE") and **Edgar threshold pulse** (`POST /api/edgar/annoyed`, Test→Skeletons) are manual-fire only until the AI conductor drives them.
+- **Interruption handling REPLACED** by `proactiveDialogueWindows` — ElevenLabs streams can't be stopped mid-sentence, so Evelina deliberately opens the mic with a trigger line instead of reacting to talkers. Bible also gained `calmAfterTheStorm`, `warden` (host = The Warden of Thornfield), `neighborMusicDetection.edgarAnnoyanceThreshold`, and `technicalSafeguards`.
+
 ## Known gotchas
 - Dell IP was 192.168.1.8, now **192.168.68.52** (bat + docs reference it).
 - If site won't load: bat window shows the error above "SERVER STOPPED"; commonest cause historically was missing node_modules (now committed).
