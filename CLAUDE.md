@@ -81,7 +81,6 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 
 ## Phase 2 additions (built)
 - **Voice input on Host Context**: 🎤 button beside SEND on the SHOW tab, Web Speech API (Chrome/Safari only — button hidden + note shown when unsupported). Tap to record (button turns red), transcript fills the field live, tap again or 3s silence auto-sends via the existing `/api/context` path.
-- **Weather-aware fog auto-timer**: OpenWeatherMap via `weather` object; configured from env `OPENWEATHER_KEY`/`OPENWEATHER_ZIP` or at runtime via `POST /api/weather/config {zip, apiKey}` (persisted to gitignored `weather-config.json`, loaded on boot). `GET /api/weather` reads it; polls every 30 min + once at startup; degrades gracefully (keeps last known values, uses Node `https` not fetch). `fogGapFactor()` multiplies ONLY the AUTO fog interval — cold <45F ×1.3 (longer gaps), warm >65F ×0.8, windy >12mph ×0.85, clamped 0.6–1.6; manual bursts untouched. Test-tab System panel has a readout + refresh + zip/key save.
 - **One-tap Show Start** (`POST /api/show/start`): fog warmup → applyShowScheme + effects → ambient → sensors armed (`state.sensorsArmed`) → storm cycle reset to Distant → `state.showActive`/`state.showStartedAt` set (elapsed tracking). `POST /api/show/stop` marks inactive + stops storm cycle (NOT a teardown — that's ALL STOP/STRIKE DOWN). SHOW tab has a green ▶ START SHOW button that flips to red ■ END SHOW with a live elapsed readout.
 - **Lenora is a STATIC PROP** — voice only, no physical movement, never raises her voice (`characters.lenora.staging` in CHARACTER_BIBLE).
 - Onkyo receiver reserved at **192.168.68.56** on the Deco router (updated in config.receiverIp). Govee light IPs still need re-entering on the new .68.x subnet in Test → System.
@@ -92,7 +91,6 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **Sensor priority queue**: witch > skeleton > graveyard; simultaneous trips fire the top zone now, others 3s apart. All `/api/sensor/trigger` calls route through it.
 - **ESP32 heartbeat**: `POST /api/sensor/heartbeat`; offline after 3 missed beats (>30s). **Quiet mode requires `esp32.online`** — a dead board looks identical to an empty yard.
 - **Cycle drift stats**: `state.cycleStats` (cyclesCompleted / lastCycleMs / avgCycleMs) recorded on each Overhead→Distant wrap; conductor uses it to hit the ~9pm Grand Ritual.
-- **Weather manual fallback**: `POST /api/weather/manual {tempF, windMph}` + Test-tab inputs; `fogGapFactor()` returns 1.0 with no data.
 - **Model router**: `getModel(type)` — Haiku for routine orchestration, Sonnet for anything spoken to a guest (guest_interaction / grand_ritual / edgar_reset / host_context). `GET /api/model?type=`.
 - **Token budget**: $9.00 nightly cap, 4 modes (full / haiku_only / cached_preferred / cached_only), `GET /api/budget`, `POST /api/budget/track`, `POST /api/budget/reset`; readout in the SHOW tab health row.
 - **Extensible CHARACTERS array** (`GET /api/characters`): zone/channel/mic/static/voiceId. Add a 5th character with one entry + a bible entry.
