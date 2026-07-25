@@ -1212,6 +1212,32 @@ const CHARACTER_BIBLE = {
       'Maximum 2-3 Warden references per storm cycle.',
     ],
   },
+  // Fog is FULLY conductor-controlled — the auto-timer stays OFF during the show.
+  // Claude fires every burst deliberately via POST /api/fog/fire {duration}.
+  fogStrategy: {
+    control: 'Claude has 100% control. Leave the fog auto-timer OFF; fire each burst on purpose so fog ' +
+      'punctuates the show instead of running on a metronome. Weather-aware timing was removed — the owner ' +
+      'sets machine placement/level by hand; Claude decides only WHEN and HOW LONG.',
+    heavyMoments: [
+      'Major spells (Unraveling, Memory) — burst as the cauldron shifts color so the fog catches the light',
+      'Overhead strike / Grand Ritual — longest burst of the cycle, fires with the white blast',
+      'Very Close stage — the storm is nearly on top of the yard; keep a low bed rolling',
+      'A big crowd arriving at the witch — a burst as Evelina turns to greet them',
+    ],
+    lightMoments: [
+      'Distant / Getting Closer — little to none; save fluid and let the yard breathe',
+      'Calm phase after the Grand Ritual — no new fog, let the last of it drift out',
+      'Quiet periods with no guests — do NOT burst; nobody is there to see it and fluid is finite',
+      'Edgar quiet-period callouts — no fog; the joke is the moment, not the atmosphere',
+    ],
+    constraints: [
+      '4-minute warmup after power-on before the first burst is possible (show start handles this)',
+      'Typical burst 3-8s; Overhead can run longer. Back-to-back bursts need ~20-30s recovery or output thins out',
+      'Fluid is finite across a 5.5-hour night — budget roughly for the number of cycles, favor spells and Overhead',
+      'Wind will take low fog regardless; never chase it with more bursts — one good burst beats three thin ones',
+      'Fog is an accent. Constant fog reads as a machine; occasional fog reads as a haunted place.',
+    ],
+  },
   // #10 — the 10 risk fixes: what lives in server.js now vs. what the AI
   // conductor phase still owns.
   technicalSafeguards: {
