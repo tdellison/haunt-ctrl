@@ -1549,6 +1549,39 @@ const CHARACTER_BIBLE = {
         edgar: '"The owl is watching YOU specifically Jasper"',
         lenora: '"The old ones send their regards"',
       },
+      // Sounds the owner actually has in the Haunt sounds folder beyond the
+      // originals — same 1-in-3/4 rule, same "react as if it is real" principle.
+      gateCreak: {
+        jasper: '"The gate. Something opened the gate. Did anyone open the gate?"',
+        edgar: '"People keep coming in. That is generally how gates work."',
+        evelina: 'Delighted — reads it as the storm admitting someone new.',
+        lenora: '"It opens on its own now. It did not used to."',
+      },
+      floorboardCreak: {
+        jasper: '"There are no floors out here. THERE ARE NO FLOORS."',
+        edgar: 'Long pause. "...Nope. Not thinking about that one."',
+        lenora: '"The house remembers where its rooms were."',
+      },
+      churchBell: {
+        evelina: '"Thornfield still keeps the hours. How dutiful."',
+        lenora: 'Quiet. She knows exactly which bell that is. Says nothing.',
+        jasper: 'Counts the rings out loud and gets the number wrong.',
+      },
+      catHiss: {
+        jasper: '"WHAT was that — was that a cat? Was that ONLY a cat?"',
+        edgar: '"Something out here has opinions."',
+        evelina: '"My familiars are restless."',
+      },
+      diggingSpade: {
+        jasper: '"Someone is digging. Someone is DIGGING. Out or in? OUT OR IN?"',
+        edgar: '"Could be either. That is the fun part."',
+        lenora: '"Best not to ask who holds the spade."',
+      },
+      runningAway: {
+        edgar: '"Well. They lasted longer than most."',
+        jasper: '"They had the right idea. WE SHOULD ALL HAVE THAT IDEA."',
+        evelina: 'Mildly disappointed — that was a perfectly good ritual participant.',
+      },
     },
   },
   crossCharacterAwareness: [
@@ -2083,32 +2116,50 @@ const PHANTOM_MIN_GAP_MS = 20000;
 let lastPhantomAt = 0;
 let phantomSuppressed = false;   // true during Grand Ritual
 
+// Mapped to the owner's actual Haunt sounds library:
+//   cat hiss · churchbell · crow caw · digging with spade · evil laugh 1/2/3
+//   floorboard creak · gate creak · ouch scream · owl hooting · running away · wolf howl
+// Keywords match by substring, so adding e.g. a "chains" file later just works
+// wherever a 'chain' keyword is used.
 const PHANTOM_MAP = {
-  storm_stage_0:    [{ kw: 'crow',   delayMs: 30000, volumeHint: 'low' }],
-  storm_stage_1:    [{ kw: 'owl',    delayMs: 0,     volumeHint: 'low' },
-                     { kw: 'wind',   delayMs: 4000,  volumeHint: 'low' }],
-  storm_stage_2:    [{ kw: 'wolf',   delayMs: 0,     volumeHint: 'mid' },
-                     { kw: 'chain',  delayMs: 8000,  volumeHint: 'low' }],
-  storm_stage_3:    [{ kw: 'demon',  delayMs: 0,     volumeHint: 'mid' },
-                     { kw: 'scream', delayMs: 6000,  volumeHint: 'mid' }],
+  // Storm progression — the yard notices the storm before the guests do
+  storm_stage_0:    [{ kw: 'crow',       delayMs: 30000, volumeHint: 'low' }],
+  storm_stage_1:    [{ kw: 'owl',        delayMs: 0,     volumeHint: 'low' },
+                     { kw: 'churchbell', delayMs: 6000,  volumeHint: 'low' }],
+  storm_stage_2:    [{ kw: 'wolf',       delayMs: 0,     volumeHint: 'mid' },
+                     { kw: 'gate creak', delayMs: 8000,  volumeHint: 'low' }],
+  storm_stage_3:    [{ kw: 'evil laugh', delayMs: 0,     volumeHint: 'mid' },
+                     { kw: 'scream',     delayMs: 6000,  volumeHint: 'mid' }],
   storm_stage_4:    [], // Overhead — all ambient stops, silence before the strike
-  spell_any:        [{ kw: 'chain',  delayMs: 6000,  volumeHint: 'low' }],
-  spell_memory:     [{ kw: 'owl',    delayMs: 10000, volumeHint: 'low' }],
-  spell_unraveling: [{ kw: 'wolf',   delayMs: 0,     volumeHint: 'mid' },
-                     { kw: 'wind',   delayMs: 3000,  volumeHint: 'low' }],
-  fog_burst:        [{ kw: 'wolf',   delayMs: 4000,  volumeHint: 'low' }],
-  calm_wind:        [{ kw: 'wind',   delayMs: 0,     volumeHint: 'low' }],
-  sensor_witch:     [{ kw: 'crow',   delayMs: 0,     volumeHint: 'low' }],
-  sensor_skeleton:  [{ kw: 'chain',  delayMs: 0,     volumeHint: 'low' }],
-  idle_5min:        [{ kw: 'owl',    delayMs: 0,     volumeHint: 'low' }],
+
+  // Spells
+  spell_any:        [{ kw: 'floorboard', delayMs: 6000,  volumeHint: 'low' }],
+  spell_memory:     [{ kw: 'owl',        delayMs: 10000, volumeHint: 'low' }],
+  spell_unraveling: [{ kw: 'wolf',       delayMs: 0,     volumeHint: 'mid' },
+                     { kw: 'cat hiss',   delayMs: 3000,  volumeHint: 'low' }],
+
+  fog_burst:        [{ kw: 'wolf',       delayMs: 4000,  volumeHint: 'low' }],
+  calm_wind:        [{ kw: 'churchbell', delayMs: 0,     volumeHint: 'low' }],
+
+  // Sensors — gate creaks as someone arrives; boards creak by the skeletons
+  sensor_witch:     [{ kw: 'gate creak', delayMs: 0,     volumeHint: 'low' }],
+  sensor_skeleton:  [{ kw: 'floorboard', delayMs: 0,     volumeHint: 'low' }],
+  sensor_graveyard: [{ kw: 'crow',       delayMs: 0,     volumeHint: 'low' }],
+
+  // Nobody around — something is out there working
+  idle_5min:        [{ kw: 'digging',    delayMs: 0,     volumeHint: 'low' }],
 };
 
 // First file in HAUNT SOUNDS whose name contains the keyword (case-insensitive).
+// Picks RANDOMLY among all matches so numbered variants (evil laugh 1/2/3)
+// rotate instead of always firing the first one.
 function findSoundFile(keyword) {
   try {
     const kw = String(keyword).toLowerCase();
-    const files = fs.readdirSync(HAUNT_SOUNDS_DIR);
-    return files.find(f => f.toLowerCase().includes(kw)) || null;
+    const matches = fs.readdirSync(HAUNT_SOUNDS_DIR)
+      .filter(f => f.toLowerCase().includes(kw));
+    if (!matches.length) return null;
+    return matches[Math.floor(Math.random() * matches.length)];
   } catch (_) { return null; }
 }
 
