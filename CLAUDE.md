@@ -1,6 +1,6 @@
 # HAUNT CTRL v3 — Project Memory
 
-Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on a Dell laptop at `C:\Users\tdell\haunt-ctrl-v3\`, controlled from iPhone at `http://192.168.68.52:3000`.
+Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on a Dell laptop at `C:\Users\tdell\haunt-ctrl-v3\`, controlled from iPhone at `http://192.168.1.168:3000`.
 
 ## Workflow (IMPORTANT)
 - **Make all changes directly to files. Never output code to chat. Never ask the user to copy/paste.**
@@ -13,8 +13,8 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - Commit as `Claude <noreply@anthropic.com>`.
 
 ## Hardware
-- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.68.56:60128` (reserved on the Deco router). Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
-- **Govee IPs**: also stale after the router swap — old `192.168.1.x` saved slots must be re-entered with new `192.168.68.x` addresses in Test → System (they persist to govee-slots.json).
+- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.68.56:60128` — ⚠️ LIKELY STALE: the network is back on the `192.168.1.x` subnet (Dell reserved at .1.168), so the Onkyo needs a new `192.168.1.x` address; owner to report it. Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
+- **Govee IPs**: enter each controller's current address in Test → System (persists to govee-slots.json). Network has flipped subnets a few times (.1.x → .68.x → back to .1.x) — always confirm from the router's device list before trusting a saved value.
 - **Fog machine**: fired via receiver 12V trigger commands (`TGA01`/`TGA00`), 4-min warmup. Auto-timer exists but stays OFF during the show — **fog is 100% conductor-controlled** via `POST /api/fog/fire {duration}`; heavy on major spells/Overhead, none during downtime. Strategy + constraints in `CHARACTER_BIBLE.fogStrategy`. RISK-9 hard caps enforced in code: min 45s between bursts, max 20s per burst (`state.fogCooldownUntil`). Weather-aware timing was REMOVED (projections gone; owner sets machine level by hand).
 - **Playback**: VLC command line (`C:\Program Files\VideoLAN\VLC\vlc.exe`), audio clips `--intf dummy --play-and-exit --no-loop --no-repeat --no-video`.
 - **Lights**: Govee LAN API (UDP 4003 send / 4002 listen / 4001 scan). Each zone is a tethered pair on ONE controller IP.
@@ -107,7 +107,7 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **ESP32 local handling**: `/api/sensor/trigger` accepts `{zone, escalate, localHandled:[...]}` (escalate defaults true). `escalate:false` logs and returns without entering the priority queue. `POST /api/sensor/stage` records the storm stage for the board to reflect locally in <50ms. Cuts Claude calls ~40-60%.
 
 ## Known gotchas
-- Dell IP was 192.168.1.8, now **192.168.68.52** (bat + docs reference it).
+- Dell IP was 192.168.1.8, now **192.168.1.168** (bat + docs reference it).
 - If site won't load: bat window shows the error above "SERVER STOPPED"; commonest cause historically was missing node_modules (now committed).
 - Stop-hook "Unverified commits" warnings are noise when commits are already authored as noreply@anthropic.com and pushed.
 - GitHub 403 from a session = that session's credentials died; a fresh session fixes it (owner already reconnected the integration).
