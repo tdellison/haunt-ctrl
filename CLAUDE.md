@@ -97,6 +97,15 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **Calm phase** (`POST /api/calm`, Test→Lights "🌫 CALM PHASE") and **Edgar threshold pulse** (`POST /api/edgar/annoyed`, Test→Skeletons) are manual-fire only until the AI conductor drives them.
 - **Interruption handling REPLACED** by `proactiveDialogueWindows` — ElevenLabs streams can't be stopped mid-sentence, so Evelina deliberately opens the mic with a trigger line instead of reacting to talkers. Bible also gained `calmAfterTheStorm`, `warden` (host = The Warden of Thornfield), `neighborMusicDetection.edgarAnnoyanceThreshold`, and `technicalSafeguards`.
 
+## Multi-agent + phantom layer
+- **Four agents** (conductor phase, documented in `CHARACTER_BIBLE.multiAgentArchitecture`): **Director** (Haiku — dispatch, lock, heartbeat, Warden routing, never writes dialogue), **Witch** (Evelina/Lenora, dialogue windows, spells), **Skeleton** (Jasper/Edgar, callouts, acks, cross-character), **Graveyard** (ambient, fog, storm clips, VLC).
+- **Audio lock** in code (`POST/GET /api/audio/lock`, `POST /api/audio/release`, `audioLock` in stateSnapshot): one output speaks at a time, 7-level priority — grand ritual > guest mic response > Warden signal > cross character > ambient acknowledgment > quiet period callout > atmosphere painting. Force-released after 45s; queue drain broadcasts an `audio_next` event.
+- **Director heartbeat** every 30s (Haiku only): sensor idle (3+ min → Edgar callout), storm stage vs elapsed, last ambient, fog gap vs intensity, budget, queue depth. No action is a valid outcome.
+- **Grand Ritual protocol**: fog sustained → all lights cycle → Evelina incantation (Sonnet, fresh) → 500ms → overhead white blast + thunder all zones → 800ms silence → Lenora/Evelina/Jasper/Edgar in strict order → thunder crash → calm phase → cycle reset. Director holds the lock throughout; an agent timeout falls back to a cached line — the sequence never stops.
+- **Graveyard = atmosphere painter**: swell-then-silence before a major spell, silence as a valid choice after character moments, fog as punctuation, ambient mix shifts on storm-stage transitions.
+- **PHANTOM_MAP** (`firePhantom`, `POST /api/phantom/fire`, `GET /api/phantom/map`, Test→Audio buttons): zero-LLM ambient reflexes on storm stages/spells/fog/sensors. 20s minimum gap, respects the audio lock, suppressed during the Grand Ritual, keyword-matched filenames (crow/owl/wolf/wind/chain/demon/scream) so it works as soon as HAUNT SOUNDS is populated.
+- **ESP32 local handling**: `/api/sensor/trigger` accepts `{zone, escalate, localHandled:[...]}` (escalate defaults true). `escalate:false` logs and returns without entering the priority queue. `POST /api/sensor/stage` records the storm stage for the board to reflect locally in <50ms. Cuts Claude calls ~40-60%.
+
 ## Known gotchas
 - Dell IP was 192.168.1.8, now **192.168.68.52** (bat + docs reference it).
 - If site won't load: bat window shows the error above "SERVER STOPPED"; commonest cause historically was missing node_modules (now committed).

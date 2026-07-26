@@ -1066,6 +1066,16 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-amber btn-sm" disabled>No files found</button>
     </div>
 
+    <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">👻 Phantom sounds (zero-LLM reflexes):</div>
+    <div class="fx-grid" style="margin-bottom:14px">
+      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'storm_stage_1'})">STORM 1</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'storm_stage_2'})">STORM 2</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'storm_stage_3'})">STORM 3</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'spell_any'})">SPELL</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'fog_burst'})">FOG</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'sensor_witch'})">SENSOR</button>
+    </div>
+
     <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Storm clip tests:</div>
     <div class="fx-grid" id="storm-clips-grid" style="margin-bottom:14px"></div>
 

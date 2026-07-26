@@ -200,6 +200,7 @@ function getSlotIds(...slots) {
 // Set every configured slot to its base show look
 async function applyShowScheme() {
   effects.spellYard = null; // any major-spell yard takeover ends on a full scheme restore
+  phantomSuppressed = false; // #25 — Grand Ritual silence ends on a scheme restore
   for (const [slot, base] of Object.entries(SLOT_BASES)) {
     const ids = getSlotIds(slot);
     if (!ids.length) continue;
@@ -392,6 +393,7 @@ function stopEffects() {
   if (!effects.running && !Object.keys(effects.timers).length && !effects.spellTimers.length) return;
   effects.running = false;
   effects.suspended = false;
+  phantomSuppressed = false; // #25
   for (const key of Object.keys(effects.timers)) {
     clearTimeout(effects.timers[key]);
     delete effects.timers[key];
@@ -648,6 +650,7 @@ let lastSensorAt = 0;
 
 function fireSensorZone(zone, cooldownOverride) {
   broadcastLog(`Sensor zone ${zone} firing${cooldownOverride ? ' (cooldown override)' : ''}`, 'SYSTEM');
+  if (zone === 'witch' || zone === 'skeleton') firePhantom('sensor_' + zone);
   // Real per-zone show reactions land here in the AI-conductor phase.
 }
 
@@ -671,6 +674,58 @@ function enqueueSensor(zone, cooldownOverride) {
   if (burst || sensorBusy) broadcastLog(`Sensor zone ${zone} queued`, 'SYSTEM');
   drainSensorQueue();
 }
+
+// ─── #21 Audio lock ───────────────────────────────────────────────────────────
+// Only one agent/output speaks at a time. Director sets the lock;
+// everything else queues by priority (1 = highest).
+const AUDIO_PRIORITY = { grand_ritual:1, guest_response:2, warden_signal:3, cross_character:4, ambient_ack:5, quiet_callout:6, atmosphere:7 };
+let audioLock = { held: false, owner: null, since: null, queue: [] };
+const AUDIO_LOCK_MAX_MS = 45000;
+
+function acquireAudioLock(owner, kind) {
+  if (!audioLock.held) {
+    audioLock.held = true;
+    audioLock.owner = owner || 'unknown';
+    audioLock.since = Date.now();
+    broadcastLog(`Audio lock acquired by ${audioLock.owner} (${kind || 'unspecified'})`, 'AUDIO');
+    broadcastState();
+    return true;
+  }
+  const priority = AUDIO_PRIORITY[kind] !== undefined ? AUDIO_PRIORITY[kind] : 9;
+  audioLock.queue.push({ owner: owner || 'unknown', kind: kind || 'atmosphere', priority, at: Date.now() });
+  audioLock.queue.sort((a, b) => a.priority - b.priority || a.at - b.at);
+  broadcastLog(`Audio lock busy (${audioLock.owner}) — ${owner} queued as ${kind} p${priority}`, 'AUDIO');
+  broadcastState();
+  return false;
+}
+
+function releaseAudioLock(owner) {
+  if (audioLock.held && owner && audioLock.owner !== owner) {
+    broadcastLog(`Audio lock release ignored — held by ${audioLock.owner}, not ${owner}`, 'AUDIO');
+    return false;
+  }
+  const prev = audioLock.owner;
+  audioLock.held = false;
+  audioLock.owner = null;
+  audioLock.since = null;
+  if (prev) broadcastLog(`Audio lock released by ${prev}`, 'AUDIO');
+  if (audioLock.queue.length) {
+    audioLock.queue.sort((a, b) => a.priority - b.priority || a.at - b.at);
+    const item = audioLock.queue.shift();
+    broadcastLog(`Audio next: ${item.owner} (${item.kind})`, 'AUDIO');
+    broadcast({ type: 'audio_next', data: item });
+  }
+  broadcastState();
+  return true;
+}
+
+// Auto-release safety — a lock held past 45s is a stuck agent, not a long line.
+setInterval(() => {
+  if (audioLock.held && audioLock.since && (Date.now() - audioLock.since) > AUDIO_LOCK_MAX_MS) {
+    broadcastLog(`WARNING: audio lock held by ${audioLock.owner} >45s — force releasing`, 'AUDIO');
+    releaseAudioLock(null);
+  }
+}, 5000);
 
 // RISK 4 — ESP32 heartbeat. The board POSTs /api/sensor/heartbeat on a short
 // interval; 3 missed beats (>30s) marks it offline.
@@ -882,6 +937,7 @@ function stateSnapshot() {
     // Phase 2 hardening
     esp32,
     vlcHealth:        { ambientRunning: !!ambientProcess },
+    audioLock:        { held: audioLock.held, owner: audioLock.owner, queueDepth: audioLock.queue.length },
     cycleStats:       state.cycleStats,
     calmActive,
     budget:           { spentUsd: showBudget.spentUsd, cap: showBudget.nightlyCapUsd, mode: showBudget.mode },
@@ -968,6 +1024,7 @@ function fogBurst(ms) {
     broadcastLog(`Fog burst clamped ${Math.round(ms/1000)}s → ${FOG_MAX_BURST_MS/1000}s (max burst)`, 'FOG');
   }
   state.fogCooldownUntil = now + FOG_MIN_GAP_MS;
+  firePhantom('fog_burst');
   fogOn().catch(() => {});
   if (state.fogTimer) clearTimeout(state.fogTimer);
   state.fogTimer = setTimeout(() => fogOff().catch(() => {}), dur);
@@ -1045,6 +1102,7 @@ async function fireStrike(idx) {
   const s = STRIKE_SEQUENCE[idx];
   broadcastLog(`Storm ${idx + 1}/5 — ${s.emoji} ${s.name}`, 'AUDIO');
   playStormClip(s.name === 'Overhead');
+  firePhantom('storm_stage_' + idx);
 
   try {
     const z1 = clampVol('z1', s.z1Vol);
@@ -1688,6 +1746,111 @@ const CHARACTER_BIBLE = {
       'Fog is an accent. Constant fog reads as a machine; occasional fog reads as a haunted place.',
     ],
   },
+  // ── #21-24 Multi-agent architecture (AI-conductor phase) ──────────────────
+  multiAgentArchitecture: {
+    summary: 'Four specialized agents run the show instead of one monolithic conductor. Each owns a domain, ' +
+      'they run in parallel, and a single audio lock guarantees only one thing speaks at a time.',
+    agents: {
+      director: {
+        model: 'Haiku',
+        owns: 'Reads sensors and show state, dispatches work to the other three agents, owns the audio lock, ' +
+          'runs the 30s heartbeat, routes Warden signals, and sequences the Grand Ritual.',
+        hardRule: 'The Director NEVER generates character dialogue. Not one line. It only decides who speaks and when.',
+      },
+      witch: {
+        model: 'Sonnet for guest interactions, Haiku for reactive one-liners',
+        owns: 'Evelina Crowe and Lenora Thorn. Runs proactive dialogue windows, chooses and narrates spells, ' +
+          'translates Warden signals into in-character speech.',
+        handoff: 'Signals "window open" back to the Director when it finishes, so the mic state and the lock are never guessed at.',
+      },
+      skeleton: {
+        model: 'Sonnet for creative bits, Haiku for routine reactions',
+        owns: 'Jasper Bones and Edgar Rattle. Quiet-period callouts, neighbor-music reactions, the Edgar ' +
+          'annoyance threshold, ambient sound acknowledgments, cross-character banter, and reset lines.',
+      },
+      graveyard: {
+        model: 'Haiku',
+        owns: 'Ambient sound selection, placement and volume; fog timing; storm clip routing; VLC process ' +
+          'management; atmosphere painting and background pacing.',
+      },
+    },
+    audioConflictPrevention: {
+      mechanism: 'A single audio lock. Whichever agent is about to make sound acquires it first; everyone else ' +
+        'queues by priority and is released in order. Implemented in code via POST /api/audio/lock, ' +
+        'POST /api/audio/release, GET /api/audio/lock, with a 45s force-release safety.',
+      priorityOrder: [
+        'grand ritual',
+        'guest mic response',
+        'Warden signal',
+        'cross character',
+        'ambient acknowledgment',
+        'quiet period callout',
+        'atmosphere painting',
+      ],
+      note: 'Grand ritual > guest mic response > Warden signal > cross character > ambient acknowledgment > ' +
+        'quiet period callout > atmosphere painting. Nothing overlaps; the queue drains highest priority first.',
+    },
+    parallelBenefit: 'A sensor fires → the Director dispatches the Witch agent AND the Skeleton agent concurrently ' +
+      '→ both generate at the same time → the Director queues their outputs in the right order through the audio ' +
+      'lock. Latency on multi-character moments drops to roughly one generation instead of two or three in series.',
+    directorHeartbeat: {
+      interval: 'Every 30 seconds, regardless of sensor activity. Haiku only — it is a cheap check, not a performance.',
+      checks: [
+        'Time since last sensor trip — 3+ minutes triggers an Edgar quiet-period callout',
+        'Storm stage versus elapsed cycle time — is the cycle on pace for the Grand Ritual target?',
+        'Last ambient sound — has the yard gone flat?',
+        'Fog: time since last burst versus current show intensity',
+        'Budget status — spend versus the nightly cap and which mode that implies',
+        'Agent queue depth — is anything backed up behind the audio lock?',
+      ],
+      validOutcome: 'No action is also a valid outcome — sometimes silence is correct.',
+      why: 'The heartbeat is what makes the show feel alive during genuine quiet, instead of only reacting to guests.',
+    },
+    grandRitualProtocol: {
+      steps: [
+        '1. Fog: sustained burst begins',
+        '2. All lights begin the full-yard ritual cycle',
+        '3. Evelina delivers the incantation — generated fresh by Sonnet, never cached',
+        '4. Wait 500ms',
+        '5. Overhead white blast + thunder across all zones',
+        '6. 800ms of silence',
+        '7. Final exchange in strict order: Lenora, then Evelina, then Jasper, then Edgar',
+        '8. Thunder crash',
+        '9. Calm phase',
+        '10. Cycle reset',
+      ],
+      rules: [
+        'No agent fires anything outside this sequence while it runs',
+        'The Director holds the audio lock for the entire sequence',
+        'If an agent times out, use a cached fallback line and continue — the ritual NEVER stops mid-sequence',
+      ],
+    },
+    atmospherePainter: {
+      role: 'The Graveyard agent is not a sound-effect button. It paints the space between moments.',
+      decisions: [
+        'Swell then silence before a major spell — build the bed up, then cut it, so the spell lands in a hole',
+        'After a character moment, choose between a sound and 3-4 seconds of deliberate silence',
+        'Fog as punctuation — on raised hands, after the strike settles, and as a slow pour during the calm phase',
+        'Storm-stage transitions shift the ambient mix so guests FEEL the storm arriving before they are told',
+      ],
+      rule: 'Does this moment need sound, or does it need silence? Both are valid. The agent that knows when to be ' +
+        'quiet is as valuable as one that knows what to play.',
+    },
+    phantomSounds: {
+      implemented: 'PHANTOM_MAP is implemented in code (server.js), not in an agent. Show events fire mapped ' +
+        'HAUNT SOUNDS clips directly — zero LLM cost, zero latency.',
+      rules: [
+        'Respects the audio lock — never fires while the lock is held',
+        '20 second minimum gap between any two phantom sounds',
+        'Suppressed entirely during the Grand Ritual',
+        'Plays below dialogue volume — it is texture, never the subject',
+        'Filenames are matched by keyword (crow, owl, wolf, wind, chain, demon, scream), so it starts working the ' +
+          'moment the HAUNT SOUNDS folder is populated',
+      ],
+      layering: 'LLM character acknowledgment (see ambientSoundAcknowledgment, 1-in-3) still fires separately and ' +
+        'AFTER the phantom sound — the phantom is the event, the character reaction is the payoff.',
+    },
+  },
   technicalSafeguards: {
     implementedInCode: {
       risk1_goveeQueue: 'Per-IP Govee UDP queue enforcing a 50ms minimum gap, with priority: 0 storm flash, ' +
@@ -1700,6 +1863,14 @@ const CHARACTER_BIBLE = {
         'beats (>30s). Quiet mode must require esp32.online — a dead board looks like an empty yard.',
       risk8_cycleDrift: 'cycleStats (cyclesCompleted / lastCycleMs / avgCycleMs) recorded each time the storm ' +
         'sequence wraps Overhead → Distant, so stages can be compressed or extended to hit the 9pm ritual.',
+      esp32LocalHandling: 'The ESP32 handles routine sensor reactions on-board and only escalates what needs ' +
+        'Claude. Handled LOCALLY (no server round trip, <50ms): witch-zone light bump + fog burst, skeleton-zone ' +
+        'flicker bump + phantom sound, storm-stage tracker colors (server posts the stage to /api/sensor/stage and ' +
+        'the board reflects it), and routine fog relay firing. ESCALATED to the server/Claude via ' +
+        'POST /api/sensor/trigger {zone, escalate:true, localHandled:[...]}: the first guest after a quiet period, ' +
+        'guest speech, Warden signals, the Grand Ritual, and simultaneous multi-sensor trips. When escalate is ' +
+        'false the server logs what the board already did and does NOT enter the sensor priority queue. This split ' +
+        'cuts Claude calls roughly 40-60% across a night while making the yard feel faster, not slower.',
       risk9_fogRunaway: 'Hard caps in code: minimum 45s between fog bursts, maximum 20s burst duration, cooldown tracked in state.fogCooldownUntil. Weather API was removed entirely — Claude judges fog from show state (see fogStrategy).',
     },
     conductorPhase: {
@@ -1723,6 +1894,10 @@ function castSpellLights(spellKey) {
   if (!spell) return;
   const ids = getSlotIds('cauldron');
   if (!ids.length) return;
+
+  // #25 — phantom ambient reflex under the spell (zero LLM)
+  if (spellKey === 'grandritual') phantomSuppressed = true;
+  firePhantom(spellKey === 'memory' ? 'spell_memory' : spellKey === 'unraveling' ? 'spell_unraveling' : 'spell_any');
 
   // Track every timer this cast spawns so allstop/strikedown/stopEffects can
   // kill mid-spell restores cleanly.
@@ -1899,6 +2074,79 @@ let witchProcess    = null;
 let ambientProcess  = null;
 let fxProcess       = null;
 let soundProcess    = null;
+
+// ─── #25 Phantom sound engine ─────────────────────────────────────────────────
+// Zero-LLM ambient reflexes: show events fire pre-mapped HAUNT SOUNDS clips on a
+// short delay. No Claude call, no latency, no token cost. Keyword matching means
+// it starts working the moment the owner drops files into the folder.
+const PHANTOM_MIN_GAP_MS = 20000;
+let lastPhantomAt = 0;
+let phantomSuppressed = false;   // true during Grand Ritual
+
+const PHANTOM_MAP = {
+  storm_stage_0:    [{ kw: 'crow',   delayMs: 30000, volumeHint: 'low' }],
+  storm_stage_1:    [{ kw: 'owl',    delayMs: 0,     volumeHint: 'low' },
+                     { kw: 'wind',   delayMs: 4000,  volumeHint: 'low' }],
+  storm_stage_2:    [{ kw: 'wolf',   delayMs: 0,     volumeHint: 'mid' },
+                     { kw: 'chain',  delayMs: 8000,  volumeHint: 'low' }],
+  storm_stage_3:    [{ kw: 'demon',  delayMs: 0,     volumeHint: 'mid' },
+                     { kw: 'scream', delayMs: 6000,  volumeHint: 'mid' }],
+  storm_stage_4:    [], // Overhead — all ambient stops, silence before the strike
+  spell_any:        [{ kw: 'chain',  delayMs: 6000,  volumeHint: 'low' }],
+  spell_memory:     [{ kw: 'owl',    delayMs: 10000, volumeHint: 'low' }],
+  spell_unraveling: [{ kw: 'wolf',   delayMs: 0,     volumeHint: 'mid' },
+                     { kw: 'wind',   delayMs: 3000,  volumeHint: 'low' }],
+  fog_burst:        [{ kw: 'wolf',   delayMs: 4000,  volumeHint: 'low' }],
+  calm_wind:        [{ kw: 'wind',   delayMs: 0,     volumeHint: 'low' }],
+  sensor_witch:     [{ kw: 'crow',   delayMs: 0,     volumeHint: 'low' }],
+  sensor_skeleton:  [{ kw: 'chain',  delayMs: 0,     volumeHint: 'low' }],
+  idle_5min:        [{ kw: 'owl',    delayMs: 0,     volumeHint: 'low' }],
+};
+
+// First file in HAUNT SOUNDS whose name contains the keyword (case-insensitive).
+function findSoundFile(keyword) {
+  try {
+    const kw = String(keyword).toLowerCase();
+    const files = fs.readdirSync(HAUNT_SOUNDS_DIR);
+    return files.find(f => f.toLowerCase().includes(kw)) || null;
+  } catch (_) { return null; }
+}
+
+// Shared one-shot player for HAUNT SOUNDS files (also used by /api/sounds/play).
+function playHauntSound(filename) {
+  if (!filename) return false;
+  if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
+  try {
+    soundProcess = spawn(VLC_PATH, [
+      path.join(HAUNT_SOUNDS_DIR, filename), '--intf', 'dummy', '--play-and-exit', '--no-video',
+    ], { detached: true, stdio: 'ignore' });
+    soundProcess.unref();
+    soundProcess.on('exit', () => { soundProcess = null; });
+    soundProcess.on('error', () => { soundProcess = null; });
+  } catch (e) {
+    broadcastLog(`Sound play failed: ${e.message}`, 'AUDIO');
+    return false;
+  }
+  return true;
+}
+
+function firePhantom(eventName) {
+  if (phantomSuppressed) return false;
+  if (audioLock.held) return false;
+  const steps = PHANTOM_MAP[eventName];
+  if (!steps || !steps.length) return false;
+  const now = Date.now();
+  if (now - lastPhantomAt < PHANTOM_MIN_GAP_MS) return false;
+  lastPhantomAt = now;
+  for (const step of steps) {
+    setTimeout(() => {
+      const file = findSoundFile(step.kw);
+      if (!file) return; // folder not populated yet — silent no-op
+      if (playHauntSound(file)) broadcastLog(`Phantom: ${eventName} → ${file}`, 'AUDIO');
+    }, step.delayMs || 0);
+  }
+  return true;
+}
 
 function playStormClip(overhead) {
   const file = overhead
@@ -2543,12 +2791,7 @@ app.post('/api/sounds/play', (req, res) => {
   const { filename } = req.body;
   if (!filename) return res.status(400).json({ error: 'filename required' });
   broadcastLog(`Sound: ${filename}`, 'AUDIO');
-  if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
-  soundProcess = spawn(VLC_PATH, [
-    path.join(HAUNT_SOUNDS_DIR, filename), '--intf', 'dummy', '--play-and-exit', '--no-video',
-  ], { detached: true, stdio: 'ignore' });
-  soundProcess.unref();
-  soundProcess.on('exit', () => { soundProcess = null; });
+  playHauntSound(filename);
   res.json({ ok: true, filename });
 });
 
@@ -2780,11 +3023,34 @@ app.post('/api/effects/toggle', (req, res) => {
 });
 
 // ─── Sensors (groundwork — ESP32 not yet installed) ───────────────────────────
+// #26 — richer ESP32 packet: { zone, escalate, localHandled:['lights','fog'] }.
+// The board handles routine reactions locally in <50ms and only escalates the
+// moments that actually need Claude. escalate defaults true for back-compat
+// with the Test-tab simulator.
 app.post('/api/sensor/trigger', (req, res) => {
-  const { zone, cooldownOverride } = req.body || {};
+  const { zone, cooldownOverride, escalate, localHandled } = req.body || {};
+  const z = String(zone || 'graveyard');
+  const handled = Array.isArray(localHandled) ? localHandled : [];
+  if (handled.length) broadcastLog(`Sensor ${z} — ESP32 handled [${handled.join(', ')}]`, 'SYSTEM');
+  const shouldEscalate = escalate === undefined ? true : !!escalate;
+  if (!shouldEscalate) {
+    broadcastLog(`Sensor ${z} — handled locally by ESP32, not escalated`, 'SYSTEM');
+    return res.json({ ok: true, escalated: false, zone: z, localHandled: handled });
+  }
   // RISK 5 — everything routes through the priority queue.
-  enqueueSensor(String(zone || 'graveyard'), !!cooldownOverride);
-  res.json({ ok: true, zone, queued: sensorQueue.length });
+  enqueueSensor(z, !!cooldownOverride);
+  res.json({ ok: true, escalated: true, zone: z, localHandled: handled, queued: sensorQueue.length });
+});
+
+// #26 — Director tells the ESP32 which storm stage to reflect. The server just
+// records it; the ESP32 polls/subscribes and fires its storm-tracker colors
+// locally in <50ms, so stage changes need no round trip through Claude.
+app.post('/api/sensor/stage', (req, res) => {
+  const { stage } = req.body || {};
+  state.lastStageBroadcast = { stage, at: Date.now() };
+  broadcastLog(`Sensor stage broadcast → stage ${stage} (ESP32 tracks locally)`, 'SYSTEM');
+  broadcastState();
+  res.json({ ok: true, lastStageBroadcast: state.lastStageBroadcast });
 });
 
 // RISK 4 — ESP32 sensor board heartbeat.
@@ -2795,6 +3061,48 @@ app.post('/api/sensor/heartbeat', (req, res) => {
   if (!wasOnline) broadcastLog('ESP32 sensor board ONLINE', 'SYSTEM');
   broadcastState();
   res.json({ ok: true, esp32 });
+});
+
+// ─── #21 Audio lock routes ────────────────────────────────────────────────────
+app.post('/api/audio/lock', (req, res) => {
+  const { owner, kind } = req.body || {};
+  const acquired = acquireAudioLock(owner || 'unknown', kind || 'atmosphere');
+  res.json({ ok: true, acquired, held: audioLock.held, owner: audioLock.owner, queueDepth: audioLock.queue.length });
+});
+
+app.post('/api/audio/release', (req, res) => {
+  const { owner } = req.body || {};
+  const released = releaseAudioLock(owner || null);
+  res.json({ ok: true, released, held: audioLock.held, owner: audioLock.owner, queueDepth: audioLock.queue.length });
+});
+
+app.get('/api/audio/lock', (req, res) => {
+  res.json({
+    ok: true,
+    held: audioLock.held,
+    owner: audioLock.owner,
+    since: audioLock.since,
+    heldMs: audioLock.since ? Date.now() - audioLock.since : 0,
+    queue: audioLock.queue,
+    queueDepth: audioLock.queue.length,
+    priorities: AUDIO_PRIORITY,
+  });
+});
+
+// ─── #25 Phantom sound routes ─────────────────────────────────────────────────
+app.post('/api/phantom/fire', (req, res) => {
+  const { event } = req.body || {};
+  if (!event || !PHANTOM_MAP[event]) return res.status(400).json({ error: 'unknown event', events: Object.keys(PHANTOM_MAP) });
+  const fired = firePhantom(event);
+  res.json({ ok: true, event, fired, suppressed: phantomSuppressed, lockHeld: audioLock.held });
+});
+
+app.get('/api/phantom/map', (req, res) => {
+  const resolved = {};
+  for (const [ev, steps] of Object.entries(PHANTOM_MAP)) {
+    resolved[ev] = steps.map(s => ({ ...s, file: findSoundFile(s.kw) }));
+  }
+  res.json({ ok: true, map: PHANTOM_MAP, resolved, minGapMs: PHANTOM_MIN_GAP_MS, suppressed: phantomSuppressed });
 });
 
 // ─── Media / system info ──────────────────────────────────────────────────────
