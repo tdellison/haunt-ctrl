@@ -1151,6 +1151,16 @@ body::before { animation:scanlines 10s linear infinite; }
     <div class="info-row" style="margin-bottom:12px"><span class="info-key">Clients</span><span class="info-val" id="sys-clients">--</span></div>
     <button class="btn btn-blue btn-sm" onclick="refreshSystemInfo()" style="margin-bottom:14px">↻ REFRESH INFO</button>
 
+    <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Weather (fog auto-timer):</div>
+    <div class="info-row"><span class="info-key">Conditions</span><span class="info-val" id="wx-readout">--</span></div>
+    <button class="btn btn-blue btn-sm" onclick="refreshWeather()" style="margin-bottom:10px">↻ REFRESH WEATHER</button>
+    <div class="field-row"><label>ZIP</label><input id="wx-zip" placeholder="e.g. 90210"/></div>
+    <div class="field-row"><label>API Key</label><input id="wx-key" placeholder="OpenWeatherMap key"/></div>
+    <button class="btn btn-orange btn-sm" onclick="saveWeatherConfig()" style="margin-bottom:14px">💾 SAVE WEATHER CONFIG</button>
+    <div class="field-row"><label>Temp °F</label><input id="wx-manual-temp" type="number" placeholder="e.g. 52"/></div>
+    <div class="field-row"><label>Wind mph</label><input id="wx-manual-wind" type="number" placeholder="e.g. 8"/></div>
+    <button class="btn btn-blue btn-sm" onclick="saveManualWeather()" style="margin-bottom:14px">✍ USE MANUAL WEATHER</button>
+
     <div style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2);margin-bottom:8px">Media folders:</div>
     <div id="media-lists" style="margin-bottom:14px">
       <button class="btn btn-blue btn-sm" onclick="loadMediaLists()">📁 LOAD MEDIA LISTS</button>
@@ -1477,6 +1487,9 @@ function applyState(s) {
     ssb.className = s.showActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
   }
   updateShowElapsed(s);
+
+  // Weather readout (System panel)
+  if (s.weather) updateWeatherReadout(s.weather);
 }
 
 function updateShowElapsed(s) {
@@ -1492,6 +1505,20 @@ function updateShowElapsed(s) {
   }
 }
 
+function updateWeatherReadout(w) {
+  const el = document.getElementById('wx-readout');
+  if (!el) return;
+  if (w.updatedAt) {
+    const t = w.tempF != null ? `${Math.round(w.tempF)}°F` : '--';
+    const wind = w.windMph != null ? `${Math.round(w.windMph)}mph` : '--';
+    const upd = new Date(w.updatedAt).toLocaleTimeString('en-US', { hour12:false });
+    el.textContent = `${t} · wind ${wind} · ${w.desc || '--'} · ${upd}`;
+  } else {
+    el.textContent = w.zip ? 'Configured — awaiting fetch' : 'Not configured';
+  }
+  const zi = document.getElementById('wx-zip');
+  if (zi && !zi.value && w.zip) zi.value = w.zip;
+}
 
 function applyConfig(c) {
   if (c.receiverIp)   document.getElementById('cfg-ip').value   = c.receiverIp;
@@ -1727,6 +1754,26 @@ function toggleHostMic() {
     if (input.value.trim()) sendHostContext(); // auto-send on stop
   };
   try { hostRec.start(); armSilence(); } catch(_) { stopHostMicState(); }
+}
+
+// ── Weather (System panel) ────────────────────────────────────────────────────
+async function refreshWeather() {
+  const r = await fetch('/api/weather').then(x => x.json()).catch(() => null);
+  if (r && r.weather) updateWeatherReadout(r.weather);
+}
+async function saveManualWeather() {
+  const tempF = document.getElementById('wx-manual-temp').value;
+  const windMph = document.getElementById('wx-manual-wind').value;
+  await api('/api/weather/manual', { tempF: Number(tempF), windMph: Number(windMph) });
+  setTimeout(refreshWeather, 400);
+}
+
+async function saveWeatherConfig() {
+  const zip = document.getElementById('wx-zip').value.trim();
+  const apiKey = document.getElementById('wx-key').value.trim();
+  await api('/api/weather/config', { zip, apiKey });
+  document.getElementById('wx-key').value = '';
+  setTimeout(refreshWeather, 1500);
 }
 
 // ── One-tap Show Start ────────────────────────────────────────────────────────

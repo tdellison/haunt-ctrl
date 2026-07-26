@@ -470,6 +470,7 @@ async function flashLights(stage) {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let state = {
+  fogCooldownUntil: 0,
   connected:   false,
   fogActive:   false,
   fogTimer:    null,
@@ -625,6 +626,406 @@ function loadSlotIPs() {
 }
 
 // Non-blocking, degrades gracefully. Influences ONLY the fog auto-timer gap.
+
+// GET current conditions via Node's built-in https (no global fetch guarantee).
+// On any failure keep the last known values so fog timing stays sane.
+
+// Multiplier for the fog auto-timer interval. Cold = longer gaps, warm = shorter,
+// windy = shorter (fog blows off faster). Combined multiplicatively, clamped.
+
+// ─── Phase 2 hardening ────────────────────────────────────────────────────────
+
+// RISK 5 — sensor priority queue. Three PIRs can trip within the same second
+// (a group walking up the driveway past the graveyard toward the witch). Only
+// the highest-priority zone fires immediately; the rest are queued 3s apart so
+// the show never stacks three reactions on top of each other.
+const SENSOR_PRIORITY = { witch: 0, skeleton: 1, graveyard: 2 };
+const SENSOR_SPACING_MS = 3000;
+const SENSOR_BURST_MS = 2000; // arrivals inside this window are treated as one burst
+let sensorQueue = [];
+let sensorBusy = false;
+let lastSensorAt = 0;
+
+function fireSensorZone(zone, cooldownOverride) {
+  broadcastLog(`Sensor zone ${zone} firing${cooldownOverride ? ' (cooldown override)' : ''}`, 'SYSTEM');
+  // Real per-zone show reactions land here in the AI-conductor phase.
+}
+
+function drainSensorQueue() {
+  if (sensorBusy) return;
+  if (!sensorQueue.length) return;
+  sensorBusy = true;
+  // highest priority (lowest number) first, stable within equal priority
+  sensorQueue.sort((a, b) => a.priority - b.priority || a.at - b.at);
+  const item = sensorQueue.shift();
+  fireSensorZone(item.zone, item.cooldownOverride);
+  setTimeout(() => { sensorBusy = false; drainSensorQueue(); }, SENSOR_SPACING_MS);
+}
+
+function enqueueSensor(zone, cooldownOverride) {
+  const priority = SENSOR_PRIORITY[zone] !== undefined ? SENSOR_PRIORITY[zone] : 3;
+  const now = Date.now();
+  const burst = (now - lastSensorAt) < SENSOR_BURST_MS;
+  lastSensorAt = now;
+  sensorQueue.push({ zone, priority, cooldownOverride, at: now });
+  if (burst || sensorBusy) broadcastLog(`Sensor zone ${zone} queued`, 'SYSTEM');
+  drainSensorQueue();
+}
+
+// RISK 4 — ESP32 heartbeat. The board POSTs /api/sensor/heartbeat on a short
+// interval; 3 missed beats (>30s) marks it offline.
+// IMPORTANT: quiet mode must NEVER be entered on sensor inactivity alone — a dead
+// ESP32 looks exactly like an empty yard. The AI conductor must require
+// esp32.online === true before treating sensor inactivity as "nobody there".
+let esp32 = { lastHeartbeat: null, online: false };
+setInterval(() => {
+  if (!esp32.lastHeartbeat) return;
+  const stale = (Date.now() - esp32.lastHeartbeat) > 30000;
+  if (stale && esp32.online) {
+    esp32.online = false;
+    broadcastLog('ESP32 sensor board OFFLINE (3 missed heartbeats)', 'SYSTEM');
+    broadcastState();
+  }
+}, 10000);
+
+// RISK 10 — VLC ambient watchdog. If the ambient bed is supposed to be running
+// but the process vanished, restart it. Silence in the yard is the one failure
+// guests notice immediately.
+setInterval(() => {
+  if (ambientShouldRun && !ambientProcess) {
+    broadcastLog('VLC ambient crashed — restarting', 'SYSTEM');
+    try { startAmbientLoop(); } catch (e) { broadcastLog(`VLC restart failed: ${e.message}`, 'SYSTEM'); }
+  }
+}, 5000);
+
+// #18 — Model router. Routine orchestration (storm stage bookkeeping, ambient
+// choices, light cues, quiet-period filler) runs on Haiku; anything a guest
+// actually hears as dialogue runs on Sonnet.
+//   Haiku  → storm_stage, ambient_pick, light_cue, quiet_filler, sensor_react …
+//   Sonnet → guest_interaction, grand_ritual, edgar_reset, host_context
+const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET = 'claude-sonnet-4-6';
+const SONNET_TYPES = ['guest_interaction', 'grand_ritual', 'edgar_reset', 'host_context'];
+function getModel(requestType) {
+  return SONNET_TYPES.includes(requestType) ? MODEL_SONNET : MODEL_HAIKU;
+}
+
+// #19 — Nightly token budget. Rates are per million tokens; update here if
+// pricing changes.
+const TOKEN_RATES = {
+  [MODEL_HAIKU]:  { in: 1.00,  out: 5.00  },
+  [MODEL_SONNET]: { in: 3.00,  out: 15.00 },
+};
+let showBudget = {
+  nightlyCapUsd: 9.00,
+  spentUsd: 0,
+  haikuTokens: 0,
+  sonnetTokens: 0,
+  warnThreshold: 0.75,
+  exceeded: false,
+  mode: 'full',
+};
+
+function budgetMode(pct) {
+  if (pct >= 1.00) return 'cached_only';
+  if (pct >= 0.90) return 'cached_preferred';
+  if (pct >= 0.75) return 'haiku_only';
+  return 'full';
+}
+
+function trackTokens(model, inputTokens, outputTokens) {
+  const rates = TOKEN_RATES[model] || TOKEN_RATES[MODEL_HAIKU];
+  const inTok = Math.max(0, Number(inputTokens) || 0);
+  const outTok = Math.max(0, Number(outputTokens) || 0);
+  if (model === MODEL_SONNET) showBudget.sonnetTokens += inTok + outTok;
+  else showBudget.haikuTokens += inTok + outTok;
+  showBudget.spentUsd += (inTok / 1e6) * rates.in + (outTok / 1e6) * rates.out;
+  const pct = showBudget.spentUsd / showBudget.nightlyCapUsd;
+  const prev = showBudget.mode;
+  showBudget.mode = budgetMode(pct);
+  showBudget.exceeded = pct >= 1.00;
+  if (showBudget.mode !== prev) {
+    broadcastLog(`Budget: $${showBudget.spentUsd.toFixed(2)} of $${showBudget.nightlyCapUsd.toFixed(2)} — mode → ${showBudget.mode}`, 'SYSTEM');
+  }
+  broadcastState();
+  return showBudget;
+}
+
+// #13 — CALM AFTER THE STORM. Slow fade of every configured slot to a misty low
+// blue/grey, hold 60-90s, then warm back to the show scheme (Stage 1 look).
+// NOT auto-fired — the AI conductor calls this after the Grand Ritual; the Test
+// tab button and POST /api/calm exist for manual/rehearsal use.
+let calmActive = false;
+let calmTimers = [];
+async function calmPhase() {
+  if (calmActive) return { ok: false, reason: 'calm phase already running' };
+  const allIds = getSlotIds(...Object.keys(SLOT_BASES));
+  calmActive = true;
+  effects.suspended = true; // loops keep rescheduling but stay silent
+  broadcastLog('Calm after the storm: fading to mist', 'LIGHT');
+  broadcastState();
+
+  const ids = allIds.length ? allIds : undefined;
+  if (!allIds.length && !goveeDevices.length) {
+    calmActive = false; effects.suspended = false; broadcastState();
+    return { ok: false, reason: 'no Govee lights' };
+  }
+
+  // ~3s stepped fade down into the mist
+  const steps = [
+    { c: { r: 120, g: 140, b: 170 }, bri: 40, at: 0 },
+    { c: { r: 100, g: 125, b: 150 }, bri: 25, at: 1000 },
+    { c: { r:  90, g: 110, b: 130 }, bri: 18, at: 2000 },
+    { c: { r:  90, g: 110, b: 130 }, bri: 12, at: 3000 },
+  ];
+  for (const st of steps) {
+    calmTimers.push(setTimeout(() => {
+      goveeSetColor(st.c.r, st.c.g, st.c.b, ids, 1).catch(() => {});
+      goveeSetBrightness(st.bri, ids, 1).catch(() => {});
+    }, st.at));
+  }
+
+  const holdMs = Math.round(randBetween(60000, 90000));
+  calmTimers.push(setTimeout(async () => {
+    broadcastLog('Calm phase ending — warming back to Stage 1', 'LIGHT');
+    await applyShowScheme().catch(() => {});
+    effects.suspended = false;
+    calmActive = false;
+    calmTimers = [];
+    broadcastState();
+  }, 3000 + holdMs));
+
+  return { ok: true, holdMs };
+}
+
+// #15 — Edgar's annoyance threshold visual. Skeleton slot pulses angry red
+// between 30 and 90 brightness ~5 times over 10-15s, then back to the fire base.
+let edgarPulseActive = false;
+async function edgarAngryPulse() {
+  if (edgarPulseActive) return { ok: false, reason: 'already pulsing' };
+  const ids = getSlotIds('skeleton');
+  if (!ids.length) return { ok: false, reason: 'skeleton slot not assigned' };
+  edgarPulseActive = true;
+  effects.suspended = true; // hold the fire loop while Edgar loses his composure
+  broadcastLog('Edgar threshold: skeleton lights pulse angry red', 'LIGHT');
+
+  const pulses = 5;
+  const step = Math.round(randBetween(2000, 3000)); // 5 pulses ≈ 10-15s
+  await goveeSetColor(200, 0, 0, ids, 1).catch(() => {});
+  for (let i = 0; i < pulses; i++) {
+    setTimeout(() => {
+      goveeSetColor(200, 0, 0, ids, 1).catch(() => {});
+      goveeSetBrightness(90, ids, 1).catch(() => {});
+    }, i * step);
+    setTimeout(() => {
+      goveeSetBrightness(30, ids, 1).catch(() => {});
+    }, i * step + Math.round(step / 2));
+  }
+  setTimeout(async () => {
+    await applyShowScheme().catch(() => {});
+    effects.suspended = false;
+    edgarPulseActive = false;
+    broadcastState();
+  }, pulses * step + 400);
+
+  return { ok: true, pulses, durationMs: pulses * step };
+}
+
+// ─── Broadcast ────────────────────────────────────────────────────────────────
+function broadcast(obj) {
+  const payload = JSON.stringify(obj);
+  wss.clients.forEach(c => { if (c.readyState === 1) c.send(payload); });
+}
+function broadcastState() { broadcast({ type: 'state', data: stateSnapshot() }); }
+const LOG_FILE = path.join(__dirname, 'show-log.txt');
+function broadcastLog(msg, category = 'SYSTEM') {
+  broadcast({ type: 'log', msg, category });
+  console.log(`[${category}] ${msg}`);
+  try {
+    const ts = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, `[${ts}] [${category}] ${msg}\n`, 'utf8');
+  } catch(_) {}
+}
+
+function anyVlcRunning() {
+  return !!(stormProcess || skeletonProcess || witchProcess || witchSideProcess ||
+            ambientProcess || fxProcess || soundProcess);
+}
+
+function stateSnapshot() {
+  const strike = STRIKE_SEQUENCE[strikeIndex];
+  return {
+    connected:        state.connected,
+    fogActive:        state.fogActive,
+    fogCooldownUntil: state.fogCooldownUntil || 0,
+    stormActive:      state.stormActive,
+    stormNextAt:      state.stormNextAt,
+    stormStrikeIndex: strikeIndex,
+    stormStrikeName:  `${strike.emoji} ${strike.name}`,
+    kidMode:          state.kidMode,
+    paused:           state.paused,
+    sceneMode:        state.sceneMode,
+    volumes:          state.volumes,
+    mute:             state.mute,
+    fogAutoActive:    fogAuto.active,
+    fogAutoNextAt:    fogAuto.nextAt,
+    fogWarmup:        fogAuto.warmup,
+    soundPreset,
+    ambientActive:    ambientSystem.active,
+    vlcActive:        anyVlcRunning(),
+    goveeSlotsConfigured: Object.values(GOVEE_SLOT_IDS).filter(Boolean).length,
+    effectsRunning:   effects.running,
+    hostContext:      hostContext.text,
+    showActive:       state.showActive,
+    showStartedAt:    state.showStartedAt,
+    sensorsArmed:     state.sensorsArmed,
+    // Phase 2 hardening
+    esp32,
+    vlcHealth:        { ambientRunning: !!ambientProcess },
+    cycleStats:       state.cycleStats,
+    calmActive,
+    budget:           { spentUsd: showBudget.spentUsd, cap: showBudget.nightlyCapUsd, mode: showBudget.mode },
+  };
+}
+
+// ─── Show host context field ──────────────────────────────────────────────────
+// Free-text note from the host about who's at the yard right now. The AI
+// conductor uses it for exactly ONE interaction, then calls markContextUsed()
+// to expire it (enforcement lands in the AI conductor phase).
+let hostContext = { text: '', setAt: null, used: false };
+
+function markContextUsed() {
+  hostContext.used = true;
+  hostContext.text = '';
+  broadcastState();
+}
+
+loadShowState();
+loadSlotIPs();
+
+wss.on('connection', (ws) => {
+  ws.send(JSON.stringify({ type: 'state',    data: stateSnapshot() }));
+  ws.send(JSON.stringify({ type: 'config',   data: config }));
+  ws.send(JSON.stringify({ type: 'govee',    data: goveeDevices }));
+  ws.send(JSON.stringify({ type: 'settings', data: settings }));
+});
+
+// ─── Volume helpers ───────────────────────────────────────────────────────────
+function clampVol(zone, val) {
+  return Math.max(0, Math.min(config.maxVol[zone] || 80, val));
+}
+function volToHex(v) { return v.toString(16).toUpperCase().padStart(2, '0'); }
+
+const ZONE_CMD = { z1: 'MVL', z2: 'ZVL', z3: 'Z3L' };
+const MUTE_CMD = { z1: 'AMT', z2: 'ZMT', z3: 'MT3' };
+
+// Ducking helper — snapshot current zone volume, lower by `amount`,
+// restore after `durationMs`.
+function duckZone(zone, amount, durationMs) {
+  const original = state.volumes[zone];
+  const ducked = clampVol(zone, Math.max(0, original - amount));
+  if (ducked === original) return;
+  queueISCP(`${ZONE_CMD[zone]}${volToHex(ducked)}`)
+    .then(() => { state.volumes[zone] = ducked; broadcastState(); })
+    .catch(() => {});
+  setTimeout(() => {
+    queueISCP(`${ZONE_CMD[zone]}${volToHex(original)}`)
+      .then(() => { state.volumes[zone] = original; broadcastState(); })
+      .catch(() => {});
+  }, durationMs);
+}
+
+// ─── Fog helpers ──────────────────────────────────────────────────────────────
+async function fogOn() {
+  await sendISCP('TGA01');
+  state.fogActive = true;
+  broadcastState();
+  broadcastLog('Fog ON', 'FOG');
+}
+async function fogOff() {
+  if (state.fogTimer) { clearTimeout(state.fogTimer); state.fogTimer = null; }
+  await sendISCP('TGA00');
+  state.fogActive = false;
+  broadcastState();
+  broadcastLog('Fog OFF', 'FOG');
+}
+// RISK 9 — fog runaway protection. Hard caps regardless of caller (manual,
+// auto-timer, storm Overhead, sequencer, or the AI conductor): never more than
+// one burst per 45s, never longer than 20s. Protects the machine from
+// overheating and the fluid tank from draining mid-show.
+const FOG_MIN_GAP_MS   = 45000;
+const FOG_MAX_BURST_MS = 20000;
+
+function fogBurst(ms) {
+  const now = Date.now();
+  if (state.fogCooldownUntil && now < state.fogCooldownUntil) {
+    const wait = Math.ceil((state.fogCooldownUntil - now) / 1000);
+    broadcastLog(`Fog burst blocked — cooling down ${wait}s (45s minimum between bursts)`, 'FOG');
+    return false;
+  }
+  const dur = Math.min(Math.max(1000, ms || 5000), FOG_MAX_BURST_MS);
+  if (ms > FOG_MAX_BURST_MS) {
+    broadcastLog(`Fog burst clamped ${Math.round(ms/1000)}s → ${FOG_MAX_BURST_MS/1000}s (max burst)`, 'FOG');
+  }
+  state.fogCooldownUntil = now + FOG_MIN_GAP_MS;
+  fogOn().catch(() => {});
+  if (state.fogTimer) clearTimeout(state.fogTimer);
+  state.fogTimer = setTimeout(() => fogOff().catch(() => {}), dur);
+  return true;
+}
+
+// ─── Fog Auto-Timer ───────────────────────────────────────────────────────────
+let fogAuto = {
+  active:       false,
+  burstMs:      5000,
+  intervalMs:   600000, // 10 minutes
+  nextAt:       null,
+  timer:        null,
+  warmup:       false,
+  warmupTimer:  null,
+};
+
+function scheduleFogBurst() {
+  if (!fogAuto.active) return;
+  // Only the AUTO timer gap is affected; manual bursts are untouched.
+  const gap = fogAuto.intervalMs;
+  fogAuto.nextAt = Date.now() + gap;
+  broadcastState();
+  const mm = Math.floor(gap / 60000), ss = Math.round((gap % 60000) / 1000);
+  broadcastLog(`Fog Auto: next burst in ${mm}:${String(ss).padStart(2,'0')} `, 'FOG');
+  fogAuto.timer = setTimeout(() => {
+    if (!fogAuto.active) return;
+    broadcastLog('Fog Auto: firing burst', 'FOG');
+    fogBurst(fogAuto.burstMs);
+    scheduleFogBurst();
+  }, gap);
+}
+
+function startFogAuto() {
+  if (fogAuto.active) return;
+  fogAuto.active = true;
+  fogAuto.warmup = true;
+  fogAuto.nextAt = null;
+  broadcastLog('Fog Auto-Timer ON — 4 min warmup', 'FOG');
+  broadcastState();
+  fogAuto.warmupTimer = setTimeout(() => {
+    fogAuto.warmup = false;
+    broadcastLog('Fog Auto-Timer: warmup complete — cycle starting', 'FOG');
+    broadcastState();
+    scheduleFogBurst();
+  }, 240000); // 4 minutes
+}
+
+function stopFogAuto() {
+  fogAuto.active = false;
+  fogAuto.warmup = false;
+  fogAuto.nextAt = null;
+  if (fogAuto.timer) { clearTimeout(fogAuto.timer); fogAuto.timer = null; }
+  if (fogAuto.warmupTimer) { clearTimeout(fogAuto.warmupTimer); fogAuto.warmupTimer = null; }
+  broadcastState();
+  broadcastLog('Fog Auto-Timer OFF', 'FOG');
+}
+
 // ─── Storm progressive sequence engine ───────────────────────────────────────
 // Storm volumes are LOCKED — never affected by the Normal/Boost preset.
 // Strikes hit all three zones full blast (z1/z3 mirror z2 intensity).
@@ -931,6 +1332,51 @@ const CHARACTER_BIBLE = {
     },
     notes: 'Max 200 chars. Stored in hostContext; markContextUsed() clears after one use (enforced in the AI conductor phase).',
   },
+  // 7B — every host input is a Warden signal. NEVER echo the raw input; always
+  // translate it through a character's perspective.
+  translationMatrix: {
+    principle: 'Short cryptic host inputs are treated as Warden signals or telepathic flashes and expanded into ' +
+      'character-aware narrative. Claude never outputs the raw input — it always translates it through the ' +
+      'character\'s perspective. All host inputs are Warden signals regardless of content.',
+    examples: [
+      { input: 'skeleton family',   type: 'group identity',       output: '"The Warden signals a clan of bones approaches... interesting."' },
+      { input: 'scared toddler',    type: 'crowd mood — gentle',  output: 'Characters immediately soften; Evelina shifts to warm theatrical, not scary.' },
+      { input: 'fast crowd',        type: 'pacing signal',        output: 'Characters accelerate — shorter exchanges, storm moves faster.' },
+      { input: 'Batman',            type: 'costume identity',     output: '"The Warden speaks of a caped crusader... the storm knows no allegiance."' },
+      { input: 'Princess',          type: 'costume identity',     output: 'Evelina: "The Warden has spoken the true lineage of our royal guest."' },
+      { input: 'trampling grass',   type: 'crowd control',        output: '"Beware mortals — stepping from the path awakens what sleeps beneath Thornfield."' },
+      { input: 'too close to crypt',type: 'crowd control',        output: 'Jasper panics, Evelina warns dramatically — guests step back without the host breaking character.' },
+      { input: 'rowdy teens',       type: 'crowd energy redirect',output: 'Edgar addresses them directly; Evelina challenges them to participate in a spell.' },
+    ],
+    // Turns 2-3s Sonnet latency into a magical telepathic connection warming up.
+    latencyMasking: {
+      purpose: 'When a Sonnet call is in flight, characters telegraph the incoming Warden signal BEFORE the ' +
+        'response arrives. Guests never perceive delay — they perceive drama.',
+      lines: {
+        evelina: '"Wait... the Warden\'s mind-signal pulls at me... yes... I hear it..."',
+        lenora:  '"The Warden speaks..." — pause — then the response',
+        jasper:  '"Something\'s coming through — is that — yes — the Warden sends word"',
+        edgar:   '"Here we go..." — waits — then deadpan delivery of the response',
+      },
+      trigger: 'Fires automatically whenever a Sonnet call is detected in flight.',
+    },
+    crowdControl: {
+      note: 'Dedicated input category. Host never breaks character or addresses guests directly — characters ' +
+        'deliver the message in-universe. These take PRIORITY over other pending interactions.',
+      signals: {
+        'too loud':          'Characters react to the noise as if the storm is responding to it.',
+        'stepping on props': 'In-universe warning delivered dramatically.',
+        'blocking path':     'Jasper nervously asks guests to move — framed as being for their own safety.',
+        'leaving':           'Edgar delivers a sardonic farewell; Evelina invites them to return.',
+      },
+    },
+    rules: [
+      'All host inputs treated as Warden signals regardless of content',
+      'Translation always stays in character — never reveals the raw input directly',
+      'Latency masking fires automatically when a Sonnet call is detected in flight',
+      'Crowd control inputs take priority over other pending interactions',
+    ],
+  },
   offScriptCallouts: {
     // Extends hostContextField — worked examples of host context → in-character callouts.
     examples: [
@@ -1212,34 +1658,36 @@ const CHARACTER_BIBLE = {
       'Maximum 2-3 Warden references per storm cycle.',
     ],
   },
-  // Fog is FULLY conductor-controlled — the auto-timer stays OFF during the show.
-  // Claude fires every burst deliberately via POST /api/fog/fire {duration}.
+  // #10 — the 10 risk fixes: what lives in server.js now vs. what the AI
+  // conductor phase still owns.
+  // #10 — fog is SHOW-STATE driven and fully conductor-controlled. No weather API.
+  // Auto-timer stays OFF during the show; Claude fires every burst deliberately
+  // via POST /api/fog/fire {duration}. Hard caps enforced in code (45s gap, 20s max).
   fogStrategy: {
     control: 'Claude has 100% control. Leave the fog auto-timer OFF; fire each burst on purpose so fog ' +
-      'punctuates the show instead of running on a metronome. Weather-aware timing was removed — the owner ' +
-      'sets machine placement/level by hand; Claude decides only WHEN and HOW LONG.',
-    heavyMoments: [
-      'Major spells (Unraveling, Memory) — burst as the cauldron shifts color so the fog catches the light',
-      'Overhead strike / Grand Ritual — longest burst of the cycle, fires with the white blast',
-      'Very Close stage — the storm is nearly on top of the yard; keep a low bed rolling',
-      'A big crowd arriving at the witch — a burst as Evelina turns to greet them',
+      'punctuates the show instead of running on a metronome. No external API — Claude already knows exactly ' +
+      'what is happening in the show. The owner sets machine placement/level by hand; Claude decides WHEN and HOW LONG.',
+    moreFrequent: [
+      'Active spell firing — burst as the cauldron shifts color so the fog catches the light',
+      'Major crowd present — a burst as Evelina turns to greet them',
+      'Very Close stage — the storm is nearly overhead; keep a low bed rolling',
+      'Grand Ritual — sustained fog for maximum effect, the longest burst of the cycle',
     ],
-    lightMoments: [
-      'Distant / Getting Closer — little to none; save fluid and let the yard breathe',
-      'Calm phase after the Grand Ritual — no new fog, let the last of it drift out',
-      'Quiet periods with no guests — do NOT burst; nobody is there to see it and fluid is finite',
+    longerGaps: [
+      'Quiet periods with no guests — nobody is there to see it and fluid is finite',
+      'Early Distant stage — let the yard breathe; save fluid for the build',
+      'Calm After the Storm phase — minimal fog, let the scene breathe and the last of it drift out',
       'Edgar quiet-period callouts — no fog; the joke is the moment, not the atmosphere',
     ],
-    constraints: [
+    hardLimits: [
+      'CODE-ENFORCED: minimum 45s between bursts, maximum 20s per burst (RISK 9 runaway protection)',
       '4-minute warmup after power-on before the first burst is possible (show start handles this)',
-      'Typical burst 3-8s; Overhead can run longer. Back-to-back bursts need ~20-30s recovery or output thins out',
-      'Fluid is finite across a 5.5-hour night — budget roughly for the number of cycles, favor spells and Overhead',
-      'Wind will take low fog regardless; never chase it with more bursts — one good burst beats three thin ones',
+      'Typical burst 3-8s; back-to-back bursts thin out — respect the cooldown',
+      'Fluid is finite across a 5.5-hour night — budget per cycle, favor spells and Overhead',
+      'Wind takes low fog regardless; never chase it with more bursts — one good burst beats three thin ones',
       'Fog is an accent. Constant fog reads as a machine; occasional fog reads as a haunted place.',
     ],
   },
-  // #10 — the 10 risk fixes: what lives in server.js now vs. what the AI
-  // conductor phase still owns.
   technicalSafeguards: {
     implementedInCode: {
       risk1_goveeQueue: 'Per-IP Govee UDP queue enforcing a 50ms minimum gap, with priority: 0 storm flash, ' +
@@ -1252,7 +1700,7 @@ const CHARACTER_BIBLE = {
         'beats (>30s). Quiet mode must require esp32.online — a dead board looks like an empty yard.',
       risk8_cycleDrift: 'cycleStats (cyclesCompleted / lastCycleMs / avgCycleMs) recorded each time the storm ' +
         'sequence wraps Overhead → Distant, so stages can be compressed or extended to hit the 9pm ritual.',
-      risk9_weatherFallback: 'REMOVED — weather-aware fog was dropped. Fog auto-timer uses a fixed interval; the owner sets fog levels by hand for the night\'s conditions.',
+      risk9_fogRunaway: 'Hard caps in code: minimum 45s between fog bursts, maximum 20s burst duration, cooldown tracked in state.fogCooldownUntil. Weather API was removed entirely — Claude judges fog from show state (see fogStrategy).',
     },
     conductorPhase: {
       risk2_whisperGating: 'Require 80% transcription confidence and a 0.5s minimum utterance duration; suppress ' +
@@ -2026,6 +2474,9 @@ app.post('/api/context', (req, res) => {
 app.get('/api/context', (req, res) => {
   res.json({ ok: true, hostContext });
 });
+
+
+
 
 // ─── One-tap Show Start / Stop — Phase 2 ──────────────────────────────────────
 app.post('/api/show/start', async (req, res) => {
