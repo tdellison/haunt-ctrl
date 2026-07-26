@@ -2053,7 +2053,7 @@ const STORM_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
 const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
 const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
 const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
-const HAUNT_SOUNDS_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\HAUNT SOUNDS';
+const HAUNT_SOUNDS_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\Haunt sounds';
 
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
 const SKELETON_FILES = { left: 'skeleton-left.wav', right: 'skeleton-right.wav' };
