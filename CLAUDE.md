@@ -13,7 +13,7 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - Commit as `Claude <noreply@anthropic.com>`.
 
 ## Hardware
-- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.68.56:60128` — ⚠️ LIKELY STALE: the network is back on the `192.168.1.x` subnet (Dell reserved at .1.168), so the Onkyo needs a new `192.168.1.x` address; owner to report it. Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
+- **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.1.161:60128` (DHCP-reserved, MAC 00:09:b0:9b:de:c3). Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
 - **Govee IPs**: enter each controller's current address in Test → System (persists to govee-slots.json). Network has flipped subnets a few times (.1.x → .68.x → back to .1.x) — always confirm from the router's device list before trusting a saved value.
 - **Fog machine**: fired via receiver 12V trigger commands (`TGA01`/`TGA00`), 4-min warmup. Auto-timer exists but stays OFF during the show — **fog is 100% conductor-controlled** via `POST /api/fog/fire {duration}`; heavy on major spells/Overhead, none during downtime. Strategy + constraints in `CHARACTER_BIBLE.fogStrategy`. RISK-9 hard caps enforced in code: min 45s between bursts, max 20s per burst (`state.fogCooldownUntil`). Weather-aware timing was REMOVED (projections gone; owner sets machine level by hand).
 - **Playback**: VLC command line (`C:\Program Files\VideoLAN\VLC\vlc.exe`), audio clips `--intf dummy --play-and-exit --no-loop --no-repeat --no-video`.
@@ -83,7 +83,7 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **Voice input on Host Context**: 🎤 button beside SEND on the SHOW tab, Web Speech API (Chrome/Safari only — button hidden + note shown when unsupported). Tap to record (button turns red), transcript fills the field live, tap again or 3s silence auto-sends via the existing `/api/context` path.
 - **One-tap Show Start** (`POST /api/show/start`): fog warmup → applyShowScheme + effects → ambient → sensors armed (`state.sensorsArmed`) → storm cycle reset to Distant → `state.showActive`/`state.showStartedAt` set (elapsed tracking). `POST /api/show/stop` marks inactive + stops storm cycle (NOT a teardown — that's ALL STOP/STRIKE DOWN). SHOW tab has a green ▶ START SHOW button that flips to red ■ END SHOW with a live elapsed readout.
 - **Lenora is a STATIC PROP** — voice only, no physical movement, never raises her voice (`characters.lenora.staging` in CHARACTER_BIBLE).
-- Onkyo receiver reserved at **192.168.68.56** on the Deco router (updated in config.receiverIp). Govee light IPs still need re-entering on the new .68.x subnet in Test → System.
+- Onkyo receiver reserved at **192.168.1.161**; Dell reserved at **192.168.1.168**. Govee light IPs still need entering in Test → System.
 
 ## Phase 2 hardening
 - **Govee UDP queue**: per-IP outbound queue, 50ms min gap, priority 0 storm flash / 1 spell+calm+Edgar / 2 flicker loops (default). `goveeSend(ip, cmd, priority)` still returns a Promise.
