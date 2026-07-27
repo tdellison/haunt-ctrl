@@ -14,7 +14,7 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 
 ## Hardware
 - **Receiver**: Onkyo TX-NR838, ISCP over TCP at `192.168.1.161:60128` (DHCP-reserved, MAC 00:09:b0:9b:de:c3). Zone volume 0–80 hex. A command queue (`queueISCP`) serializes traffic.
-- **Govee IPs**: enter each controller's current address in Test → System (persists to govee-slots.json). Network has flipped subnets a few times (.1.x → .68.x → back to .1.x) — always confirm from the router's device list before trusting a saved value.
+- **Govee IPs**: known DHCP reservations live in `DEFAULT_SLOT_IPS` in server.js (skeleton = 192.168.1.216) so they survive a fresh setup; anything saved in Test → System overrides them (persists to govee-slots.json). Network has flipped subnets a few times (.1.x → .68.x → back to .1.x) — always confirm from the router's device list before trusting a saved value.
 - **Fog machine**: fired via receiver 12V trigger commands (`TGA01`/`TGA00`), 4-min warmup. Auto-timer exists but stays OFF during the show — **fog is 100% conductor-controlled** via `POST /api/fog/fire {duration}`; heavy on major spells/Overhead, none during downtime. Strategy + constraints in `CHARACTER_BIBLE.fogStrategy`. RISK-9 hard caps enforced in code: min 45s between bursts, max 20s per burst (`state.fogCooldownUntil`). Weather-aware timing was REMOVED (projections gone; owner sets machine level by hand).
 - **Playback**: VLC command line (`C:\Program Files\VideoLAN\VLC\vlc.exe`), audio clips `--intf dummy --play-and-exit --no-loop --no-repeat --no-video`.
 - **Lights**: Govee LAN API (UDP 4003 send / 4002 listen / 4001 scan). Each zone is a tethered pair on ONE controller IP.

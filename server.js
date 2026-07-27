@@ -606,11 +606,22 @@ function saveSlotIPs() {
     fs.writeFileSync(SLOTS_FILE, JSON.stringify(GOVEE_IPS), 'utf8');
   } catch(_) {}
 }
+// Known DHCP reservations — these survive a fresh setup or a lost
+// govee-slots.json. Anything saved from the UI overrides these.
+const DEFAULT_SLOT_IPS = {
+  skeleton: '192.168.1.216',
+  // witch:    '',
+  // moon:     '',
+  // storm:    '',
+  // cauldron: '',
+};
+
 function loadSlotIPs() {
+  let saved = {};
+  try { saved = JSON.parse(fs.readFileSync(SLOTS_FILE, 'utf8')) || {}; } catch(_) {}
   try {
-    const saved = JSON.parse(fs.readFileSync(SLOTS_FILE, 'utf8'));
     for (const slot of Object.keys(GOVEE_IPS)) {
-      const ip = saved?.[slot];
+      const ip = saved[slot] || DEFAULT_SLOT_IPS[slot];
       if (!ip) continue;
       let dev = goveeDevices.find(d => d.ip === ip);
       if (!dev) {
