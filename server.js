@@ -492,6 +492,13 @@ let state = {
   // these to compress or extend stages so the Grand Ritual lands on the ~9pm
   // target instead of slowly drifting off schedule across the night.
   cycleStats: { cyclesCompleted: 0, lastCycleMs: null, avgCycleMs: null, cycleStartedAt: null },
+  // §27 — mic gate. Storm audio bleeding into the outdoor mics reads as speech to
+  // Whisper and fires phantom character responses. Software mute only.
+  micGate: { mutedUntil: 0, reason: null },
+  // §28 — ghostly/demonic voice intrusions. HARD limit of 2 per show night.
+  intrusions: { count: 0, lastAt: null, lastKind: null, lastCycle: null },
+  // §29 — internet health / graceful degradation.
+  net: { online: true, degraded: false, lastOkAt: null, consecutiveFails: 0 },
 };
 
 // ─── Sound presets ────────────────────────────────────────────────────────────
@@ -738,6 +745,121 @@ setInterval(() => {
   }
 }, 5000);
 
+// ─── §29 Internet health + graceful degradation ───────────────────────────────
+// The show must never fully stop. If the internet drops, ElevenLabs and the
+// Claude API go away but lights, fog, storm cycling, phantom sounds and VLC all
+// keep running — characters speak from the local cache instead of going silent.
+const NET_CHECK_INTERVAL_MS = 30000;
+const NET_FAIL_THRESHOLD    = 2;     // 2 consecutive failed pings → degraded
+const NET_PING_TIMEOUT_MS   = 5000;
+// Timeout protection — don't wait on a slow API, serve from cache instead.
+const ELEVENLABS_TIMEOUT_MS = 3000;
+const CLAUDE_TIMEOUT_MS     = 4000;
+const AUDIO_CACHE_DIR = path.join(__dirname, 'cache', 'audio');
+
+function ensureAudioCacheDir() {
+  try { fs.mkdirSync(AUDIO_CACHE_DIR, { recursive: true }); } catch (_) {}
+}
+
+// Lists what's actually cached per character, so the conductor (and the health
+// row) can tell whether degraded mode has anything to fall back on.
+function audioCacheStatus() {
+  ensureAudioCacheDir();
+  let files = [];
+  try { files = fs.readdirSync(AUDIO_CACHE_DIR).filter(f => /\.(mp3|wav)$/i.test(f)); } catch (_) {}
+  const perCharacter = {};
+  for (const c of CHARACTERS) {
+    perCharacter[c.id] = files.filter(f => f.toLowerCase().startsWith(c.id.toLowerCase())).length;
+  }
+  return { total: files.length, perCharacter, dir: AUDIO_CACHE_DIR };
+}
+
+function setNetOnline(online) {
+  const was = state.net.online;
+  state.net.online = online;
+  state.net.degraded = !online;
+  if (online) {
+    state.net.lastOkAt = Date.now();
+    state.net.consecutiveFails = 0;
+  }
+  if (was !== online) {
+    if (online) {
+      broadcastLog('Internet restored — live API mode resumed', 'SYSTEM');
+    } else {
+      const cache = audioCacheStatus();
+      broadcastLog(
+        `INTERNET DOWN — degraded mode: cached audio (${cache.total} clips), rule-based decisions. ` +
+        'Fix: enable phone hotspot and connect the Dell to it.',
+        'SYSTEM'
+      );
+    }
+    broadcast({ type: 'net_health', data: { online, degraded: !online } });
+    broadcastState();
+  }
+}
+
+function checkInternet() {
+  const req = https.request(
+    { method: 'HEAD', host: 'www.google.com', path: '/generate_204', timeout: NET_PING_TIMEOUT_MS },
+    (res) => { res.resume(); setNetOnline(true); }
+  );
+  const fail = () => {
+    try { req.destroy(); } catch (_) {}
+    state.net.consecutiveFails += 1;
+    if (state.net.consecutiveFails >= NET_FAIL_THRESHOLD) setNetOnline(false);
+  };
+  req.on('timeout', fail);
+  req.on('error', fail);
+  req.end();
+}
+
+let netMonitorTimer = null;
+function startNetMonitor() {
+  if (netMonitorTimer) return;
+  ensureAudioCacheDir();
+  checkInternet();
+  netMonitorTimer = setInterval(checkInternet, NET_CHECK_INTERVAL_MS);
+}
+
+// ─── §27 Mic gate — storm audio mic mute ──────────────────────────────────────
+// Thunder through the outdoor mics transcribes as speech and triggers false
+// character responses. Software mute only — no hardware change. Storm mute
+// OUTRANKS every other mic state: an overhead strike closes an open dialogue
+// window immediately and holds it closed.
+const MIC_MUTE = {
+  stormClipTailMs: 1000,   // clip duration + 1s
+  stormClipAssumedMs: 6000,// clips aren't probed for length; assume 6s then add tail
+  overheadMs:       3000,  // loudest event — hard 3s floor
+  lightningMs:      1000,
+  characterMs:      3000,  // RISK 7 — host phone mic vs zone 1 output
+};
+
+function muteMics(ms, reason) {
+  const until = Date.now() + ms;
+  // Never shorten an existing longer mute — the loudest event wins.
+  if (until > state.micGate.mutedUntil) {
+    state.micGate.mutedUntil = until;
+    state.micGate.reason = reason;
+    broadcastLog(`Mics muted ${Math.round(ms / 1000)}s — ${reason}`, 'AUDIO');
+    broadcast({ type: 'mic_gate', data: { muted: true, reason, until } });
+    broadcastState();
+  }
+  return state.micGate.mutedUntil;
+}
+
+function micsMuted() {
+  return Date.now() < (state.micGate.mutedUntil || 0);
+}
+
+function micGateSnapshot() {
+  const muted = micsMuted();
+  return {
+    muted,
+    reason: muted ? state.micGate.reason : null,
+    msRemaining: muted ? state.micGate.mutedUntil - Date.now() : 0,
+  };
+}
+
 // RISK 4 — ESP32 heartbeat. The board POSTs /api/sensor/heartbeat on a short
 // interval; 3 missed beats (>30s) marks it offline.
 // IMPORTANT: quiet mode must NEVER be entered on sensor inactivity alone — a dead
@@ -952,6 +1074,10 @@ function stateSnapshot() {
     cycleStats:       state.cycleStats,
     calmActive,
     budget:           { spentUsd: showBudget.spentUsd, cap: showBudget.nightlyCapUsd, mode: showBudget.mode },
+    // §27 / §28 / §29
+    micGate:          micGateSnapshot(),
+    intrusions:       { count: state.intrusions.count, max: INTRUSION_MAX_PER_NIGHT, lastKind: state.intrusions.lastKind },
+    net:              { online: state.net.online, degraded: state.net.degraded, lastOkAt: state.net.lastOkAt },
   };
 }
 
@@ -1895,8 +2021,52 @@ const CHARACTER_BIBLE = {
         'AFTER the phantom sound — the phantom is the event, the character reaction is the payoff.',
     },
   },
+  // §28 — something is drawn in by the power of the storm. RARE: hard limit of
+  // TWO per show night, enforced in code (fireIntrusion / intrusionEligible).
+  voiceIntrusions: {
+    premise: 'Once or twice a night — never more — an uninvited entity is attracted by the power of the ' +
+      'Hollow Storm. The characters react as if something genuinely showed up unannounced. This is not an ' +
+      'ambient effect; it is an event.',
+    constraints: [
+      'Only during Close or Very Close — the storm must be strong enough to attract them.',
+      'Maximum TWO per full show night regardless of how many cycles run.',
+      'Never during the Grand Ritual or the Calm After the Storm phase.',
+      'Never back to back — a full storm cycle must pass between intrusions.',
+      'Random timing within the eligible stages — never predictable.',
+      'The whole beat, sound plus reactions, runs 10-15 seconds. The storm continues uninterrupted.',
+      'Characters acknowledge it ONCE and then never reference it again for the rest of the night.',
+    ],
+    ghostly: {
+      feel: 'Something ethereal passed through.',
+      evelina: 'Intrigued — confirmation the storm is responding. "Did you feel that... yes... they\'re drawn to it"',
+      lenora:  'Uncomfortable; this is outside the ritual. "That wasn\'t supposed to come through"',
+      jasper:  'Absolutely terrified. "WHAT WAS THAT WHAT WAS THAT"',
+      edgar:   '"Great. Uninvited guests. At least they don\'t eat the candy."',
+    },
+    demonic: {
+      feel: 'Darker. The characters are genuinely more alarmed.',
+      evelina: 'Excited but cautious. "The deeper ones are listening now... good"',
+      lenora:  'Firmly dismissive, directed at the void itself. "No. Not you. Leave."',
+      jasper:  'Cannot speak — just makes sounds.',
+      edgar:   'Long pause. "I don\'t like that one." Genuine, no joke. This is one of the few moments Edgar drops the act.',
+    },
+    afterward: 'Characters shoo it off and return to normal show flow.',
+    api: 'POST /api/intrusion/fire {kind?} — kind is ghostly|demonic, omitted means auto-pick from storm ' +
+      'intensity (Very Close draws the deeper ones). GET /api/intrusion/status reports remaining count and ' +
+      'why it is or is not currently eligible. The route returns 409 with a reason when it is not.',
+  },
+
   technicalSafeguards: {
     implementedInCode: {
+      micGate_stormMute: '§27 — storm audio is muted at the mics in code (muteMics/micsMuted, state.micGate). ' +
+        'Storm clip = clip + 1s, overhead strike = hard 3s floor, character audio = 3s. Storm mute OUTRANKS ' +
+        'every other mic state: an overhead strike closes an open dialogue window immediately and holds it. ' +
+        'A longer mute never gets shortened by a later shorter one. GET/POST /api/mic/gate, /api/mic/mute.',
+      internetFailsafe: '§29 — health check every 30s; 2 consecutive failures flips state.net.degraded. In ' +
+        'degraded mode: ElevenLabs falls back to cached local clips, Claude falls back to rule-based ' +
+        'decisions, Whisper still runs locally, and phantom sounds, storm cycling, lights and fog all ' +
+        'continue untouched. The show never fully stops. Timeouts: ElevenLabs 3s, Claude 4s — do not wait ' +
+        'past those, serve cache and resume live on the next call. Host fix is the phone hotspot.',
       risk1_goveeQueue: 'Per-IP Govee UDP queue enforcing a 50ms minimum gap, with priority: 0 storm flash, ' +
         '1 spell/calm/Edgar colors, 2 flicker + idle loops. Higher priority jumps the queue.',
       risk10_vlcWatchdog: '5s interval — if the ambient bed should be running but the VLC process is gone, log ' +
@@ -2210,6 +2380,58 @@ function firePhantom(eventName) {
   return true;
 }
 
+// ─── §28 Ghostly / demonic voice intrusions ───────────────────────────────────
+// Something is drawn in by the power of the Hollow Storm. HARD limit of 2 per
+// show night — this is a rare event, not an ambient effect. Only fires while the
+// storm is strong enough to attract them (Close / Very Close), never during the
+// Grand Ritual or the calm phase, and never twice inside the same cycle.
+const INTRUSION_MAX_PER_NIGHT = 2;
+const INTRUSION_ELIGIBLE_STAGES = [2, 3]; // Close, Very Close
+const INTRUSION_KEYWORDS = { ghostly: 'demon', demonic: 'demon' };
+
+function intrusionEligible() {
+  if (state.intrusions.count >= INTRUSION_MAX_PER_NIGHT) return { ok: false, why: 'nightly limit of 2 reached' };
+  if (!INTRUSION_ELIGIBLE_STAGES.includes(strikeIndex)) return { ok: false, why: 'storm stage must be Close or Very Close' };
+  if (phantomSuppressed) return { ok: false, why: 'Grand Ritual in progress' };
+  if (calmActive) return { ok: false, why: 'calm phase in progress' };
+  if (audioLock.held) return { ok: false, why: `audio lock held by ${audioLock.owner}` };
+  // Never back to back — a full cycle must pass between intrusions.
+  if (state.intrusions.lastCycle !== null && state.intrusions.lastCycle === state.cycleStats.cyclesCompleted) {
+    return { ok: false, why: 'must wait a full storm cycle since the last intrusion' };
+  }
+  return { ok: true };
+}
+
+// kind: 'ghostly' | 'demonic' | undefined (auto-picks from storm intensity —
+// Very Close is darker, so it draws the deeper ones).
+function fireIntrusion(kind) {
+  const check = intrusionEligible();
+  if (!check.ok) return { ok: false, error: check.why };
+
+  const chosen = (kind === 'ghostly' || kind === 'demonic')
+    ? kind
+    : (strikeIndex >= 3 ? 'demonic' : 'ghostly');
+
+  const file = findSoundFile(INTRUSION_KEYWORDS[chosen]);
+  if (!file) return { ok: false, error: 'no matching sound file in HAUNT SOUNDS' };
+
+  state.intrusions.count += 1;
+  state.intrusions.lastAt = Date.now();
+  state.intrusions.lastKind = chosen;
+  state.intrusions.lastCycle = state.cycleStats.cyclesCompleted;
+
+  playHauntSound(file);
+  broadcastLog(
+    `INTRUSION (${chosen}) → ${file} — ${state.intrusions.count}/${INTRUSION_MAX_PER_NIGHT} tonight`,
+    'AUDIO'
+  );
+  // The conductor listens for this and drives the character reactions; the
+  // reaction lines live in CHARACTER_BIBLE.voiceIntrusions.
+  broadcast({ type: 'intrusion', data: { kind: chosen, file, count: state.intrusions.count } });
+  broadcastState();
+  return { ok: true, kind: chosen, file, count: state.intrusions.count };
+}
+
 function playStormClip(overhead) {
   const file = overhead
     ? OVERHEAD_FILE
@@ -2219,6 +2441,15 @@ function playStormClip(overhead) {
 
 function playStormFile(file) {
   if (stormProcess) { try { stormProcess.kill(); } catch (_) {} stormProcess = null; }
+  // §27 — gate the mics for the clip. Overhead is the loudest event on the yard
+  // and gets the hard 3s floor regardless of clip length.
+  const isOverhead = (file === OVERHEAD_FILE);
+  muteMics(
+    isOverhead
+      ? Math.max(MIC_MUTE.overheadMs, MIC_MUTE.stormClipAssumedMs + MIC_MUTE.stormClipTailMs)
+      : MIC_MUTE.stormClipAssumedMs + MIC_MUTE.stormClipTailMs,
+    isOverhead ? 'overhead strike' : 'storm clip'
+  );
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
   stormProcess = spawn(VLC_PATH, [
     path.join(STORM_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
@@ -3167,6 +3398,65 @@ app.get('/api/phantom/map', (req, res) => {
   res.json({ ok: true, map: PHANTOM_MAP, resolved, minGapMs: PHANTOM_MIN_GAP_MS, suppressed: phantomSuppressed });
 });
 
+// ─── §27 Mic gate routes ──────────────────────────────────────────────────────
+app.get('/api/mic/gate', (req, res) => {
+  res.json({ ok: true, ...micGateSnapshot(), policy: MIC_MUTE });
+});
+
+// Called when a character speaks so the host phone mic doesn't capture zone 1
+// output as host context (RISK 7), and by any other output that needs the gate.
+app.post('/api/mic/mute', (req, res) => {
+  const { ms, reason } = req.body || {};
+  const dur = Number.isFinite(ms) ? Math.max(0, Math.min(30000, ms)) : MIC_MUTE.characterMs;
+  muteMics(dur, reason || 'character audio');
+  res.json({ ok: true, ...micGateSnapshot() });
+});
+
+// ─── §28 Voice intrusion routes ───────────────────────────────────────────────
+app.post('/api/intrusion/fire', (req, res) => {
+  const { kind } = req.body || {};
+  if (kind && kind !== 'ghostly' && kind !== 'demonic') {
+    return res.status(400).json({ error: 'kind must be ghostly or demonic' });
+  }
+  const result = fireIntrusion(kind);
+  if (!result.ok) return res.status(409).json(result);
+  res.json(result);
+});
+
+app.get('/api/intrusion/status', (req, res) => {
+  const check = intrusionEligible();
+  res.json({
+    ok: true,
+    count: state.intrusions.count,
+    max: INTRUSION_MAX_PER_NIGHT,
+    remaining: Math.max(0, INTRUSION_MAX_PER_NIGHT - state.intrusions.count),
+    lastKind: state.intrusions.lastKind,
+    lastAt: state.intrusions.lastAt,
+    eligible: check.ok,
+    reason: check.ok ? null : check.why,
+    eligibleStages: INTRUSION_ELIGIBLE_STAGES.map(i => STRIKE_SEQUENCE[i].name),
+  });
+});
+
+// ─── §29 Internet health routes ───────────────────────────────────────────────
+app.get('/api/net/health', (req, res) => {
+  res.json({
+    ok: true,
+    online: state.net.online,
+    degraded: state.net.degraded,
+    lastOkAt: state.net.lastOkAt,
+    consecutiveFails: state.net.consecutiveFails,
+    checkIntervalMs: NET_CHECK_INTERVAL_MS,
+    timeouts: { elevenlabsMs: ELEVENLABS_TIMEOUT_MS, claudeMs: CLAUDE_TIMEOUT_MS },
+    cache: audioCacheStatus(),
+    hotspotNote: 'If internet drops: enable phone mobile hotspot, connect the Dell to it. ~30 second fix.',
+  });
+});
+
+app.get('/api/cache/audio', (req, res) => {
+  res.json({ ok: true, ...audioCacheStatus() });
+});
+
 // ─── Media / system info ──────────────────────────────────────────────────────
 app.get('/api/media/lists', (req, res) => {
   const dirs = {
@@ -3288,5 +3578,6 @@ const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`[HAUNT] HAUNT CTRL v3 on http://localhost:${PORT}`);
   testConnection();
+  startNetMonitor(); // §29 — internet health / degraded-mode switching
 });
 

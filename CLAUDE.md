@@ -106,8 +106,22 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - **PHANTOM_MAP** (`firePhantom`, `POST /api/phantom/fire`, `GET /api/phantom/map`, Test→Audio buttons): zero-LLM ambient reflexes on storm stages/spells/fog/sensors. 20s minimum gap, respects the audio lock, suppressed during the Grand Ritual, keyword-matched filenames (crow/owl/wolf/wind/chain/demon/scream) so it works as soon as HAUNT SOUNDS is populated.
 - **ESP32 local handling**: `/api/sensor/trigger` accepts `{zone, escalate, localHandled:[...]}` (escalate defaults true). `escalate:false` logs and returns without entering the priority queue. `POST /api/sensor/stage` records the storm stage for the board to reflect locally in <50ms. Cuts Claude calls ~40-60%.
 
+## Phase 2 final adds (§27–29, built)
+- **Mic gate (§27)**: `muteMics(ms, reason)` / `micsMuted()` / `state.micGate`. Storm clip = 6s assumed + 1s tail, **overhead strike = hard 3s floor**, character audio = 3s (RISK 7). Storm mute **outranks every other mic state** — an overhead strike closes an open dialogue window immediately; a longer mute is never shortened by a later shorter one. Wired into `playStormFile` so every storm clip gates automatically. `GET /api/mic/gate`, `POST /api/mic/mute {ms, reason}`.
+- **Voice intrusions (§28)**: `fireIntrusion(kind)` / `intrusionEligible()`. Ghostly or demonic — something drawn in by the storm. **Hard limit of 2 per night**, enforced in code. Only during Close/Very Close, never during Grand Ritual or calm phase, never twice in the same cycle, auto-picks demonic at Very Close. Reaction lines per character in `CHARACTER_BIBLE.voiceIntrusions`. Characters acknowledge it once and never reference it again. `POST /api/intrusion/fire {kind?}` (409 + reason when ineligible), `GET /api/intrusion/status`.
+- **Internet failsafe (§29)**: health check every 30s, 2 consecutive failures → `state.net.degraded`. Degraded = cached local audio + rule-based decisions; Whisper, phantom sounds, storm cycling, lights and fog all keep running — the show never fully stops. Timeouts: ElevenLabs 3s, Claude 4s (serve cache, don't wait). Cache dir `cache/audio/`, filenames must start with the character id for the per-character count to work. `GET /api/net/health`, `GET /api/cache/audio`. Host fix for a real outage: phone hotspot.
+- Note: **`/api/state` is not a route** — it falls through to index.html. The state snapshot ships over the WebSocket (`{type:'state'}`).
+
 ## Known gotchas
 - Dell IP was 192.168.1.8, now **192.168.1.168** (bat + docs reference it).
 - If site won't load: bat window shows the error above "SERVER STOPPED"; commonest cause historically was missing node_modules (now committed).
 - Stop-hook "Unverified commits" warnings are noise when commits are already authored as noreply@anthropic.com and pushed.
 - GitHub 403 from a session = that session's credentials died; a fresh session fixes it (owner already reconnected the integration).
+- **Phone can't reach the server but the Dell can (SOLVED — Norton).** Symptom: `http://192.168.1.168:3000` loads in Chrome on the Dell, blank/unreachable from the iPhone; `netstat -ano | findstr :3000` shows `0.0.0.0:3000 LISTENING` with no connection from the phone's IP. Cause: Norton 360 Smart Firewall. The fix took all of these:
+  1. Windows Firewall inbound rule: `netsh advfirewall firewall add rule name="HAUNT CTRL 3000" dir=in action=allow protocol=TCP localport=3000` (admin prompt).
+  2. Norton → Settings → Firewall → Smart Firewall → **Network** tab: set **Sky Net / Sky Net-5G / Sky Net-5G 2** to **Private** (they defaulted to Public).
+  3. Norton → **Traffic Rules** tab: new rule `Haunt ctrl 3000` — Allow / In / TCP / Address `192.168.1.0-192.168.1.255` (CIDR `/24` is rejected; use the dash range) / local port 3000 / Reporting None.
+  4. **CRITICAL: drag that rule to the TOP of the Traffic Rules list.** Norton matches top-down and stops at the first hit; new rules land at the bottom under the default block rules and never fire. Steps 1–3 alone did nothing — the reorder is what fixed it.
+  - Norton Program Control already had Node.js on Allow, so that layer was never the problem.
+  - Norton VPN adapters are installed on the Dell. They were disconnected during the show setup. If that VPN ever auto-connects it will reroute traffic and break both the phone UI and Govee UDP discovery — disable auto-connect before show night.
+- iOS Safari will send `192.168.1.168:3000` to Google search; type the full `http://192.168.1.168:3000`. Bookmark it to avoid the issue entirely.
