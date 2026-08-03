@@ -219,7 +219,8 @@ function getSlotIds(...slots) {
     if (SLOT_GROUPS[s]) expanded.push(...SLOT_GROUPS[s]);
     else expanded.push(s);
   }
-  return expanded.map(s => GOVEE_SLOT_IDS[s]).filter(Boolean);
+  // Dedupe: a tethered pair shares ONE controller IP - both slots resolve to the same device id.
+  return [...new Set(expanded.map(s => GOVEE_SLOT_IDS[s]).filter(Boolean))];
 }
 
 // Set every configured slot to its base show look
