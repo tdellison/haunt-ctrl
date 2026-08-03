@@ -1231,6 +1231,21 @@ body::before { animation:scanlines 10s linear infinite; }
     <div class="info-row" style="border-bottom:none"><span class="info-key">Protocol</span><span class="info-val">ISCP over TCP</span></div>
   </div>
 
+  <!-- Govee lights -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">💡</span>Govee Lights</div>
+    <div id="govee-setup-rows"></div>
+    <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-green btn-sm" onclick="saveGoveeSetup()">💾 Save IPs</button>
+      <button class="btn btn-blue  btn-sm" onclick="testAllGoveeSetup()">⚡ Test All</button>
+      <span id="govee-setup-status" style="font-family:'Courier New',monospace;font-size:.76em;color:var(--dim2);letter-spacing:1px">Not saved this session</span>
+    </div>
+    <div style="margin-top:8px;font-size:.72em;color:var(--dim2);letter-spacing:.5px;line-height:1.5">
+      Tethered pairs share ONE controller IP — enter the same address for both halves.
+      Saving applies immediately, no restart needed.
+    </div>
+  </div>
+
   <!-- App settings -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">⚙</span>App Settings</div>
@@ -1888,6 +1903,83 @@ async function applySlot(key) {
   appendLog(`Slot ${key}: rgb(${r},${g},${b}) @ ${bri}%`, 'LIGHT');
 }
 
+// ── Govee lights (Setup tab) ──────────────────────────────────────────────────
+// Character-facing labels; keys match the server's slot names.
+const GOVEE_SETUP_SLOTS = [
+  { key:'skeletonLeft',  label:'Skeleton Left',            fallback:'192.168.1.216' },
+  { key:'skeletonRight', label:'Skeleton Right',           fallback:'192.168.1.216' },
+  { key:'witchMain',     label:'Witch Main (Evelina)',     fallback:'192.168.1.209' },
+  { key:'witchSecond',   label:'Witch Second (Lenora)',    fallback:'192.168.1.209' },
+  { key:'moonLeft',      label:'Moon Left',                fallback:'' },
+  { key:'moonRight',     label:'Moon Right',               fallback:'' },
+  { key:'cauldron',      label:'Cauldron Bulb',            fallback:'' },
+  { key:'monument',      label:'Monument Bulb',            fallback:'' },
+];
+
+async function buildGoveeSetup() {
+  const box = document.getElementById('govee-setup-rows');
+  if (!box) return;
+  const r = await apiGet('/api/govee/slots');
+  box.innerHTML = '';
+  GOVEE_SETUP_SLOTS.forEach(({ key, label, fallback }) => {
+    // Saved value wins; the fallback is the known DHCP reservation.
+    const saved = r?.ips?.[key];
+    const val = (saved && saved.length) ? saved : fallback;
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    row.innerHTML =
+      `<label style="min-width:170px">${label}</label>` +
+      `<input class="raw-input" id="gset-${key}" placeholder="192.168.1.x" value="${val}"/>` +
+      `<button class="btn btn-blue btn-sm" onclick="testGoveeSetup('${key}')">TEST</button>` +
+      `<span class="dot ${val ? '' : 'off'}" id="gsetdot-${key}" title="${val ? 'not tested yet' : 'no IP set'}"></span>`;
+    box.appendChild(row);
+  });
+}
+
+async function testGoveeSetup(key) {
+  const ip = document.getElementById(`gset-${key}`)?.value?.trim();
+  const dot = document.getElementById(`gsetdot-${key}`);
+  if (!ip) {
+    if (dot) { dot.className = 'dot off'; dot.title = 'no IP set'; }
+    appendLog(`Govee ${key}: no IP entered`, 'LIGHT');
+    return false;
+  }
+  if (dot) { dot.className = 'dot storm'; dot.title = 'testing...'; }
+  const res = await api('/api/govee/test-ip', { ip });
+  const good = !!res?.responded;
+  if (dot) {
+    dot.className = 'dot ' + (good ? 'on' : 'off');
+    dot.title = good ? `${ip} responded` : `${ip} did not respond`;
+  }
+  appendLog(`Govee ${key} @ ${ip}: ${good ? 'responded ✓' : 'NO REPLY ✗'}`, 'LIGHT');
+  return good;
+}
+
+async function testAllGoveeSetup() {
+  for (const { key } of GOVEE_SETUP_SLOTS) {
+    const ip = document.getElementById(`gset-${key}`)?.value?.trim();
+    if (ip) await testGoveeSetup(key);
+  }
+}
+
+async function saveGoveeSetup() {
+  const ips = {};
+  for (const { key } of GOVEE_SETUP_SLOTS) {
+    ips[key] = document.getElementById(`gset-${key}`)?.value?.trim() || '';
+  }
+  const res = await api('/api/govee/slots/save', { ips });
+  const el = document.getElementById('govee-setup-status');
+  if (res?.ok) {
+    const n = Object.values(res.ips).filter(Boolean).length;
+    if (el) { el.textContent = `Saved — ${n}/8 assigned`; el.style.color = 'var(--green)'; }
+    appendLog(`Govee slot IPs saved (${n}/8 assigned) — active immediately`, 'LIGHT');
+    loadSlots();
+  } else {
+    if (el) { el.textContent = res?.error || 'Save failed'; el.style.color = 'var(--red)'; }
+    appendLog(`Govee save failed: ${res?.error || 'unknown error'}`, 'LIGHT');
+  }
+}
+
 // ── Govee IP fields (System panel) ────────────────────────────────────────────
 function buildGoveeIPGrid() {
   const grid = document.getElementById('govee-ip-grid');
@@ -2109,6 +2201,7 @@ document.addEventListener('keydown', (e) => {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 buildGoveeIPGrid();
+buildGoveeSetup();
 buildStormClipGrid();
 appendLog(DEMO ? 'HAUNT CTRL v3 — DEMO MODE' : 'HAUNT CTRL v3 online', 'SYSTEM');
 if (DEMO) appendLog('All buttons functional — API calls logged here', 'SYSTEM');
