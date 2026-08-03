@@ -10,6 +10,7 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - `node_modules` is COMMITTED to the repo on purpose (the Dell must never need npm install). Do not gitignore it.
 - `govee-slots.json` and `show-state.json` are per-machine runtime files, gitignored.
 - Always run `node --check server.js` before committing.
+- **Delivery workflow (owner preference): PowerShell on the Dell.** Cloud sessions frequently lose their GitHub push credential mid-session (403 on `git push`, unrecoverable inside that session). Do not burn time retrying or spinning up fresh sessions. Instead: for a one-line change, hand the owner a single PowerShell block using (Get-Content $p -Raw).Replace(...) that edits, syntax-checks, commits and pushes. For larger changes, send the changed files and have the owner download (NOT drag - dragging creates 1KB shortcuts), copy into place, then commit and push from PowerShell. Always back up the originals first and verify byte counts before committing.
 - Commit as `Claude <noreply@anthropic.com>`.
 
 ## Hardware
