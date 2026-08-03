@@ -152,6 +152,98 @@ function goveeSend(ip, cmdObj, priority = 2) {
   });
 }
 
+// Which slot owns a device id, or null if it isn't assigned to one.
+function slotForDeviceId(id) {
+  return Object.keys(GOVEE_SLOT_IDS).find(s => GOVEE_SLOT_IDS[s] === id) || null;
+}
+
+// The look a slot should hold RIGHT NOW. Everything is its SLOT_BASES entry
+// except the monument, which tracks the live storm stage rather than a fixed
+// base — after a flash it must return to its current spectral level, not to the
+// stage-1 "off" base.
+function currentBaseFor(slot) {
+  if (slot === 'monument') {
+    const idx = (effects.monumentOverride !== null && effects.monumentOverride !== undefined)
+      ? effects.monumentOverride
+      : Math.max(0, Math.min(MONUMENT_STAGES.length - 1, strikeIndex));
+    const st = MONUMENT_STAGES[idx];
+    return { color: st.color, bri: st.bri };
+  }
+  const b = SLOT_BASES[slot];
+  return b ? { color: b.color, bri: b.bri } : null;
+}
+
+// Post-flash restore. Slot-assigned lights go back to their OWN base colour;
+// anything not in a slot falls back to the pre-flash snapshot. Previously this
+// restored every light from the snapshot, and because devices are created with a
+// hardcoded orange, un-repainted lights all came back skeleton-coloured.
+async function restoreAfterFlash(snapshot) {
+  for (const dev of goveeDevices) {
+    const slot = slotForDeviceId(dev.id);
+    const base = slot ? currentBaseFor(slot) : null;
+    if (base) {
+      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: base.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
+      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: base.bri } }, 0).catch(() => {});
+      dev.color = { ...base.color };
+      dev.brightness = base.bri;
+      continue;
+    }
+    const snap = snapshot && snapshot.find(s => s.id === dev.id);
+    if (!snap) continue;
+    await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
+    await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }, 0).catch(() => {});
+    dev.color = snap.color;
+    dev.brightness = snap.brightness;
+  }
+  broadcastGovee();
+}
+
+// Which slot owns a device id, or null if it isn't assigned to one.
+function slotForDeviceId(id) {
+  return Object.keys(GOVEE_SLOT_IDS).find(s => GOVEE_SLOT_IDS[s] === id) || null;
+}
+
+// The look a slot should hold RIGHT NOW. Everything is its SLOT_BASES entry
+// except the monument, which tracks the live storm stage rather than a fixed
+// base - after a flash it must return to its current spectral level, not the
+// stage-1 off base.
+function currentBaseFor(slot) {
+  if (slot === 'monument') {
+    const idx = (effects.monumentOverride !== null && effects.monumentOverride !== undefined)
+      ? effects.monumentOverride
+      : Math.max(0, Math.min(MONUMENT_STAGES.length - 1, strikeIndex));
+    const st = MONUMENT_STAGES[idx];
+    return { color: st.color, bri: st.bri };
+  }
+  const b = SLOT_BASES[slot];
+  return b ? { color: b.color, bri: b.bri } : null;
+}
+
+// Post-flash restore. Slot-assigned lights go back to their OWN base color;
+// anything not in a slot falls back to the pre-flash snapshot. Previously this
+// restored every light from the snapshot, and because devices were created with
+// a hardcoded orange, un-repainted lights all came back skeleton-colored.
+async function restoreAfterFlash(snapshot) {
+  for (const dev of goveeDevices) {
+    const slot = slotForDeviceId(dev.id);
+    const base = slot ? currentBaseFor(slot) : null;
+    if (base) {
+      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: base.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
+      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: base.bri } }, 0).catch(() => {});
+      dev.color = { ...base.color };
+      dev.brightness = base.bri;
+      continue;
+    }
+    const snap = snapshot && snapshot.find(s => s.id === dev.id);
+    if (!snap) continue;
+    await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
+    await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }, 0).catch(() => {});
+    dev.color = snap.color;
+    dev.brightness = snap.brightness;
+  }
+  broadcastGovee();
+}
+
 async function goveeSetColor(r, g, b, ids, priority = 2) {
   const cmd = { cmd: 'colorwc', data: { color: { r, g, b }, colorTemInKelvin: 0 } };
   const targets = ids ? goveeDevices.filter(d => ids.includes(d.id)) : goveeDevices;
@@ -757,7 +849,11 @@ function loadSlotIPs() {
       if (!dev) {
         dev = {
           id: `govee-${slot}`, name: SLOT_LABELS[slot] || slot,
-          ip, model: 'Manual', on: true, color: { r:255, g:98, b:0 }, brightness: 100,
+          // Born with THIS slot's base colour — a hardcoded orange here is what made
+          // every light restore to the skeleton colour after a flash.
+          ip, model: 'Manual', on: true,
+          color: { ...(SLOT_BASES[slot]?.color || { r:255, g:98, b:0 }) },
+          brightness: SLOT_BASES[slot]?.bri ?? 100,
         };
         goveeDevices.push(dev);
       }
@@ -3330,7 +3426,9 @@ app.post('/api/govee/add', (req, res) => {
   }
   const dev = {
     id: `govee-${Date.now()}-${Math.floor(Math.random()*1000)}`, name: name || `Light ${goveeDevices.length + 1}`,
-    ip, model: 'Manual', on: true, color: { r:255, g:98, b:0 }, brightness: 100,
+    ip, model: 'Manual', on: true,
+    color: { ...((slot && SLOT_BASES[slot]?.color) || { r:255, g:98, b:0 }) },
+    brightness: (slot && SLOT_BASES[slot]?.bri) ?? 100,
   };
   if (slot) GOVEE_SLOT_IDS[slot] = dev.id;
   saveSlotIPs();
@@ -3391,26 +3489,20 @@ app.post('/api/govee/lightning', async (req, res) => {
   try {
     await goveeSetColor(255, 255, 255);
     await goveeSetBrightness(100);
-    async function restoreAll() {
-      for (const snap of snapshot) {
-        const dev = goveeDevices.find(d => d.id === snap.id);
-        if (!dev) continue;
-        await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } });
-        await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } });
-        dev.color = snap.color; dev.brightness = snap.brightness;
-      }
-      broadcastGovee();
-    }
+    // Hold the effect loops during the flash so they don't repaint mid-blast.
+    effects.suspended = true;
+    const restoreAll = () => restoreAfterFlash(snapshot);
+    const finish = async () => { await restoreAll(); effects.suspended = false; };
     if (style === 'double') {
       setTimeout(async () => {
         await restoreAll();
         setTimeout(async () => {
-          await goveeSetColor(255, 255, 255);
-          setTimeout(restoreAll, 200);
+          await goveeSetColor(255, 255, 255, undefined, 0);
+          setTimeout(finish, 200);
         }, 150);
       }, duration);
     } else {
-      setTimeout(restoreAll, duration);
+      setTimeout(finish, duration);
     }
     res.json({ ok: true });
   } catch (e) { res.status(502).json({ error: e.message }); }
