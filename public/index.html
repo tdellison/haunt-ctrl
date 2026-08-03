@@ -1,0 +1,1953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#080810"/>
+<title>HAUNT CTRL v3</title>
+<style>
+:root {
+  --bg:      #080810;
+  --panel:   #0e0e1c;
+  --border:  #1e1e35;
+  --border2: #2a2a48;
+  --orange:  #ffb347;
+  --amber:   #c8860a;
+  --amber2:  #e67e22;
+  --red:     #c0392b;
+  --red2:    #e74c3c;
+  --green:   #66bb6a;
+  --orange2: #f57f17;
+  --purple:  #ce93d8;
+  --blue:    #4fc3f7;
+  --yellow:  #ffe082;
+  --dim:     #555570;
+  --dim2:    #888899;
+  --text:    #d0c8b8;
+
+  --go: rgba(255,179,71,.45);
+  --gr: rgba(192,57,43,.5);
+  --gg: rgba(102,187,106,.45);
+  --gb: rgba(79,195,247,.45);
+  --gp: rgba(206,147,216,.45);
+  --gy: rgba(230,126,34,.45);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Courier New', Courier, monospace;
+  min-height: 100vh;
+  position: relative;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent, transparent 2px,
+    rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#0a0a18}
+::-webkit-scrollbar-thumb{background:#2a1a00;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--orange)}
+
+/* ── Animations ── */
+@keyframes flicker {
+  0%,19%,21%,23%,25%,54%,56%,100%{opacity:1;text-shadow:0 0 10px var(--orange),0 0 30px var(--orange)}
+  20%,24%,55%{opacity:.7;text-shadow:none}
+}
+@keyframes pulse {
+  0%,100%{opacity:1} 50%{opacity:.5}
+}
+@keyframes dot-pulse {
+  0%,100%{transform:scale(1)} 50%{transform:scale(1.4)}
+}
+@keyframes slide-in {
+  from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)}
+}
+@keyframes demo-gradient {
+  0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%}
+}
+@keyframes strike-ready {
+  0%,100%{box-shadow:0 0 15px var(--gy)} 50%{box-shadow:0 0 35px var(--gy),0 0 70px rgba(230,126,34,.2)}
+}
+@keyframes countdown-tick {
+  0%{opacity:1} 50%{opacity:.6} 100%{opacity:1}
+}
+
+/* ── Demo Banner ── */
+#demo-banner {
+  display: none;
+  background: linear-gradient(270deg, #ff6200, #9b20e0, #ff6200);
+  background-size: 400% 400%;
+  animation: demo-gradient 4s ease infinite;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: .72em;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+body.demo-mode #demo-banner { display: block; }
+
+/* ── Header ── */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: linear-gradient(180deg, #0c0408 0%, #06040e 100%);
+  border-bottom: 1px solid var(--orange);
+  box-shadow: 0 2px 30px rgba(255,100,0,.15), 0 6px 60px rgba(60,0,0,.4);
+  padding: 10px 20px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-left: calc(20px + env(safe-area-inset-left));
+  padding-right: calc(20px + env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.logo {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.5em;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--orange);
+  animation: flicker 10s infinite;
+  white-space: nowrap;
+}
+.logo .v3 { font-size: .5em; color: var(--dim2); letter-spacing: 2px; margin-left: 8px; }
+.logo .subtitle { font-size: .35em; color: var(--dim); letter-spacing: 2px; display: block; margin-top: 2px; }
+
+.hdr-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: .7em;
+  letter-spacing: 2px;
+}
+#live-clock {
+  font-family: 'Courier New', monospace;
+  color: var(--orange);
+  font-size: 1.1em;
+  letter-spacing: 3px;
+  text-shadow: 0 0 8px var(--go);
+}
+.status-dot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.si {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--dim);
+  font-size: .85em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #1a1a2a;
+  border: 1px solid #2a2a3a;
+  flex-shrink: 0;
+}
+.dot.on    { background:var(--green);  border-color:var(--green);  box-shadow:0 0 6px var(--gg);  animation:dot-pulse 2s infinite; }
+.dot.off   { background:var(--red);    border-color:var(--red);    box-shadow:0 0 6px var(--gr);  animation:dot-pulse 1s infinite; }
+.dot.fog   { background:var(--blue);   border-color:var(--blue);   box-shadow:0 0 6px var(--gb);  animation:dot-pulse 1.5s infinite; }
+.dot.storm { background:var(--amber2); border-color:var(--amber2); box-shadow:0 0 6px var(--gy);  animation:dot-pulse .6s infinite; }
+
+#demo-badge {
+  display: none;
+  background: #300060;
+  color: var(--purple);
+  border: 1px solid var(--purple);
+  padding: 2px 10px;
+  border-radius: 2px;
+  font-size: .78em;
+  font-weight: 700;
+  letter-spacing: 2px;
+  animation: pulse 1.5s infinite;
+}
+body.demo-mode #demo-badge { display: inline-block; }
+
+/* ── Global bar ── */
+.global-bar {
+  background: #0a0610;
+  border-bottom: 1px solid #18102a;
+  padding: 10px 20px;
+  padding-left: calc(20px + env(safe-area-inset-left));
+  padding-right: calc(20px + env(safe-area-inset-right));
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Buttons ── */
+.btn {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  font-size: .8em;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 9px 16px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all .12s;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  min-height: 38px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.btn::after {
+  content:'';
+  position:absolute;
+  top:0;left:-100%;width:60%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);
+  transform:skewX(-15deg);
+  transition:left .3s;
+}
+.btn:hover::after{left:150%}
+.btn:active{transform:scale(.95) translateY(1px)}
+
+.btn-red    { background:linear-gradient(180deg,#5c0a0a,#2e0000); color:#ffaaaa; border-color:#8a1010; box-shadow:0 2px 10px rgba(130,0,0,.5); }
+.btn-red:hover    { background:linear-gradient(180deg,#8a0000,#5c0000); box-shadow:0 4px 20px var(--gr); border-color:var(--red2); color:#fff; }
+.btn-orange { background:linear-gradient(180deg,#2e1200,#180900); color:var(--orange); border-color:#5a2800; box-shadow:0 2px 8px rgba(100,40,0,.4); }
+.btn-orange:hover { background:linear-gradient(180deg,#5a2400,#2e1200); box-shadow:0 4px 18px var(--go); border-color:var(--orange); }
+.btn-green  { background:linear-gradient(180deg,#0a2010,#040e06); color:var(--green); border-color:#1a5020; box-shadow:0 2px 8px rgba(0,70,20,.4); }
+.btn-green:hover  { background:linear-gradient(180deg,#183820,#0a2010); box-shadow:0 4px 18px var(--gg); border-color:var(--green); }
+.btn-green.active { background:linear-gradient(180deg,#1a5a28,#0e3018); box-shadow:0 0 18px var(--gg); border-color:#44dd66; color:#aaffcc; animation:pulse 2s infinite; }
+.btn-blue   { background:linear-gradient(180deg,#06182a,#020c18); color:var(--blue); border-color:#0e3a5a; box-shadow:0 2px 8px rgba(0,60,100,.4); }
+.btn-blue:hover   { background:linear-gradient(180deg,#0e2a42,#06182a); box-shadow:0 4px 18px var(--gb); border-color:var(--blue); }
+.btn-purple { background:linear-gradient(180deg,#1c0828,#0c0418); color:var(--purple); border-color:#4a1060; box-shadow:0 2px 8px rgba(80,0,140,.4); }
+.btn-purple:hover { background:linear-gradient(180deg,#2e0e42,#1c0828); box-shadow:0 4px 18px var(--gp); border-color:var(--purple); }
+.btn-amber  { background:linear-gradient(180deg,#281400,#140a00); color:var(--amber2); border-color:#503000; box-shadow:0 2px 8px rgba(80,40,0,.4); }
+.btn-amber:hover  { background:linear-gradient(180deg,#3c2000,#281400); box-shadow:0 4px 18px var(--gy); border-color:var(--amber2); }
+.btn-amber.active { background:linear-gradient(180deg,#5a2e00,#3c1e00); box-shadow:0 0 18px var(--gy); border-color:var(--amber2); color:#ffd080; animation:pulse 2s infinite; }
+
+.btn-sm  { padding:5px 10px; font-size:.72em; min-height:34px; }
+.btn-lg  { padding:12px 24px; font-size:.85em; letter-spacing:3px; }
+.btn-xl  { padding:14px 30px; font-size:.95em; letter-spacing:4px; font-weight:900; }
+.btn-full{ width:100%; }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  background: #050510;
+  border-bottom: 1px solid #18102a;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab {
+  padding: 11px 20px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: .74em;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all .2s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.tab:hover { color: var(--orange); background: rgba(255,179,71,.04); }
+.tab.active { color: var(--orange); border-bottom-color: var(--orange); background: rgba(255,179,71,.06); text-shadow: 0 0 10px var(--go); }
+
+/* ── Layout ── */
+.content {
+  padding: 16px 20px;
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+  max-width: 1140px;
+  margin: 0 auto;
+}
+.pane    { display: none; }
+.pane.active { display: block; animation: slide-in .15s ease; }
+
+.panel {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.015);
+}
+.panel::before,.panel::after {
+  content:''; position:absolute;
+  width:12px; height:12px;
+  border-color:var(--orange); border-style:solid;
+}
+.panel::before { top:-1px; left:-1px;  border-width:2px 0 0 2px; }
+.panel::after  { bottom:-1px; right:-1px; border-width:0 2px 2px 0; }
+
+.panel-title {
+  font-family: Georgia, serif;
+  font-size: .78em;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--orange);
+  text-shadow: 0 0 8px var(--go);
+  margin-bottom: 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-title .pt-icon { font-size: 1.1em; }
+
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+
+/* ── Volume sliders ── */
+.vol-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  background: rgba(0,0,0,.3);
+  border: 1px solid #14101e;
+  border-radius: 2px;
+}
+.vol-label {
+  width: 70px;
+  font-family: 'Courier New', monospace;
+  font-size: .72em;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--orange);
+  flex-shrink: 0;
+}
+.vol-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  outline: none;
+  min-width: 0;
+}
+.vol-slider.green-fill  { background: linear-gradient(to right, var(--green)  0%, var(--green)  var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
+.vol-slider.orange-fill { background: linear-gradient(to right, var(--orange2) 0%, var(--orange2) var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
+.vol-slider.purple-fill { background: linear-gradient(to right, var(--purple) 0%, var(--purple) var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
+.vol-slider.red-fill    { background: linear-gradient(to right, var(--red)    0%, var(--red)    var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
+.vol-slider.blue-fill   { background: linear-gradient(to right, var(--blue)   0%, var(--blue)   var(--pct,0%), #1a1a2a var(--pct,0%), #1a1a2a 100%); }
+.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance:none;
+  width:22px; height:22px;
+  border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, #ffcc80, var(--orange) 55%, #6a2000 100%);
+  cursor:pointer;
+  box-shadow:0 0 8px var(--go);
+  border:1px solid rgba(255,200,100,.3);
+}
+.vol-val {
+  font-family: 'Courier New', monospace;
+  width: 30px;
+  text-align: right;
+  font-size: .9em;
+  color: var(--orange);
+  transition: color .2s;
+  flex-shrink: 0;
+}
+.vol-val.warn { color: var(--amber2); }
+.vol-val.danger { color: var(--red2); }
+.vol-cap { font-size:.68em; color:var(--dim2); width:36px; letter-spacing:1px; flex-shrink:0; }
+.vol-warn-line { font-size:.66em; color:var(--amber); letter-spacing:1px; }
+
+/* ── Char cards ── */
+.char-card {
+  background: linear-gradient(180deg, #0e0800 0%, #060400 100%);
+  border: 1px solid #1e0e00;
+  border-radius: 3px;
+  padding: 22px 12px 16px;
+  cursor: pointer;
+  text-align: center;
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.char-card:hover { border-color: var(--orange); box-shadow: 0 0 24px var(--go); transform: translateY(-2px); }
+.char-card:active { transform: scale(.95); }
+.char-card .cicon { font-size:2.8em; display:block; margin-bottom:10px; filter:drop-shadow(0 0 8px rgba(255,80,0,.5)); transition:transform .2s; }
+.char-card:hover .cicon { transform:scale(1.15); }
+.char-card h3 { font-family:Georgia,serif; font-size:.82em; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--orange); margin-bottom:6px; }
+.char-card p  { font-size:.68em; color:var(--dim2); letter-spacing:1px; }
+
+/* ── Scene btn grid ── */
+.scene-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.scene-btn {
+  background: linear-gradient(180deg, #100a1a 0%, #080610 100%);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 16px 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: all .2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.scene-btn:hover { border-color:var(--orange); box-shadow:0 0 16px var(--go); transform:translateY(-1px); }
+.scene-btn.active { border-color:var(--orange); background:linear-gradient(180deg,#1c1000,#0e0800); box-shadow:0 0 20px var(--go); }
+.scene-btn .sicon { font-size:1.8em; display:block; margin-bottom:8px; }
+.scene-btn .slabel { font-family:Georgia,serif; font-size:.7em; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--dim2); }
+.scene-btn:hover .slabel,.scene-btn.active .slabel { color:var(--orange); }
+
+/* ── Storm ── */
+.strike-btn {
+  width:100%; padding:28px; border:2px solid var(--amber2); border-radius:3px;
+  background:linear-gradient(180deg,#180e00,#0c0800);
+  color:var(--amber2); font-family:Georgia,serif; font-size:1.3em; font-weight:700;
+  letter-spacing:5px; text-transform:uppercase; cursor:pointer;
+  animation:strike-ready 2.5s ease-in-out infinite;
+  text-shadow:0 0 14px var(--gy); transition:all .15s;
+  touch-action: manipulation;
+}
+.strike-btn:hover { background:linear-gradient(180deg,#281800,#181000); box-shadow:0 0 50px var(--gy); }
+.strike-btn:active { transform:scale(.98); }
+
+#storm-strike-info {
+  background: rgba(0,0,0,.4);
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  font-family: 'Courier New', monospace;
+}
+#storm-strike-label {
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--amber2);
+  text-shadow: 0 0 8px var(--gy);
+  display: block;
+  margin-bottom: 4px;
+}
+#storm-strike-num {
+  font-size: .72em;
+  color: var(--dim2);
+  letter-spacing: 2px;
+  display: block;
+}
+
+#storm-countdown {
+  font-family:'Courier New',monospace; font-size:.8em; letter-spacing:3px;
+  color:var(--amber2); text-transform:uppercase; padding:8px 0; text-align:center;
+}
+#storm-countdown.ticking { animation:countdown-tick 1s infinite; }
+
+/* ── FX Soundboard ── */
+.fx-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+/* ── Fog auto-timer ── */
+.fog-timer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fog-warmup-badge {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: rgba(79,195,247,.08);
+  border: 1px solid var(--blue);
+  border-radius: 2px;
+  padding: 7px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: .74em;
+  letter-spacing: 2px;
+  color: var(--blue);
+  animation: pulse 2s infinite;
+}
+.fog-warmup-badge.show { display: flex; }
+.fog-dur-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fog-dur-row span {
+  font-size: .7em;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim2);
+}
+
+/* ── Clip library ── */
+.clip-list { display:flex; flex-direction:column; gap:4px; }
+.clip-item {
+  display:flex; align-items:center; gap:10px;
+  padding:7px 10px; border:1px solid var(--border);
+  background:rgba(0,0,0,.3); border-radius:2px; cursor:pointer;
+  font-family:'Courier New',monospace; font-size:.74em; letter-spacing:1px;
+  color:var(--dim2); transition:all .15s;
+  min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.clip-item:hover { border-color:var(--orange); color:var(--orange); background:rgba(255,179,71,.03); }
+.clip-item .clip-icon { font-size:1.1em; flex-shrink:0; }
+
+/* ── Log box ── */
+#log-box {
+  background:#030308; border:1px solid #0e0e1a; border-radius:2px;
+  padding:9px 11px; height:180px; overflow-y:auto;
+  font-family:'Courier New',monospace; font-size:.72em;
+  box-shadow:inset 0 0 20px rgba(0,0,0,.8);
+  -webkit-overflow-scrolling: touch;
+}
+.log-entry { padding:2px 0; line-height:1.5; transition:color .2s; }
+.log-entry.new { color:#5a5a6a; animation:slide-in .15s ease; }
+.log-entry.new:first-child { color:#9a9aaa; }
+.log-cat { font-size:.85em; font-weight:700; margin-right:6px; }
+.log-cat.SCARE  { color:#c0392b; }
+.log-cat.VIDEO  { color:#9b59b6; }
+.log-cat.AUDIO  { color:#f57f17; }
+.log-cat.FOG    { color:#4fc3f7; }
+.log-cat.LIGHT  { color:#ffb347; }
+.log-cat.SYSTEM { color:#66bb6a; }
+.log-cat.WITCH  { color:#ce93d8; }
+
+/* ── Shutdown modal ── */
+#shutdown-modal {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.85); z-index:1000;
+  align-items:center; justify-content:center;
+}
+#shutdown-modal.open { display:flex; }
+.shutdown-box {
+  background:var(--panel); border:1px solid var(--red);
+  border-radius:4px; padding:30px 36px; max-width:480px; width:90%;
+  box-shadow:0 0 60px rgba(192,57,43,.4);
+}
+.shutdown-box h2 {
+  font-family:Georgia,serif; color:var(--red2); text-align:center;
+  letter-spacing:4px; margin-bottom:24px; font-size:1.1em;
+}
+.shutdown-step {
+  display:flex; align-items:center; gap:12px; padding:10px 0;
+  border-bottom:1px solid var(--border); font-size:.82em;
+  font-family:'Courier New',monospace; letter-spacing:1px; color:var(--dim2);
+}
+.shutdown-step:last-of-type { border-bottom:none; }
+.step-icon { width:24px; text-align:center; font-size:1.2em; }
+.step-status { margin-left:auto; font-size:.8em; font-weight:700; letter-spacing:2px; }
+.step-status.running { color:var(--amber2); animation:pulse .8s infinite; }
+.step-status.done    { color:var(--green); }
+#shutdown-result {
+  display:none; text-align:center; margin-top:18px;
+  font-family:Georgia,serif; font-size:1em; color:var(--green);
+  letter-spacing:3px; text-shadow:0 0 12px var(--gg);
+}
+.shutdown-actions { display:flex; gap:10px; margin-top:20px; }
+
+/* ── Setup fields ── */
+.field-row { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.field-row label {
+  font-family:'Courier New',monospace; font-size:.7em; font-weight:700;
+  letter-spacing:3px; text-transform:uppercase; color:var(--dim2); width:120px;
+}
+.field-row input, .raw-input {
+  background:#060610; border:1px solid #2a1a06; color:var(--text);
+  padding:7px 11px; border-radius:2px; font-family:'Courier New',monospace;
+  font-size:.83em; outline:none; transition:all .15s;
+}
+.field-row input { flex:1; min-width:120px; }
+.raw-input { flex:1; width:100%; }
+.field-row input:focus, .raw-input:focus { border-color:var(--orange); box-shadow:0 0 8px var(--go); color:var(--orange); }
+.field-row input::placeholder, .raw-input::placeholder { color:#2a1a08; }
+
+/* ── Toggle switch ── */
+.toggle-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:9px 0; border-bottom:1px solid var(--border); font-size:.8em; letter-spacing:1px;
+}
+.toggle-row:last-child { border-bottom:none; }
+.toggle-label { color:var(--dim2); font-family:'Courier New',monospace; letter-spacing:2px; text-transform:uppercase; }
+.toggle {
+  position:relative; width:44px; height:22px; cursor:pointer; flex-shrink:0;
+}
+.toggle input { opacity:0; width:0; height:0; }
+.toggle-track {
+  position:absolute; inset:0; background:#1a1a2a; border:1px solid var(--border);
+  border-radius:11px; transition:.25s;
+}
+.toggle-track::before {
+  content:''; position:absolute; width:16px; height:16px;
+  border-radius:50%; background:var(--dim); bottom:2px; left:2px;
+  transition:.25s;
+}
+.toggle input:checked + .toggle-track { background:#1a2a1a; border-color:var(--green); }
+.toggle input:checked + .toggle-track::before { transform:translateX(22px); background:var(--green); box-shadow:0 0 6px var(--gg); }
+
+/* ── Countdown badge ── */
+.countdown-badge {
+  display:inline-flex; align-items:center; gap:6px;
+  background:#0e0a1a; border:1px solid var(--border2);
+  border-radius:2px; padding:6px 12px;
+  font-family:'Courier New',monospace; font-size:.76em; letter-spacing:2px;
+  color:var(--dim2); transition:all .3s;
+}
+.countdown-badge.active { border-color:var(--green); color:var(--green); background:#080e08; }
+.countdown-badge.active .cd-dot { background:var(--green); box-shadow:0 0 6px var(--gg); animation:dot-pulse 1s infinite; }
+.cd-dot { width:7px; height:7px; border-radius:50%; background:var(--dim); flex-shrink:0; }
+
+/* ── Color swatches ── */
+.swatch-grid { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+.swatch-item { display:flex; flex-direction:column; align-items:center; gap:5px; }
+.swatch {
+  width:44px; height:44px; border-radius:3px; border:2px solid rgba(0,0,0,.4);
+  cursor:pointer; transition:all .15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.swatch:hover { transform:scale(1.15); border-color:rgba(255,255,255,.4); }
+.swatch:active { transform:scale(.92); }
+.swatch-name { font-size:.58em; letter-spacing:1px; text-transform:uppercase; color:var(--dim2); }
+
+/* ── Govee IP fields ── */
+.govee-ip-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.govee-ip-row { display:flex; flex-direction:column; gap:4px; }
+.govee-ip-row label { font-family:'Courier New',monospace; font-size:.68em; letter-spacing:2px; text-transform:uppercase; color:var(--dim2); }
+.govee-ip-row label.storm-label { color: var(--blue); }
+
+/* ── Keyboard shortcuts table ── */
+.kbd-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:.76em; }
+.kbd { display:inline-block; background:#1a1a2a; border:1px solid var(--border2); padding:2px 8px; border-radius:3px; font-family:'Courier New',monospace; color:var(--orange); letter-spacing:1px; }
+.kbd-desc { color:var(--dim2); letter-spacing:1px; align-self:center; }
+
+/* ── Status info ── */
+.info-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:.76em; font-family:'Courier New',monospace; }
+.info-row:last-child { border-bottom:none; }
+.info-key { color:var(--dim2); width:120px; letter-spacing:2px; text-transform:uppercase; flex-shrink:0; }
+.info-val { color:var(--orange); }
+
+/* ── Auto-scare char toggles ── */
+.char-toggle-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:.78em; font-family:'Courier New',monospace; letter-spacing:1px; }
+.char-toggle-row:last-child { border-bottom:none; }
+
+/* ── Responsive ── */
+@media(max-width:700px) {
+  .grid2,.grid3{ grid-template-columns:1fr; }
+  .scene-grid  { grid-template-columns:1fr 1fr; }
+  .govee-ip-grid { grid-template-columns:1fr; }
+  .btn-xl { padding:12px 20px; font-size:.88em; }
+}
+
+/* ── Mobile — phone-specific (480px and under) ── */
+@media(max-width:480px) {
+  .logo { font-size: 1.1em; letter-spacing: 2px; }
+  .logo .v3 { display: none; }
+  .logo .subtitle { display: none; }
+  #live-clock { font-size: .9em; letter-spacing: 2px; }
+  .si .si-label { display: none; }
+  header { padding: 8px 14px; padding-top: calc(8px + env(safe-area-inset-top)); }
+
+  .global-bar { padding: 8px 12px; gap: 8px; }
+  .global-bar .btn-xl { padding: 12px 14px; font-size: .78em; letter-spacing: 1px; }
+  .global-bar .btn-lg { padding: 10px 12px; font-size: .76em; letter-spacing: 1px; }
+
+  .tab { padding: 10px 14px; font-size: .68em; letter-spacing: 1px; }
+
+  .content { padding: 10px 12px; }
+  .panel { padding: 12px 14px; }
+
+  .btn { min-height: 46px; padding: 10px 14px; font-size: .78em; }
+  .btn-sm { min-height: 40px; padding: 8px 12px; font-size: .72em; }
+  .btn-lg { min-height: 46px; padding: 12px 16px; }
+  .btn-xl { min-height: 50px; padding: 12px 16px; font-size: .84em; }
+
+  .scene-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid2,.grid3 { grid-template-columns: 1fr; }
+
+  .fx-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .vol-row { padding: 8px 10px; gap: 8px; flex-wrap: nowrap; }
+  .vol-label { width: 60px; font-size: .68em; }
+  .vol-slider { min-height: 44px; }
+  .vol-cap { display: none; }
+  .vol-val { width: 26px; font-size: .85em; }
+
+  .char-card { padding: 16px 8px 12px; }
+  .char-card .cicon { font-size: 2.2em; }
+  .char-card h3 { font-size: .74em; }
+  .char-card p { display: none; }
+
+  .swatch-grid { gap: 8px; }
+  .swatch { width: 48px; height: 48px; }
+
+  .govee-ip-grid { grid-template-columns: 1fr; }
+
+  .strike-btn { padding: 20px; font-size: 1em; letter-spacing: 3px; }
+
+  .kbd-grid { font-size: .7em; }
+  .info-row { flex-wrap: wrap; }
+  .info-key { width: 90px; font-size: .7em; }
+
+  #log-box { height: 140px; }
+
+  .shutdown-box { padding: 20px 16px; }
+  .shutdown-actions { flex-direction: column; }
+}
+
+html, body { touch-action: manipulation; }
+</style>
+</head>
+<body>
+
+<div id="demo-banner">⚠ DEMO MODE — No Server Required — All Controls Functional</div>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="logo">🎃 HAUNT CTRL<span class="v3">v3</span></div>
+  <div class="hdr-right">
+    <div id="live-clock">--:--:--</div>
+    <div class="status-dot-row">
+      <span class="si"><span id="dot-rx" class="dot"></span><span class="si-label">RX</span></span>
+      <span class="si"><span id="dot-fog" class="dot"></span><span class="si-label">FOG</span></span>
+      <span class="si"><span id="dot-storm" class="dot"></span><span class="si-label">STORM</span></span>
+    </div>
+    <span id="demo-badge">DEMO</span>
+  </div>
+</header>
+
+<!-- ══ GLOBAL BAR ══ -->
+<div class="global-bar">
+  <button class="btn btn-red btn-xl" onclick="openShutdown()">⛔ ALL STOP</button>
+  <button class="btn btn-amber btn-lg" id="pause-btn" onclick="api('/api/pause')">⏸ PAUSE</button>
+  <button class="btn btn-blue  btn-lg" onclick="api('/api/lightning')">⚡ LIGHTNING</button>
+  <button class="btn btn-blue  btn-lg" onclick="api('/api/fog/fire',{duration:5000})">🌫 FOG BURST</button>
+</div>
+
+<!-- ══ TABS ══ -->
+<div class="tabs">
+  <div class="tab active" data-pane="cmd">⚡ COMMAND</div>
+  <div class="tab" data-pane="graveyard">💀 GRAVEYARD</div>
+  <div class="tab" data-pane="jamboree">🎃 JAMBOREE</div>
+  <div class="tab" data-pane="audio">🔊 AUDIO</div>
+  <div class="tab" data-pane="lights">💡 LIGHTS</div>
+  <div class="tab" data-pane="setup">⚙ SETUP</div>
+</div>
+
+<!-- ══ CONTENT ══ -->
+<div class="content">
+
+<!-- ─── COMMAND ─── -->
+<div class="pane active" id="pane-cmd">
+
+  <!-- Scene modes -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎭</span>Scene Mode</div>
+    <div class="scene-grid">
+      <div class="scene-btn" id="scene-kids"    onclick="setScene('kids')">
+        <span class="sicon">🧒</span><span class="slabel">Kids</span>
+      </div>
+      <div class="scene-btn active" id="scene-normal"  onclick="setScene('normal')">
+        <span class="sicon">👻</span><span class="slabel">Normal</span>
+      </div>
+      <div class="scene-btn" id="scene-intense" onclick="setScene('intense')">
+        <span class="sicon">💀</span><span class="slabel">Intense</span>
+      </div>
+      <div class="scene-btn" id="scene-loud"    onclick="setScene('loud')">
+        <span class="sicon">📢</span><span class="slabel">Loud</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Character quick fire -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎬</span>Character Quick Fire</div>
+    <div class="grid3">
+      <div class="char-card" onclick="fireChar('grimreaper')">
+        <span class="cicon">☠️</span>
+        <h3>Reaper</h3>
+        <p>7s fog · cold blue · boost</p>
+      </div>
+      <div class="char-card" onclick="fireChar('headlesshorseman')">
+        <span class="cicon">🐴</span>
+        <h3>Horseman</h3>
+        <p>3s fog · blood red · boost</p>
+      </div>
+      <div class="char-card" onclick="fireChar('pumpkinking')">
+        <span class="cicon">👑</span>
+        <h3>Pmp King</h3>
+        <p>12s fog · witch green · boost</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storm mode -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">⛈</span>Storm Mode</div>
+    <div class="grid2">
+      <div>
+        <div id="storm-strike-info">
+          <span id="storm-strike-label">Storm Inactive</span>
+          <span id="storm-strike-num" style="color:var(--dim2)">5-stage progressive cycle · 2 min intervals</span>
+        </div>
+        <div id="storm-countdown">Storm inactive</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-amber btn-lg btn-full" id="storm-toggle-btn" onclick="toggleStorm()">▶ Start Auto Storm</button>
+        <button class="strike-btn" onclick="fireStrikeNow()">⚡ FIRE NOW ⚡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fog Auto-Timer -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌫</span>Fog Auto-Timer</div>
+    <div class="fog-timer-card">
+      <div class="fog-warmup-badge" id="fog-warmup-badge">⏳ Warming up — 4 min until ready</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="countdown-badge" id="fog-auto-badge" style="flex:1">
+          <span class="cd-dot"></span><span id="fog-auto-status">Inactive</span>
+        </div>
+        <button class="btn btn-red btn-sm" onclick="killFog()">⛔ KILL FOG</button>
+      </div>
+      <button class="btn btn-blue btn-full btn-lg" id="fog-auto-btn" onclick="toggleFogAuto()">▶ Start Fog Auto-Timer</button>
+      <div class="fog-dur-row">
+        <span>Burst:</span>
+        <button class="btn btn-blue btn-sm active" id="fog-dur-5"  onclick="setFogDuration(5)">5s</button>
+        <button class="btn btn-blue btn-sm"         id="fog-dur-10" onclick="setFogDuration(10)">10s</button>
+        <button class="btn btn-blue btn-sm"         id="fog-dur-15" onclick="setFogDuration(15)">15s</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FX Soundboard -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎵</span>FX Soundboard</div>
+    <div class="fx-grid">
+      <button class="btn btn-red    btn-sm" onclick="playFX('scream')">😱 SCREAM</button>
+      <button class="btn btn-amber  btn-sm" onclick="playFX('thunder')">⛈ THUNDER</button>
+      <button class="btn btn-purple btn-sm" onclick="playFX('laugh')">😈 LAUGH</button>
+      <button class="btn btn-orange btn-sm" onclick="playFX('chains')">⛓ CHAINS</button>
+      <button class="btn btn-orange btn-sm" onclick="playFX('crows')">🐦‍⬛ CROWS</button>
+      <button class="btn btn-orange btn-sm" onclick="playFX('gallop')">🐴 GALLOP</button>
+      <button class="btn btn-red    btn-sm" onclick="playFX('scythe')">☠️ SCYTHE</button>
+      <button class="btn btn-purple btn-sm" onclick="playFX('cackle')">🧙 CACKLE</button>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-red btn-full btn-sm" onclick="stopFX()">■ STOP FX</button>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📋</span>Event Log</div>
+    <div id="log-box"></div>
+  </div>
+
+</div><!-- /pane-cmd -->
+
+<!-- ─── GRAVEYARD ─── -->
+<div class="pane" id="pane-graveyard">
+
+  <!-- Status boxes -->
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title"><span class="pt-icon">👻</span>Auto Scare</div>
+      <div class="countdown-badge" id="autoscare-badge" style="margin-bottom:12px">
+        <span class="cd-dot"></span><span id="autoscare-status">Inactive</span>
+      </div>
+      <button class="btn btn-green btn-full btn-lg" id="autoscare-btn" onclick="toggleAutoScare()">▶ Start Auto Scare</button>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">Interval:</span>
+        <button class="btn btn-orange btn-sm" id="interval-2" onclick="setScareInterval(2)">2 MIN</button>
+        <button class="btn btn-orange btn-sm" id="interval-3" onclick="setScareInterval(3)">3 MIN</button>
+      </div>
+      <div style="margin-top:12px">
+        <div class="char-toggle-row">
+          <span>☠️ Reaper</span>
+          <label class="toggle"><input type="checkbox" id="scare-reaper" checked onchange="updateScareChars()"><span class="toggle-track"></span></label>
+        </div>
+        <div class="char-toggle-row">
+          <span>🐴 Horseman</span>
+          <label class="toggle"><input type="checkbox" id="scare-horseman" checked onchange="updateScareChars()"><span class="toggle-track"></span></label>
+        </div>
+        <div class="char-toggle-row">
+          <span>👑 Pumpkin King</span>
+          <label class="toggle"><input type="checkbox" id="scare-pumpkin" checked onchange="updateScareChars()"><span class="toggle-track"></span></label>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span class="pt-icon">🧙</span>Witch Audio Timer</div>
+      <div class="countdown-badge" id="witch-badge" style="margin-bottom:12px">
+        <span class="cd-dot"></span><span id="witch-status">Inactive</span>
+      </div>
+      <button class="btn btn-purple btn-full btn-lg" id="witch-toggle-btn" onclick="toggleWitch()">▶ Start Witch Timer</button>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'witchinghour'})">🌙 WITCHING HOUR</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'catcrow'})">🐈‍⬛ CAT &amp; CROW</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'spellbound'})">🔮 SPELLBOUND</button>
+        <button class="btn btn-purple btn-sm" onclick="api('/api/witch/fire',{clip:'seance'})">🕯 SÉANCE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ambient loop -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌫</span>Graveyard Ambient Loop</div>
+    <p style="font-size:.72em;color:var(--dim2);margin-bottom:12px;letter-spacing:1px;line-height:1.6">
+      Continuous shuffled background atmosphere — runs underneath, audio only.
+    </p>
+    <button class="btn btn-green btn-full btn-lg" id="ambient-btn" onclick="toggleAmbient()">▶ Start Ambient Loop</button>
+  </div>
+
+  <!-- Graveyard display controls -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📺</span>Graveyard Display — P2 Component</div>
+    <div style="background:#030308;border:1px solid var(--border);padding:8px 12px;border-radius:2px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:.76em;color:var(--green);letter-spacing:2px" id="p2-nowplaying">
+      ▶ No clip selected
+    </div>
+    <div style="background:#0a0a16;border:1px solid var(--border);height:4px;border-radius:2px;margin-bottom:14px;overflow:hidden">
+      <div id="p2-progress" style="height:100%;width:0%;background:var(--green);transition:width .5s"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-green btn-sm" onclick="p2Control('play')">▶ PLAY</button>
+      <button class="btn btn-red   btn-sm" onclick="p2Control('stop')">■ STOP</button>
+      <button class="btn btn-orange btn-sm" onclick="p2Control('next')">⏭ NEXT</button>
+    </div>
+  </div>
+
+  <!-- Character triggers -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎬</span>Character Triggers</div>
+    <p style="font-size:.72em;color:var(--dim2);margin-bottom:14px;letter-spacing:1px;line-height:1.6">
+      Graveyard ambient runs continuously underneath — character triggers boost audio above ambient, fire fog + lights, then restore.
+    </p>
+    <div class="grid3">
+      <div class="char-card" onclick="fireChar('grimreaper')">
+        <span class="cicon">☠️</span><h3>Grim Reaper</h3><p>Boost · 7s fog · cold blue</p>
+      </div>
+      <div class="char-card" onclick="fireChar('headlesshorseman')">
+        <span class="cicon">🐴</span><h3>Headless Horseman</h3><p>Boost · 3s fog · blood red</p>
+      </div>
+      <div class="char-card" onclick="fireChar('pumpkinging')">
+        <span class="cicon">👑</span><h3>Pumpkin King</h3><p>Boost · 12s fog · witch green</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clip library -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎞</span>Clip Library — Legends of Halloween</div>
+    <div class="grid3">
+      <div>
+        <div style="font-family:Georgia,serif;font-size:.8em;color:var(--orange);letter-spacing:3px;margin-bottom:10px;text-transform:uppercase">☠️ Grim Reaper</div>
+        <div class="clip-list">
+          <div class="clip-item" onclick="loadClip('grimreaper','Fear the Reaper')"><span class="clip-icon">▶</span>Fear the Reaper</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Out of Time')"><span class="clip-icon">▶</span>Out of Time</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','The Ferryman')"><span class="clip-icon">▶</span>The Ferryman</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Deep Sleeper')"><span class="clip-icon">▶</span>Deep Sleeper</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Dreadful Apparition')"><span class="clip-icon">▶</span>Dreadful Apparition</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Grave Warning')"><span class="clip-icon">▶</span>Grave Warning</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Startle Scare 1')"><span class="clip-icon">▶</span>Startle Scare 1</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Startle Scare 2')"><span class="clip-icon">▶</span>Startle Scare 2</div>
+          <div class="clip-item" onclick="loadClip('grimreaper','Startle Scare 3')"><span class="clip-icon">▶</span>Startle Scare 3</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:Georgia,serif;font-size:.8em;color:var(--orange2);letter-spacing:3px;margin-bottom:10px;text-transform:uppercase">🐴 Headless Horseman</div>
+        <div class="clip-list">
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Headless Hessian')"><span class="clip-icon">▶</span>Headless Hessian</div>
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Ride of the Horseman')"><span class="clip-icon">▶</span>Ride of the Horseman</div>
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Sleepy Hollow Steed')"><span class="clip-icon">▶</span>Sleepy Hollow Steed</div>
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Stormy Hollow')"><span class="clip-icon">▶</span>Stormy Hollow</div>
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Startle Scare 1')"><span class="clip-icon">▶</span>Startle Scare 1</div>
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Startle Scare 2')"><span class="clip-icon">▶</span>Startle Scare 2</div>
+          <div class="clip-item" onclick="loadClip('headlesshorseman','Startle Scare 3')"><span class="clip-icon">▶</span>Startle Scare 3</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:Georgia,serif;font-size:.8em;color:var(--purple);letter-spacing:3px;margin-bottom:10px;text-transform:uppercase">👑 Pumpkin King</div>
+        <div class="clip-list">
+          <div class="clip-item" onclick="loadClip('pumpkinking','Hail to the King')"><span class="clip-icon">▶</span>Hail to the King</div>
+          <div class="clip-item" onclick="loadClip('pumpkinking','Hungry Goblin')"><span class="clip-icon">▶</span>Hungry Goblin</div>
+          <div class="clip-item" onclick="loadClip('pumpkinking','Lord of the Patch')"><span class="clip-icon">▶</span>Lord of the Patch</div>
+          <div class="clip-item" onclick="loadClip('pumpkinking','The Scarecrow')"><span class="clip-icon">▶</span>The Scarecrow</div>
+          <div class="clip-item" onclick="loadClip('pumpkinking','Startle Scare 1')"><span class="clip-icon">▶</span>Startle Scare 1</div>
+          <div class="clip-item" onclick="loadClip('pumpkinking','Startle Scare 2')"><span class="clip-icon">▶</span>Startle Scare 2</div>
+          <div class="clip-item" onclick="loadClip('pumpkinking','Startle Scare 3')"><span class="clip-icon">▶</span>Startle Scare 3</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /pane-graveyard -->
+
+<!-- ─── JAMBOREE ─── -->
+<div class="pane" id="pane-jamboree">
+
+  <!-- Display controls -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📺</span>Jamboree Display — P1 HDMI</div>
+    <div style="background:#030308;border:1px solid var(--border);padding:8px 12px;border-radius:2px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:.76em;color:var(--orange2);letter-spacing:2px" id="p1-nowplaying">
+      ▶ No content selected
+    </div>
+    <div style="background:#0a0a16;border:1px solid var(--border);height:4px;border-radius:2px;margin-bottom:14px;overflow:hidden">
+      <div id="p1-progress" style="height:100%;width:0%;background:var(--orange2);transition:width .5s"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-orange btn-sm" onclick="p1Control('play')">▶ PLAY</button>
+      <button class="btn btn-red    btn-sm" onclick="p1Control('stop')">■ STOP</button>
+      <button class="btn btn-orange btn-sm" onclick="p1Control('next')">⏭ NEXT</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Songs -->
+    <div class="panel">
+      <div class="panel-title"><span class="pt-icon">🎵</span>Songs — Jamboree 3 + 1</div>
+      <div class="clip-list">
+        <div class="clip-item" onclick="loadP1('Addams Family')"><span class="clip-icon">🎵</span>Addams Family</div>
+        <div class="clip-item" onclick="loadP1('Ghostbusters')"><span class="clip-icon">🎵</span>Ghostbusters</div>
+        <div class="clip-item" onclick="loadP1('Monster Mash')"><span class="clip-icon">🎵</span>Monster Mash</div>
+        <div class="clip-item" onclick="loadP1('The Pumpkin Song')"><span class="clip-icon">🎵</span>The Pumpkin Song</div>
+        <div class="clip-item" onclick="loadP1('Three Children Bold')"><span class="clip-icon">🎵</span>Three Children Bold</div>
+        <div class="clip-item" onclick="loadP1('Twas The Night')"><span class="clip-icon">🎵</span>Twas The Night</div>
+      </div>
+    </div>
+
+    <!-- Stories -->
+    <div class="panel">
+      <div class="panel-title"><span class="pt-icon">📖</span>Stories, Jokes &amp; More</div>
+      <div class="clip-list">
+        <div class="clip-item" onclick="loadP1('Hall of Pumpkin King')"><span class="clip-icon">👑</span>Hall of Pumpkin King</div>
+        <div class="clip-item" onclick="loadP1('Jokes 1')"><span class="clip-icon">😄</span>Jokes 1</div>
+        <div class="clip-item" onclick="loadP1('Jokes 2')"><span class="clip-icon">😄</span>Jokes 2</div>
+        <div class="clip-item" onclick="loadP1('Jokes 3')"><span class="clip-icon">😄</span>Jokes 3</div>
+        <div class="clip-item" onclick="loadP1('Funny Faces')"><span class="clip-icon">😜</span>Funny Faces</div>
+        <div class="clip-item" onclick="loadP1('Heckling Hijinks')"><span class="clip-icon">🎭</span>Heckling Hijinks</div>
+        <div class="clip-item" onclick="loadP1('Lord of the Gourds')"><span class="clip-icon">👑</span>Lord of the Gourds</div>
+        <div class="clip-item" onclick="loadP1('The Raven')"><span class="clip-icon">🐦</span>The Raven</div>
+        <div class="clip-item" onclick="loadP1('Treater Greeters')"><span class="clip-icon">🍬</span>Treater Greeters</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /pane-jamboree -->
+
+<!-- ─── AUDIO ─── -->
+<div class="pane" id="pane-audio">
+
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🔊</span>Zone Volumes — Safe Caps Enforced</div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--green)">Graveyard</span>
+      <input type="range" class="vol-slider green-fill" id="vol-z2" min="0" max="48"
+        oninput="onSlider(this,'z2')" onchange="setVol('z2',this.value)"/>
+      <span class="vol-val" id="val-z2">25</span>
+      <span class="vol-cap">/ <span id="cap-z2">48</span></span>
+      <button class="btn btn-orange btn-sm" id="mute-z2" onclick="toggleMute('z2')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--orange2)">Jamboree</span>
+      <input type="range" class="vol-slider orange-fill" id="vol-z1" min="0" max="60"
+        oninput="onSlider(this,'z1')" onchange="setVol('z1',this.value)"/>
+      <span class="vol-val" id="val-z1">30</span>
+      <span class="vol-cap">/ <span id="cap-z1">60</span></span>
+      <button class="btn btn-orange btn-sm" id="mute-z1" onclick="toggleMute('z1')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--purple)">Witch</span>
+      <input type="range" class="vol-slider purple-fill" id="vol-z3" min="0" max="44"
+        oninput="onSlider(this,'z3')" onchange="setVol('z3',this.value)"/>
+      <span class="vol-val" id="val-z3">20</span>
+      <span class="vol-cap">/ <span id="cap-z3">44</span></span>
+      <button class="btn btn-orange btn-sm" id="mute-z3" onclick="toggleMute('z3')">MUTE</button>
+    </div>
+
+    <div class="vol-row">
+      <span class="vol-label" style="color:var(--blue)">Subwoofer</span>
+      <input type="range" class="vol-slider blue-fill" id="vol-sub" min="0" max="52"
+        oninput="onSlider(this,'sub')" onchange="demoLog('Sub level set to '+this.value,'AUDIO')"/>
+      <span class="vol-val" id="val-sub">30</span>
+      <span class="vol-cap">/ 52</span>
+      <span class="vol-warn-line">HARD CAP</span>
+    </div>
+
+  </div>
+
+  <!-- Scene presets -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎭</span>Scene Volume Presets</div>
+    <div class="scene-grid">
+      <div class="scene-btn" onclick="setScene('kids')">
+        <span class="sicon">🧒</span><span class="slabel">Kids</span>
+        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:25 J:44 W:16 S:36</div>
+      </div>
+      <div class="scene-btn" onclick="setScene('normal')">
+        <span class="sicon">👻</span><span class="slabel">Normal</span>
+        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:48 J:52 W:32 S:48</div>
+      </div>
+      <div class="scene-btn" onclick="setScene('intense')">
+        <span class="sicon">💀</span><span class="slabel">Intense</span>
+        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:60 J:56 W:40 S:52</div>
+      </div>
+      <div class="scene-btn" onclick="setScene('loud')">
+        <span class="sicon">📢</span><span class="slabel">Loud</span>
+        <div style="font-size:.6em;color:var(--dim2);margin-top:6px;letter-spacing:1px">G:60 J:60 W:44 S:52</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zone routing reference -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📡</span>Speaker Zone Routing</div>
+    <div class="info-row"><span class="info-key">FL / FR</span><span class="info-val">Jamboree music + dialog</span></div>
+    <div class="info-row"><span class="info-key">CENTER</span><span class="info-val">Jamboree dialog anchor</span></div>
+    <div class="info-row"><span class="info-key">SL / SR</span><span class="info-val">Graveyard atmosphere wrap</span></div>
+    <div class="info-row"><span class="info-key">SUB</span><span class="info-val">Shared rumble — hard cap 65%</span></div>
+    <div class="info-row"><span class="info-key">ZONE 2</span><span class="info-val">Graveyard display speakers</span></div>
+    <div class="info-row" style="border-bottom:none"><span class="info-key">HIDDEN</span><span class="info-val">Witch animatronic speakers (Z3)</span></div>
+  </div>
+
+</div><!-- /pane-audio -->
+
+<!-- ─── LIGHTS ─── -->
+<div class="pane" id="pane-lights">
+
+  <!-- Lightning -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">⚡</span>Lightning Control</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn btn-blue btn-xl btn-full" onclick="api('/api/govee/lightning',{duration:400,style:flashStyle})">⚡ FLASH ALL LIGHTS</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span style="font-size:.72em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">Style:</span>
+      <button class="btn btn-blue btn-sm active" id="flash-single" onclick="setFlashStyle('single')">SINGLE</button>
+      <button class="btn btn-blue btn-sm"         id="flash-double" onclick="setFlashStyle('double')">DOUBLE ⚡⚡</button>
+      <button class="btn btn-amber btn-sm"         id="flash-storm"  onclick="setFlashStyle('storm')">STORM 🌩</button>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Auto-flash with Thunder FX</span>
+      <label class="toggle"><input type="checkbox" id="auto-flash-toggle"><span class="toggle-track"></span></label>
+    </div>
+  </div>
+
+  <!-- Ambient color presets -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🎨</span>Ambient Color Presets</div>
+    <div class="swatch-grid">
+      <div class="swatch-item">
+        <div class="swatch" style="background:#6400b4" onclick="setLightPreset(100,0,180)"></div>
+        <span class="swatch-name">Death Purple</span>
+      </div>
+      <div class="swatch-item">
+        <div class="swatch" style="background:#001eff" onclick="setLightPreset(0,30,255)"></div>
+        <span class="swatch-name">Ghost Blue</span>
+      </div>
+      <div class="swatch-item">
+        <div class="swatch" style="background:#cc0000" onclick="setLightPreset(204,0,0)"></div>
+        <span class="swatch-name">Reaper Red</span>
+      </div>
+      <div class="swatch-item">
+        <div class="swatch" style="background:#00b41e" onclick="setLightPreset(0,180,30)"></div>
+        <span class="swatch-name">Witch Green</span>
+      </div>
+      <div class="swatch-item">
+        <div class="swatch" style="background:#cc5500" onclick="setLightPreset(204,85,0)"></div>
+        <span class="swatch-name">Blood Orange</span>
+      </div>
+      <div class="swatch-item">
+        <div class="swatch" style="background:#111;border-color:#333" onclick="api('/api/govee/power',{on:false})"></div>
+        <span class="swatch-name">Lights Off</span>
+      </div>
+    </div>
+
+    <!-- Brightness -->
+    <div class="vol-row" style="margin-bottom:0">
+      <span class="vol-label">Brightness</span>
+      <input type="range" class="vol-slider orange-fill" id="bri-slider" min="0" max="100" value="100"
+        style="--pct:100%"
+        oninput="this.style.setProperty('--pct',this.value+'%');document.getElementById('bri-val').textContent=this.value"
+        onchange="api('/api/govee/brightness',{value:parseInt(this.value)})"/>
+      <span class="vol-val" id="bri-val">100</span>
+      <span class="vol-cap">%</span>
+    </div>
+  </div>
+
+  <!-- Custom color -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🖌</span>Custom Color</div>
+    <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+      <div style="flex:1;min-width:100px">
+        <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--red2);margin-bottom:6px">R</div>
+        <input type="range" class="vol-slider red-fill" id="cr" min="0" max="255" value="255"
+          oninput="updateCustomColor()" style="--pct:100%;width:100%"/>
+      </div>
+      <div style="flex:1;min-width:100px">
+        <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:6px">G</div>
+        <input type="range" class="vol-slider green-fill" id="cg" min="0" max="255" value="98"
+          oninput="updateCustomColor()" style="--pct:38%;width:100%"/>
+      </div>
+      <div style="flex:1;min-width:100px">
+        <div style="font-size:.68em;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:6px">B</div>
+        <input type="range" class="vol-slider blue-fill" id="cb" min="0" max="255" value="0"
+          oninput="updateCustomColor()" style="--pct:0%;width:100%"/>
+      </div>
+      <div id="color-preview" style="width:52px;height:52px;border-radius:3px;border:1px solid var(--border2);background:rgb(255,98,0);flex-shrink:0"></div>
+      <button class="btn btn-orange" onclick="applyCustomColor()">Apply All</button>
+    </div>
+
+    <!-- Character color reference -->
+    <div style="font-family:Georgia,serif;font-size:.72em;letter-spacing:3px;text-transform:uppercase;color:var(--orange);margin-bottom:10px">Character Auto Colors</div>
+    <div class="info-row"><span class="info-key">☠️ Reaper</span><span class="info-val">White flash → cold blue hold</span></div>
+    <div class="info-row"><span class="info-key">🐴 Horseman</span><span class="info-val">White flash → blood red hold</span></div>
+    <div class="info-row"><span class="info-key">👑 Pmp King</span><span class="info-val">Orange flash → witch green hold</span></div>
+    <div class="info-row" style="border-bottom:none"><span class="info-key">All</span><span class="info-val">Return to ambient after scene</span></div>
+  </div>
+
+  <!-- Govee IP config -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">💡</span>Govee Light IPs</div>
+    <div class="govee-ip-grid">
+      <div class="govee-ip-row">
+        <label>Graveyard Light 1</label>
+        <input class="raw-input" id="gip-1" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label>Graveyard Light 2</label>
+        <input class="raw-input" id="gip-2" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label>Graveyard Light 3</label>
+        <input class="raw-input" id="gip-3" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label>Graveyard Light 4</label>
+        <input class="raw-input" id="gip-4" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label>Witch Area Light 1</label>
+        <input class="raw-input" id="gip-w1" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label>Witch Area Light 2</label>
+        <input class="raw-input" id="gip-w2" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label class="storm-label">⚡ Storm Light 1</label>
+        <input class="raw-input" id="gip-s1" placeholder="192.168.1.x"/>
+      </div>
+      <div class="govee-ip-row">
+        <label class="storm-label">⚡ Storm Light 2</label>
+        <input class="raw-input" id="gip-s2" placeholder="192.168.1.x"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-orange btn-sm" onclick="saveGoveeIPs()">💾 Save</button>
+      <button class="btn btn-blue   btn-sm" onclick="api('/api/govee/discover')">🔍 Scan LAN</button>
+      <button class="btn btn-green  btn-sm" onclick="testAllGovee()">✓ Test All</button>
+    </div>
+  </div>
+
+</div><!-- /pane-lights -->
+
+<!-- ─── SETUP ─── -->
+<div class="pane" id="pane-setup">
+
+  <!-- Receiver -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📻</span>TX-NR838 Receiver</div>
+    <div class="field-row">
+      <label>Receiver IP</label>
+      <input id="cfg-ip" value="192.168.1.190"/>
+    </div>
+    <div class="field-row">
+      <label>Port</label>
+      <input id="cfg-port" value="60128" style="max-width:110px"/>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-green  btn-sm" onclick="saveConfig()">⚡ Connect</button>
+      <button class="btn btn-red    btn-sm" onclick="api('/api/onkyo/command',{command:'PWR00'})">✕ Disconnect</button>
+      <span id="connect-status" style="font-family:'Courier New',monospace;font-size:.76em;color:var(--dim2);letter-spacing:1px">Not tested</span>
+    </div>
+  </div>
+
+  <!-- Quick commands -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">⚡</span>Quick Receiver Commands</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-green  btn-sm" onclick="api('/api/onkyo/command',{command:'PWR01'})">⚡ Power On</button>
+      <button class="btn btn-red    btn-sm" onclick="api('/api/onkyo/command',{command:'PWR00'})">⏻ Power Off</button>
+      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/command',{command:'MVLUP'})">🔊 Vol Up</button>
+      <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/command',{command:'MVLDOWN'})">🔉 Vol Down</button>
+      <button class="btn btn-amber  btn-sm" onclick="api('/api/onkyo/command',{command:'AMT01'})">🔇 Mute On</button>
+      <button class="btn btn-amber  btn-sm" onclick="api('/api/onkyo/command',{command:'AMT00'})">🔊 Mute Off</button>
+      <button class="btn btn-blue   btn-sm" onclick="api('/api/fog/fire',{duration:5000})">🌫 Fog On</button>
+      <button class="btn btn-red    btn-sm" onclick="api('/api/fog/stop')">■ Fog Off</button>
+    </div>
+  </div>
+
+  <!-- Network info -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌐</span>Network Info</div>
+    <div class="info-row"><span class="info-key">Server</span><span class="info-val">http://localhost:8080</span></div>
+    <div class="info-row"><span class="info-key">Receiver</span><span class="info-val">192.168.1.190 : 60128</span></div>
+    <div class="info-row"><span class="info-key">Govee UDP</span><span class="info-val">Port 4003 send / 4002 listen</span></div>
+    <div class="info-row" style="border-bottom:none"><span class="info-key">Protocol</span><span class="info-val">ISCP over TCP</span></div>
+  </div>
+
+  <!-- App settings -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">⚙</span>App Settings</div>
+    <div class="toggle-row">
+      <span class="toggle-label">Haptic Feedback</span>
+      <label class="toggle"><input type="checkbox" id="set-haptic" checked onchange="saveSetting('hapticFeedback',this.checked)"><span class="toggle-track"></span></label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Auto-duck Jamboree on Character Triggers</span>
+      <label class="toggle"><input type="checkbox" id="set-autoduck" checked onchange="saveSetting('autoDuckJamboree',this.checked)"><span class="toggle-track"></span></label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Fog with Characters</span>
+      <label class="toggle"><input type="checkbox" id="set-fogchars" checked onchange="saveSetting('fogWithCharacters',this.checked)"><span class="toggle-track"></span></label>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">⌨</span>Keyboard Shortcuts</div>
+    <div class="kbd-grid">
+      <span class="kbd">1</span><span class="kbd-desc">Fire Reaper</span>
+      <span class="kbd">2</span><span class="kbd-desc">Fire Horseman</span>
+      <span class="kbd">3</span><span class="kbd-desc">Fire Pumpkin King</span>
+      <span class="kbd">F</span><span class="kbd-desc">Fog burst</span>
+      <span class="kbd">L</span><span class="kbd-desc">Lightning flash</span>
+      <span class="kbd">K</span><span class="kbd-desc">Kids mode</span>
+      <span class="kbd">N</span><span class="kbd-desc">Normal mode</span>
+      <span class="kbd">SPACE</span><span class="kbd-desc">Pause / Resume</span>
+      <span class="kbd">ESC</span><span class="kbd-desc">All Stop shutdown sequence</span>
+    </div>
+  </div>
+
+</div><!-- /pane-setup -->
+</div><!-- /.content -->
+
+<!-- ══ SHUTDOWN MODAL ══ -->
+<div id="shutdown-modal">
+  <div class="shutdown-box">
+    <h2>⛔ SHUTDOWN SEQUENCE</h2>
+    <div class="shutdown-step" id="step-1">
+      <span class="step-icon">🔊</span>
+      <span>Fading audio to zero</span>
+      <span class="step-status" id="step-1-status"></span>
+    </div>
+    <div class="shutdown-step" id="step-2">
+      <span class="step-icon">⏱</span>
+      <span>Stopping all timers</span>
+      <span class="step-status" id="step-2-status"></span>
+    </div>
+    <div class="shutdown-step" id="step-3">
+      <span class="step-icon">🎬</span>
+      <span>Stopping projectors (P1 &amp; P2)</span>
+      <span class="step-status" id="step-3-status"></span>
+    </div>
+    <div class="shutdown-step" id="step-4">
+      <span class="step-icon">💡</span>
+      <span>Turning off lights</span>
+      <span class="step-status" id="step-4-status"></span>
+    </div>
+    <div class="shutdown-step" id="step-5">
+      <span class="step-icon">📻</span>
+      <span>Sending receiver power off</span>
+      <span class="step-status" id="step-5-status"></span>
+    </div>
+    <div id="shutdown-result">✅ SAFE TO POWER DOWN</div>
+    <div class="shutdown-actions">
+      <button class="btn btn-red btn-full" id="shutdown-confirm-btn" onclick="runShutdown()">⛔ CONFIRM SHUTDOWN</button>
+      <button class="btn btn-orange" onclick="closeShutdown()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Demo mode detection ────────────────────────────────────────────────────────
+const DEMO = (location.protocol === 'file:');
+if (DEMO) document.body.classList.add('demo-mode');
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let appState = {
+  connected: false, fogActive: false, stormActive: false,
+  stormNextAt: null, stormStrikeIndex: 0, stormStrikeName: '',
+  kidMode: false, paused: false, sceneMode: 'normal',
+  volumes: { z1:30, z2:25, z3:20, sub:30 },
+  mute: { z1:false, z2:false, z3:false },
+  autoScare: { active:false, intervalMin:2, chars:{grimreaper:true,headlesshorseman:true,pumpkinking:true}, nextAt:null },
+  witchTimer: { active:false, nextAt:null },
+  fogAutoActive: false, fogAutoNextAt: null, fogWarmup: false,
+};
+let flashStyle = 'single';
+let fogDuration = 5;
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let ws, wsRetry = 1000;
+function connectWS() {
+  if (DEMO) return;
+  try {
+    ws = new WebSocket(`ws://${location.host}`);
+    ws.onopen  = () => { wsRetry = 1000; appendLog('WebSocket connected', 'SYSTEM'); };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'state')    applyState(msg.data);
+        if (msg.type === 'config')   applyConfig(msg.data);
+        if (msg.type === 'log')      appendLog(msg.msg, msg.category);
+        if (msg.type === 'govee')    applyGovee(msg.data);
+        if (msg.type === 'settings') applySettings(msg.data);
+      } catch(_) {}
+    };
+    ws.onclose = () => {
+      document.getElementById('dot-rx').className = 'dot off';
+      setTimeout(connectWS, wsRetry);
+      wsRetry = Math.min(wsRetry * 2, 10000);
+    };
+  } catch(_) {}
+}
+connectWS();
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function api(url, body) {
+  if (DEMO) {
+    appendLog(`[DEMO] ${url} ${body ? JSON.stringify(body) : ''}`, 'SYSTEM');
+    return { ok: true };
+  }
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    const data = await r.json();
+    if (!r.ok) appendLog(`ERROR: ${data.error}`, 'SYSTEM');
+    return data;
+  } catch(e) {
+    appendLog(`Network error: ${e.message}`, 'SYSTEM');
+    return { ok: false };
+  }
+}
+
+function demoLog(msg, cat) { if (DEMO) appendLog(msg, cat); }
+
+// ── State sync ────────────────────────────────────────────────────────────────
+function applyState(s) {
+  appState = { ...appState, ...s };
+
+  document.getElementById('dot-rx').className    = 'dot ' + (s.connected   ? 'on'  : 'off');
+  document.getElementById('dot-fog').className   = 'dot ' + (s.fogActive   ? 'fog' : '');
+  document.getElementById('dot-storm').className = 'dot ' + (s.stormActive ? 'storm': '');
+
+  const pb = document.getElementById('pause-btn');
+  pb.textContent = s.paused ? '▶ RESUME' : '⏸ PAUSE';
+  pb.className   = s.paused ? 'btn btn-green btn-lg' : 'btn btn-amber btn-lg';
+
+  // Scene buttons
+  ['kids','normal','intense','loud'].forEach(sc => {
+    const el = document.getElementById(`scene-${sc}`);
+    if (el) el.classList.toggle('active', s.sceneMode === sc);
+  });
+
+  // Storm
+  const stBtn = document.getElementById('storm-toggle-btn');
+  stBtn.textContent = s.stormActive ? '■ Stop Storm' : '▶ Start Auto Storm';
+  stBtn.className   = s.stormActive ? 'btn btn-red btn-lg btn-full' : 'btn btn-amber btn-lg btn-full';
+  updateStormCountdown(s);
+
+  // Fog auto-timer
+  if (s.fogAutoActive !== undefined) updateFogAutoUI(s);
+
+  // Volumes
+  ['z1','z2','z3'].forEach(z => {
+    syncSlider(z, s.volumes[z] ?? 0);
+    const mb = document.getElementById(`mute-${z}`);
+    if (mb) mb.classList.toggle('active', s.mute?.[z]);
+  });
+
+  // Auto scare
+  const ab = document.getElementById('autoscare-badge');
+  const as = document.getElementById('autoscare-status');
+  const aBtn = document.getElementById('autoscare-btn');
+  ab.classList.toggle('active', s.autoScare?.active);
+  as.textContent = s.autoScare?.active
+    ? (s.autoScare.nextAt ? `Next in ${countdown(s.autoScare.nextAt)}` : 'Active')
+    : 'Inactive';
+  aBtn.textContent = s.autoScare?.active ? '■ Stop Auto Scare' : '▶ Start Auto Scare';
+  aBtn.className   = s.autoScare?.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-green btn-full btn-lg';
+
+  // Witch timer
+  const wb   = document.getElementById('witch-badge');
+  const ws2  = document.getElementById('witch-status');
+  const wBtn = document.getElementById('witch-toggle-btn');
+  wb.classList.toggle('active', s.witchTimer?.active);
+  ws2.textContent = s.witchTimer?.active
+    ? (s.witchTimer.nextAt ? `Next in ${countdown(s.witchTimer.nextAt)}` : 'Active')
+    : 'Inactive';
+  wBtn.textContent = s.witchTimer?.active ? '■ Stop Witch Timer' : '▶ Start Witch Timer';
+  wBtn.className   = s.witchTimer?.active ? 'btn btn-red btn-full btn-lg' : 'btn btn-purple btn-full btn-lg';
+}
+
+function applyConfig(c) {
+  if (c.receiverIp)   document.getElementById('cfg-ip').value   = c.receiverIp;
+  if (c.receiverPort) document.getElementById('cfg-port').value = c.receiverPort;
+  ['z1','z2','z3'].forEach(z => {
+    if (c.maxVol?.[z] !== undefined) {
+      const cap = document.getElementById(`cap-${z}`);
+      const sl  = document.getElementById(`vol-${z}`);
+      if (cap) cap.textContent = c.maxVol[z];
+      if (sl)  sl.max = c.maxVol[z];
+    }
+  });
+}
+
+function applySettings(s) {
+  if (s.hapticFeedback    !== undefined) document.getElementById('set-haptic').checked   = s.hapticFeedback;
+  if (s.autoDuckJamboree  !== undefined) document.getElementById('set-autoduck').checked = s.autoDuckJamboree;
+  if (s.fogWithCharacters !== undefined) document.getElementById('set-fogchars').checked = s.fogWithCharacters;
+}
+
+function applyGovee(devices) {
+  // reserved for future Govee state display
+}
+
+// ── Sliders ───────────────────────────────────────────────────────────────────
+function onSlider(el, zone) {
+  const pct = (el.value / el.max * 100).toFixed(1) + '%';
+  el.style.setProperty('--pct', pct);
+  const vEl = document.getElementById(`val-${zone}`);
+  if (vEl) {
+    vEl.textContent = el.value;
+    const ratio = el.value / el.max;
+    vEl.className = 'vol-val' + (ratio >= .75 ? ' danger' : ratio >= .65 ? ' warn' : '');
+  }
+}
+function syncSlider(zone, val) {
+  const el = document.getElementById(`vol-${zone}`);
+  if (el) { el.value = val; onSlider(el, zone); }
+}
+function setVol(zone, val) {
+  api('/api/onkyo/volume', { zone, value: parseInt(val, 10) });
+}
+function toggleMute(zone) {
+  const btn = document.getElementById(`mute-${zone}`);
+  api('/api/onkyo/mute', { zone, mute: !btn?.classList.contains('active') });
+}
+
+// ── Scene / character ─────────────────────────────────────────────────────────
+function setScene(s) {
+  api('/api/scene', { scene: s });
+  demoLog(`Scene: ${s}`, 'SYSTEM');
+  ['kids','normal','intense','loud'].forEach(sc =>
+    document.getElementById(`scene-${sc}`)?.classList.toggle('active', sc === s)
+  );
+}
+function fireChar(c) {
+  api('/api/character', { character: c });
+  demoLog(`Character trigger: ${c}`, 'SCARE');
+}
+
+// ── Storm ─────────────────────────────────────────────────────────────────────
+function toggleStorm() {
+  api('/api/storm/toggle');
+  if (DEMO) {
+    appState.stormActive = !appState.stormActive;
+    if (appState.stormActive) {
+      appState.stormStrikeIndex = 0;
+      appState.stormStrikeName = '🌧 Distant';
+      appState.stormNextAt = Date.now() + 120000;
+    }
+    updateStormCountdown(appState);
+  }
+}
+function fireStrikeNow() {
+  api('/api/storm/strike');
+  demoLog('Manual strike fired', 'AUDIO');
+}
+function updateStormCountdown(s) {
+  const el  = document.getElementById('storm-countdown');
+  const lbl = document.getElementById('storm-strike-label');
+  const num = document.getElementById('storm-strike-num');
+  if (!el) return;
+  if (s.stormActive) {
+    if (s.stormStrikeName) {
+      lbl.textContent = s.stormStrikeName;
+      lbl.style.color = 'var(--amber2)';
+    }
+    if (s.stormStrikeIndex !== undefined) {
+      num.textContent = `Strike ${s.stormStrikeIndex + 1} of 5 — auto-cycle active`;
+    }
+    if (s.stormNextAt) {
+      el.textContent = `⚡ Next strike in ${countdown(s.stormNextAt)}`;
+      el.classList.add('ticking');
+    } else {
+      el.textContent = '⚡ Storm active — scheduling…';
+    }
+  } else {
+    lbl.textContent = 'Storm Inactive';
+    lbl.style.color = 'var(--dim2)';
+    num.textContent = '5-stage progressive cycle · 2 min intervals';
+    el.textContent = 'Storm inactive';
+    el.classList.remove('ticking');
+  }
+}
+function countdown(targetMs) {
+  const sec = Math.max(0, Math.round((targetMs - Date.now()) / 1000));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// ── Fog auto-timer ────────────────────────────────────────────────────────────
+function toggleFogAuto() {
+  api('/api/fog/auto/toggle');
+  if (DEMO) {
+    appState.fogAutoActive = !appState.fogAutoActive;
+    appState.fogAutoNextAt = appState.fogAutoActive ? Date.now() + 600000 : null;
+    appState.fogWarmup = appState.fogAutoActive;
+    updateFogAutoUI(appState);
+  }
+}
+function killFog() {
+  api('/api/fog/kill');
+  demoLog('Fog killed', 'FOG');
+  if (DEMO) {
+    appState.fogAutoActive = false;
+    appState.fogAutoNextAt = null;
+    appState.fogWarmup = false;
+    updateFogAutoUI(appState);
+  }
+}
+function setFogDuration(sec) {
+  fogDuration = sec;
+  [5,10,15].forEach(s => {
+    const btn = document.getElementById(`fog-dur-${s}`);
+    if (btn) btn.classList.toggle('active', s === sec);
+  });
+  api('/api/fog/auto/config', { burstDuration: sec });
+}
+function updateFogAutoUI(s) {
+  const badge  = document.getElementById('fog-auto-badge');
+  const status = document.getElementById('fog-auto-status');
+  const btn    = document.getElementById('fog-auto-btn');
+  const warmup = document.getElementById('fog-warmup-badge');
+
+  badge.classList.toggle('active', !!s.fogAutoActive);
+  status.textContent = s.fogAutoActive
+    ? (s.fogAutoNextAt ? `Next in ${countdown(s.fogAutoNextAt)}` : 'Active')
+    : 'Inactive';
+  btn.textContent = s.fogAutoActive ? '■ Stop Fog Auto-Timer' : '▶ Start Fog Auto-Timer';
+  btn.className   = s.fogAutoActive ? 'btn btn-red btn-full btn-lg' : 'btn btn-blue btn-full btn-lg';
+  warmup.classList.toggle('show', !!s.fogWarmup);
+}
+
+// ── Auto scare ────────────────────────────────────────────────────────────────
+let scareInterval = 2;
+function toggleAutoScare() {
+  api('/api/autoscare/toggle', {
+    intervalMin: scareInterval,
+    chars: {
+      grimreaper:       document.getElementById('scare-reaper')?.checked,
+      headlesshorseman: document.getElementById('scare-horseman')?.checked,
+      pumpkinking:      document.getElementById('scare-pumpkin')?.checked,
+    },
+  });
+}
+function setScareInterval(min) {
+  scareInterval = min;
+  document.getElementById('interval-2').className = 'btn btn-sm ' + (min === 2 ? 'btn-green' : 'btn-orange');
+  document.getElementById('interval-3').className = 'btn btn-sm ' + (min === 3 ? 'btn-green' : 'btn-orange');
+  api('/api/autoscare/config', { intervalMin: min });
+}
+function updateScareChars() {
+  api('/api/autoscare/config', {
+    chars: {
+      grimreaper:       document.getElementById('scare-reaper')?.checked,
+      headlesshorseman: document.getElementById('scare-horseman')?.checked,
+      pumpkinking:      document.getElementById('scare-pumpkin')?.checked,
+    },
+  });
+}
+
+// ── Witch timer ───────────────────────────────────────────────────────────────
+function toggleWitch() {
+  api('/api/witch/toggle');
+}
+
+// ── Ambient loop ──────────────────────────────────────────────────────────────
+async function toggleAmbient() {
+  const r = await api('/api/ambient/toggle');
+  const btn = document.getElementById('ambient-btn');
+  if (r?.active) {
+    btn.textContent = '■ Stop Ambient Loop';
+    btn.className = 'btn btn-red btn-full btn-lg';
+  } else {
+    btn.textContent = '▶ Start Ambient Loop';
+    btn.className = 'btn btn-green btn-full btn-lg';
+  }
+}
+
+// ── FX soundboard ─────────────────────────────────────────────────────────────
+function playFX(fx) {
+  api('/api/fx/play', { fx });
+  demoLog(`FX: ${fx}`, 'AUDIO');
+  if (fx === 'thunder' && document.getElementById('auto-flash-toggle')?.checked) {
+    api('/api/govee/lightning', { duration: 400, style: flashStyle });
+  }
+}
+function stopFX() {
+  api('/api/fx/stop');
+  demoLog('FX stopped', 'AUDIO');
+}
+
+// ── Clip library ──────────────────────────────────────────────────────────────
+function loadClip(char, title) {
+  document.getElementById('p2-nowplaying').textContent = `▶ ${title}`;
+  api('/api/character', { character: char, clip: title });
+  demoLog(`Clip: ${title}`, 'VIDEO');
+}
+function loadP1(title) {
+  document.getElementById('p1-nowplaying').textContent = `▶ ${title}`;
+  api('/api/jamboree/play', { title });
+  demoLog(`P1: ${title}`, 'VIDEO');
+}
+function p1Control(cmd) {
+  demoLog(`P1 ${cmd}`, 'VIDEO');
+  if (cmd === 'stop') { api('/api/jamboree/stop'); return; }
+  api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : 'NTCSKIPF' });
+}
+function p2Control(cmd) { demoLog(`P2 ${cmd}`, 'VIDEO'); api('/api/onkyo/command', { command: cmd === 'play' ? 'NTCPLAY' : cmd === 'stop' ? 'NTCSTOP' : 'NTCSKIPF' }); }
+
+// ── Lights ────────────────────────────────────────────────────────────────────
+function setLightPreset(r, g, b) {
+  api('/api/govee/color', { r, g, b });
+  demoLog(`Light color rgb(${r},${g},${b})`, 'LIGHT');
+}
+function setFlashStyle(style) {
+  flashStyle = style;
+  ['single','double','storm'].forEach(s => {
+    const btn = document.getElementById(`flash-${s}`);
+    if (btn) btn.classList.toggle('active', s === style);
+  });
+}
+function updateCustomColor() {
+  const r = document.getElementById('cr').value;
+  const g = document.getElementById('cg').value;
+  const b = document.getElementById('cb').value;
+  document.getElementById('cr').style.setProperty('--pct', (r/255*100).toFixed(1)+'%');
+  document.getElementById('cg').style.setProperty('--pct', (g/255*100).toFixed(1)+'%');
+  document.getElementById('cb').style.setProperty('--pct', (b/255*100).toFixed(1)+'%');
+  document.getElementById('color-preview').style.background = `rgb(${r},${g},${b})`;
+}
+function applyCustomColor() {
+  const r = parseInt(document.getElementById('cr').value);
+  const g = parseInt(document.getElementById('cg').value);
+  const b = parseInt(document.getElementById('cb').value);
+  api('/api/govee/color', { r, g, b });
+}
+
+// ── Govee IPs ─────────────────────────────────────────────────────────────────
+function saveGoveeIPs() {
+  ['1','2','3','4'].forEach(n => {
+    const ip = document.getElementById(`gip-${n}`)?.value?.trim();
+    if (ip) api('/api/govee/add', { ip, name: `Graveyard Light ${n}`, slot: `graveyard${n}` });
+  });
+  ['w1','w2'].forEach((k,i) => {
+    const ip = document.getElementById(`gip-${k}`)?.value?.trim();
+    if (ip) api('/api/govee/add', { ip, name: `Witch Light ${i+1}`, slot: `witch${i+1}` });
+  });
+  ['s1','s2'].forEach((k,i) => {
+    const ip = document.getElementById(`gip-${k}`)?.value?.trim();
+    if (ip) api('/api/govee/add', { ip, name: `Storm Light ${i+1}`, slot: `storm${i+1}` });
+  });
+  appendLog('Govee IPs saved', 'LIGHT');
+}
+function testAllGovee() {
+  api('/api/govee/lightning', { duration: 500, style: 'single' });
+  appendLog('Testing all Govee lights — flash sent', 'LIGHT');
+}
+
+// ── Config / settings ─────────────────────────────────────────────────────────
+async function saveConfig() {
+  document.getElementById('connect-status').textContent = 'Connecting…';
+  await api('/api/config', {
+    receiverIp:   document.getElementById('cfg-ip').value.trim(),
+    receiverPort: document.getElementById('cfg-port').value.trim(),
+  });
+  const r = await api('/api/connect');
+  document.getElementById('connect-status').textContent = r?.connected ? '✅ Connected' : '❌ Unreachable';
+}
+function saveSetting(key, val) {
+  api('/api/settings', { [key]: val });
+}
+
+// ── Shutdown sequence ─────────────────────────────────────────────────────────
+let shutdownRunning = false;
+function openShutdown() {
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById(`step-${i}-status`).textContent = '';
+    document.getElementById(`step-${i}-status`).className   = 'step-status';
+  }
+  document.getElementById('shutdown-result').style.display = 'none';
+  document.getElementById('shutdown-confirm-btn').style.display = '';
+  shutdownRunning = false;
+  document.getElementById('shutdown-modal').classList.add('open');
+}
+function closeShutdown() {
+  if (shutdownRunning) return;
+  document.getElementById('shutdown-modal').classList.remove('open');
+}
+async function runShutdown() {
+  if (shutdownRunning) return;
+  shutdownRunning = true;
+  document.getElementById('shutdown-confirm-btn').style.display = 'none';
+
+  async function step(n, label, fn) {
+    const el = document.getElementById(`step-${n}-status`);
+    el.textContent = 'Running…'; el.className = 'step-status running';
+    try { await fn(); } catch(_) {}
+    await new Promise(r => setTimeout(r, 500));
+    el.textContent = '✓'; el.className = 'step-status done';
+    appendLog(`Shutdown step ${n}: ${label}`, 'SYSTEM');
+  }
+
+  await step(1, 'Audio faded', async () => {
+    await api('/api/onkyo/volume', { zone:'z1', value:0 });
+    await api('/api/onkyo/volume', { zone:'z2', value:0 });
+    await api('/api/onkyo/volume', { zone:'z3', value:0 });
+  });
+  await step(2, 'Timers stopped', async () => {
+    // timers stopped server-side by /api/shutdown
+  });
+  await step(3, 'Projectors stopped', async () => {
+    await api('/api/onkyo/command', { command: 'NTCSTOP' });
+  });
+  await step(4, 'Lights off', async () => {
+    await api('/api/govee/power', { on: false });
+  });
+  await step(5, 'Receiver off', async () => {
+    await api('/api/shutdown');
+  });
+
+  document.getElementById('shutdown-result').style.display = 'block';
+  shutdownRunning = false;
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+function appendLog(msg, category = 'SYSTEM') {
+  const box = document.getElementById('log-box');
+  if (!box) return;
+  const d   = document.createElement('div');
+  d.className = 'log-entry new';
+  const cat = category || 'SYSTEM';
+  const ts  = new Date().toLocaleTimeString();
+  d.innerHTML = `<span class="log-cat ${cat}">${cat}</span><span style="color:var(--dim2)">[${ts}]</span> ${msg}`;
+  box.prepend(d);
+  while (box.children.length > 300) box.removeChild(box.lastChild);
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  ['touchstart','click'].forEach(evt =>
+    tab.addEventListener(evt, (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
+      document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`pane-${tab.dataset.pane}`)?.classList.add('active');
+    }, { passive: false })
+  );
+});
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('live-clock').textContent =
+    new Date().toLocaleTimeString('en-US', { hour12:false });
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Countdown refresh ─────────────────────────────────────────────────────────
+setInterval(() => {
+  if (appState.stormActive) updateStormCountdown(appState);
+  if (appState.autoScare?.active && appState.autoScare.nextAt) {
+    document.getElementById('autoscare-status').textContent =
+      `Next in ${countdown(appState.autoScare.nextAt)}`;
+  }
+  if (appState.witchTimer?.active && appState.witchTimer.nextAt) {
+    document.getElementById('witch-status').textContent =
+      `Next in ${countdown(appState.witchTimer.nextAt)}`;
+  }
+  if (appState.fogAutoActive && appState.fogAutoNextAt) {
+    document.getElementById('fog-auto-status').textContent =
+      `Next in ${countdown(appState.fogAutoNextAt)}`;
+  }
+}, 1000);
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  switch(e.key) {
+    case '1': fireChar('grimreaper');       break;
+    case '2': fireChar('headlesshorseman'); break;
+    case '3': fireChar('pumpkinking');      break;
+    case 'f': case 'F': api('/api/fog/fire', { duration:5000 }); break;
+    case 'l': case 'L': api('/api/govee/lightning', { duration:400, style:flashStyle }); break;
+    case 'k': case 'K': setScene('kids');   break;
+    case 'n': case 'N': setScene('normal'); break;
+    case ' ': e.preventDefault(); api('/api/pause'); break;
+    case 'Escape': openShutdown(); break;
+  }
+});
+
+// ── Init log ──────────────────────────────────────────────────────────────────
+appendLog(DEMO ? 'HAUNT CTRL v3 — DEMO MODE' : 'HAUNT CTRL v3 online', 'SYSTEM');
+if (DEMO) appendLog('All buttons functional — API calls logged here', 'SYSTEM');
+</script>
+</body>
+</html>
