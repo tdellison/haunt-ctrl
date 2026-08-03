@@ -617,7 +617,7 @@ function saveSlotIPs() {
 // govee-slots.json. Anything saved from the UI overrides these.
 const DEFAULT_SLOT_IPS = {
   skeleton: '192.168.1.216',
-  // witch:    '',
+  witch:    '192.168.1.209',
   // moon:     '',
   // storm:    '',
   // cauldron: '',
