@@ -36,7 +36,14 @@ let settings = {
 //  5. cauldron — separate A19 bulb, green base RGB(0,180,0), deep red
 //                RGB(180,0,0) on spell trigger, pulses back to green after 20s
 let goveeDevices = [];
-const GOVEE_IPS = { skeleton:'', witch:'', moon:'', storm:'', cauldron:'' };
+// 8 slots — 6 floods + 2 A19 bulbs. Each is its own controller IP.
+// The storm-tracker slot was removed; storm stages now drive the monument bulb.
+const GOVEE_IPS = {
+  skeletonLeft:  '', skeletonRight: '',
+  witchMain:     '', witchSecond:   '',
+  moonLeft:      '', moonRight:     '',
+  cauldron:      '', monument:      '',
+};
 const GOVEE_SLOT_IDS = {};
 
 const GOVEE_CMD_PORT    = 4003;
@@ -185,21 +192,41 @@ const GOVEE_COLORS = {
 
 // Base show scheme — every slot's resting color + brightness
 const SLOT_BASES = {
-  skeleton: { color: { r:255, g: 80, b:  0 }, bri: 25 }, // orange/red fire base
-  witch:    { color: { r:100, g:  0, b:180 }, bri: 30 }, // deep purple
-  moon:     { color: { r: 60, g:120, b:255 }, bri: 40 }, // cool steady blue
-  storm:    { color: { r: 30, g:120, b:255 }, bri: 15 }, // cold blue, storm-driven
-  cauldron: { color: { r:  0, g:180, b:  0 }, bri: 60 }, // green boil
+  skeletonLeft:  { color: { r:255, g: 80, b:  0 }, bri: 25 }, // orange/red fire base
+  skeletonRight: { color: { r:255, g: 80, b:  0 }, bri: 25 },
+  witchMain:     { color: { r:100, g:  0, b:180 }, bri: 30 }, // deep purple
+  witchSecond:   { color: { r:100, g:  0, b:180 }, bri: 30 },
+  moonLeft:      { color: { r: 60, g:120, b:255 }, bri: 40 }, // cool steady blue
+  moonRight:     { color: { r: 60, g:120, b:255 }, bri: 40 },
+  cauldron:      { color: { r:  0, g:180, b:  0 }, bri: 60 }, // green boil
+  // Monument starts the cycle completely dark — stage 1 is "off", not "dim".
+  monument:      { color: { r:  0, g:140, b:150 }, bri:  0 },
 };
 
-// Return Govee device IDs for named slots
+// Group aliases — a behavior usually addresses a pair, not one fixture. Callers
+// keep using getSlotIds('skeleton') and it expands to both skeleton slots.
+const SLOT_GROUPS = {
+  skeleton: ['skeletonLeft', 'skeletonRight'],
+  witch:    ['witchMain', 'witchSecond'],
+  moon:     ['moonLeft', 'moonRight'],
+};
+
+// Return Govee device IDs for named slots. Accepts individual slot names and
+// group aliases; unknown names resolve to nothing rather than throwing.
 function getSlotIds(...slots) {
-  return slots.map(s => GOVEE_SLOT_IDS[s]).filter(Boolean);
+  const expanded = [];
+  for (const s of slots) {
+    if (SLOT_GROUPS[s]) expanded.push(...SLOT_GROUPS[s]);
+    else expanded.push(s);
+  }
+  return expanded.map(s => GOVEE_SLOT_IDS[s]).filter(Boolean);
 }
 
 // Set every configured slot to its base show look
 async function applyShowScheme() {
   effects.spellYard = null; // any major-spell yard takeover ends on a full scheme restore
+  effects.monumentOverride = null; // monument returns to tracking the storm stage
+  effects.monumentBlackout = false;
   phantomSuppressed = false; // #25 — Grand Ritual silence ends on a scheme restore
   for (const [slot, base] of Object.entries(SLOT_BASES)) {
     const ids = getSlotIds(slot);
@@ -230,6 +257,8 @@ const effects = {
   spellSeq: null, // { seq, colors, idx } while a named spell runs on the cauldron
   spellYard: null, // 'unraveling' | 'memory' | 'grandritual' while a MAJOR spell owns the yard
   spellTimers: [], // timers spawned by castSpellLights (build/restore steps) — cleared by stopEffects
+  monumentOverride: null,  // anomaly: drive the monument off-stage (see setMonumentOverride)
+  monumentBlackout: false, // blackout storm: monument is last dark / first back
 };
 
 const FIRE_PALETTE = [
@@ -378,6 +407,84 @@ function cauldronBoilTick() {
   effects.timers.cauldron = setTimeout(cauldronBoilTick, delay);
 }
 
+// ─── Monument bulb — spectral progression ─────────────────────────────────────
+// Slot 8 tracks the storm stage and is the yard's slow tell that something is
+// waking up. It does NOT flicker like the cauldron — it emerges.
+//   Stage 1 Distant       — completely off
+//   Stage 2 Getting Closer— barely visible cold white-grey
+//   Stage 3 Close         — dim blue-green spectral
+//   Stage 4 Very Close    — brighter green-teal, pulsing
+//   Stage 5 Overhead      — full spectral green-blue cycling (Grand Ritual)
+const MONUMENT_STAGES = [
+  { color: { r:   0, g:   0, b:   0 }, bri:  0, mode: 'off'     },
+  { color: { r: 200, g: 205, b: 215 }, bri:  5, mode: 'steady'  },
+  { color: { r:   0, g: 120, b: 140 }, bri: 18, mode: 'steady'  },
+  { color: { r:   0, g: 190, b: 150 }, bri: 40, mode: 'pulse'   },
+  { color: { r:   0, g: 220, b: 180 }, bri: 90, mode: 'cycling' },
+];
+const MONUMENT_CYCLE = [
+  { r:   0, g: 220, b: 180 }, { r:   0, g: 180, b: 220 },
+  { r:  40, g: 120, b: 255 }, { r:   0, g: 210, b: 200 },
+];
+let monumentPhase = 0;
+
+function monumentTick() {
+  if (!effects.running) return;
+  const ids = getSlotIds('monument');
+  let stepMs = 900;
+  if (ids.length && !effects.suspended) {
+    // effects.monumentOverride lets an anomaly drive the monument independently
+    // of the storm stage (see setMonumentOverride).
+    const stageIdx = (effects.monumentOverride !== null && effects.monumentOverride !== undefined)
+      ? effects.monumentOverride
+      : Math.max(0, Math.min(MONUMENT_STAGES.length - 1, strikeIndex));
+    const st = MONUMENT_STAGES[stageIdx];
+    if (effects.monumentBlackout) {
+      // Blackout storm — the monument is the LAST light to go dark. Held here
+      // at a bare ember until releaseMonumentBlackout() brings it back first.
+      goveeSetColor(0, 140, 150, ids, 1).catch(() => {});
+      goveeSetBrightness(3, ids, 1).catch(() => {});
+      stepMs = 1200;
+    } else if (st.mode === 'off') {
+      goveeSetBrightness(0, ids).catch(() => {});
+      stepMs = 2000;
+    } else if (st.mode === 'steady') {
+      goveeSetColor(st.color.r, st.color.g, st.color.b, ids).catch(() => {});
+      goveeSetBrightness(st.bri, ids).catch(() => {});
+      stepMs = 2000;
+    } else if (st.mode === 'pulse') {
+      const wave = (Math.sin(monumentPhase * 0.5) + 1) / 2;
+      goveeSetColor(st.color.r, st.color.g, st.color.b, ids).catch(() => {});
+      goveeSetBrightness(Math.round(st.bri + wave * 25), ids).catch(() => {});
+      stepMs = 600;
+    } else { // cycling — Grand Ritual, monument at maximum
+      const c = MONUMENT_CYCLE[monumentPhase % MONUMENT_CYCLE.length];
+      goveeSetColor(c.r, c.g, c.b, ids, 1).catch(() => {});
+      goveeSetBrightness(Math.round(randBetween(80, 100)), ids, 1).catch(() => {});
+      stepMs = 350;
+    }
+  }
+  monumentPhase++;
+  effects.timers.monument = setTimeout(monumentTick, stepMs);
+}
+
+// Anomaly hooks — the monument can act on its own, ahead of the storm stage.
+// stageIdx 0-4, or null to hand control back to the storm progression.
+function setMonumentOverride(stageIdx) {
+  effects.monumentOverride = (stageIdx === null || stageIdx === undefined) ? null : stageIdx;
+  broadcastLog(
+    effects.monumentOverride === null
+      ? 'Monument: released to storm stage'
+      : `Monument: spectral override → stage ${effects.monumentOverride + 1}`,
+    'LIGHT'
+  );
+}
+
+function setMonumentBlackout(on) {
+  effects.monumentBlackout = !!on;
+  broadcastLog(`Monument: blackout hold ${on ? 'ON — last to go dark' : 'OFF — first to return'}`, 'LIGHT');
+}
+
 function startEffects() {
   if (effects.running) return;
   effects.running = true;
@@ -385,7 +492,8 @@ function startEffects() {
   skelFireTick();
   witchBreathTick();
   cauldronBoilTick();
-  broadcastLog('Living effects ON — skeleton fire, witch breathing, cauldron boil', 'LIGHT');
+  monumentTick();
+  broadcastLog('Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral', 'LIGHT');
   broadcastState();
 }
 
@@ -416,24 +524,24 @@ function stopEffects() {
 // 3 Very Close:     storm slot bright electric blue 75%
 // 4 Overhead:       ALL slots full white blast, back to base after 600ms
 async function flashLights(stage) {
-  // Fallback: if no light is assigned to the storm slot yet, flash ALL lights so
-  // testing works before slot setup. Assign the Storm slot for show behavior.
-  let stormIds = getSlotIds('storm');
-  if (!stormIds.length && goveeDevices.length) {
-    broadcastLog('Storm flash: no storm slot assigned — flashing all lights (assign Storm slot in Test tab)', 'LIGHT');
-    stormIds = undefined; // undefined targets all devices in goveeSetColor/Brightness
-  } else if (!stormIds.length) {
-    broadcastLog('Storm flash: no Govee lights connected', 'LIGHT');
-    return;
-  }
-  if (stage <= 0) {
-    await goveeSetColor(30, 120, 255, stormIds, 0); await goveeSetBrightness(15, stormIds, 0);
-  } else if (stage === 1) {
-    await goveeSetColor(30, 120, 255, stormIds, 0); await goveeSetBrightness(30, stormIds, 0);
-  } else if (stage === 2) {
-    await goveeSetColor(50, 140, 255, stormIds, 0); await goveeSetBrightness(50, stormIds, 0);
-  } else if (stage === 3) {
-    await goveeSetColor(80, 180, 255, stormIds, 0); await goveeSetBrightness(75, stormIds, 0);
+  // Stages 1-4 are the MONUMENT's spectral progression — there is no storm
+  // tracker slot any more. The monument loop reads strikeIndex on its own tick,
+  // so a stage change only needs to land the new look immediately; the loop
+  // takes over from there.
+  if (stage <= 3) {
+    const monIds = getSlotIds('monument');
+    if (!monIds.length) {
+      broadcastLog('Storm stage: no monument slot assigned — assign it in Test → System', 'LIGHT');
+      return;
+    }
+    const st = MONUMENT_STAGES[Math.max(0, Math.min(MONUMENT_STAGES.length - 1, stage))];
+    if (st.mode === 'off') {
+      await goveeSetBrightness(0, monIds, 0);
+    } else {
+      await goveeSetColor(st.color.r, st.color.g, st.color.b, monIds, 0);
+      await goveeSetBrightness(st.bri, monIds, 0);
+    }
+    broadcastLog(`Monument: stage ${stage + 1} — ${st.mode}`, 'LIGHT');
   } else {
     // Overhead — full white blast on every configured slot (or all lights if
     // no slots). ALL slots including cauldron — owner spec: "no exceptions".
@@ -616,11 +724,14 @@ function saveSlotIPs() {
 // Known DHCP reservations — these survive a fresh setup or a lost
 // govee-slots.json. Anything saved from the UI overrides these.
 const DEFAULT_SLOT_IPS = {
-  skeleton: '192.168.1.216',
-  witch:    '192.168.1.209',
-  // moon:     '',
-  // storm:    '',
-  // cauldron: '',
+  skeletonLeft: '192.168.1.216',
+  witchMain:    '192.168.1.209',
+  // skeletonRight: '',
+  // witchSecond:   '',
+  // moonLeft:      '',
+  // moonRight:     '',
+  // cauldron:      '',
+  // monument:      '',
 };
 
 function loadSlotIPs() {
@@ -2161,18 +2272,22 @@ function castSpellLights(spellKey) {
         const moonIds = getSlotIds('moon');
         if (moonIds.length) goveeSetBrightness(28, moonIds, 1).catch(() => {});
       } else if (spellKey === 'grandritual') {
-        // Pre-Overhead build: storm trackers full electric blue then white.
-        // The Overhead white blast + base restore come from flashLights stage 4.
-        const stormIds = getSlotIds('storm');
-        if (stormIds.length) {
-          goveeSetColor(80, 180, 255, stormIds, 1).catch(() => {});
-          goveeSetBrightness(100, stormIds, 1).catch(() => {});
-          track(() => {
-            if (effects.spellYard !== 'grandritual') return;
-            goveeSetColor(255, 255, 255, stormIds, 1).catch(() => {});
-            goveeSetBrightness(100, stormIds, 1).catch(() => {});
-          }, Math.round(durMs / 2));
-        }
+        // Pre-Overhead build: the MONUMENT climbs to full spectral green-blue
+        // cycling — it is the visual countdown to the blast. The monument loop
+        // handles the cycling itself once the override is set to the top stage.
+        setMonumentOverride(MONUMENT_STAGES.length - 1);
+        // At maximum intensity, just before the overhead blast, the spectral
+        // laugh fires from the graveyard speakers.
+        track(() => {
+          if (effects.spellYard !== 'grandritual') return;
+          const file = findSoundFile('demon');
+          if (file) {
+            playHauntSound(file);
+            broadcastLog(`Monument at maximum — spectral laugh (${file})`, 'AUDIO');
+          } else {
+            broadcastLog('Monument at maximum — no spectral laugh file found in HAUNT SOUNDS', 'AUDIO');
+          }
+        }, Math.round(durMs * 0.75));
       }
     }
   }, 3000);
@@ -2195,7 +2310,7 @@ function castSpellLights(spellKey) {
       effects.spellYard = null;
       const moonIds = getSlotIds('moon');
       if (moonIds.length) {
-        const m = SLOT_BASES.moon;
+        const m = SLOT_BASES.moonLeft;
         goveeSetColor(m.color.r, m.color.g, m.color.b, moonIds, 1).catch(() => {});
         goveeSetBrightness(m.bri, moonIds, 1).catch(() => {});
       }
@@ -2209,14 +2324,14 @@ function castSpellLights(spellKey) {
         if (witchIds.length) { goveeSetColor(150, 0, 30, witchIds, 1).catch(() => {}); goveeSetBrightness(12, witchIds, 1).catch(() => {}); }
       }, 0);
       track(() => { // step 2: base colors return, still dim
-        const w = SLOT_BASES.witch, s = SLOT_BASES.skeleton;
+        const w = SLOT_BASES.witchMain, s = SLOT_BASES.skeletonLeft;
         if (witchIds.length) { goveeSetColor(w.color.r, w.color.g, w.color.b, witchIds, 1).catch(() => {}); goveeSetBrightness(15, witchIds, 1).catch(() => {}); }
         if (skelIds.length) { goveeSetColor(s.color.r, s.color.g, s.color.b, skelIds, 1).catch(() => {}); goveeSetBrightness(12, skelIds, 1).catch(() => {}); }
       }, 1000);
       track(() => { // step 3: full base brightness, loops resume normal on next tick
         effects.spellYard = null;
         effects.suspended = false;
-        const w = SLOT_BASES.witch, s = SLOT_BASES.skeleton;
+        const w = SLOT_BASES.witchMain, s = SLOT_BASES.skeletonLeft;
         if (witchIds.length) goveeSetBrightness(w.bri, witchIds, 1).catch(() => {});
         if (skelIds.length) goveeSetBrightness(s.bri, skelIds, 1).catch(() => {});
       }, 2000);

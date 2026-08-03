@@ -27,7 +27,27 @@ Halloween AV show controller for Todd (tdellison13@gmail.com). Node.js server on
 - Witch fire ducks z1 by 8 for 30s (skeletons 22 ft from witch mic — bleed).
 - Sound presets: normal (30/28/26) / boost (40/38/36); storm volumes are locked and never affected.
 
-## Govee light slots (5, one IP each, persisted in govee-slots.json)
+## Govee light slots (8, one IP each, persisted in govee-slots.json)
+**6 floods + 2 A19 bulbs. The storm-tracker slot was REMOVED entirely** — storm stages now drive the monument bulb.
+
+| # | Slot key | Fixture | Behavior |
+|---|---|---|---|
+| 1 | `skeletonLeft` | flood | fire illusion, orange/red irregular flicker (192.168.1.216) |
+| 2 | `skeletonRight` | flood | fire illusion, orange/red irregular flicker |
+| 3 | `witchMain` | flood | deep purple breathing pulse (192.168.1.209) |
+| 4 | `witchSecond` | flood | deep purple breathing pulse |
+| 5 | `moonLeft` | flood | cool blue steady, never changes |
+| 6 | `moonRight` | flood | cool blue steady, never changes |
+| 7 | `cauldron` | A19 bulb | green organic flicker, spell-reactive |
+| 8 | `monument` | A19 bulb | spectral progression tracking storm stages |
+
+- **`SLOT_GROUPS` aliases**: `getSlotIds('skeleton'/'witch'/'moon')` expands to both members of the pair, so behaviors address a pair while IPs stay per-fixture.
+- **Monument progression** (`MONUMENT_STAGES`, `monumentTick`): Stage 1 completely OFF → 2 barely visible cold white-grey → 3 dim blue-green spectral → 4 brighter green-teal pulsing → 5 full spectral green-blue cycling (Grand Ritual). It emerges, it does not flicker.
+- **Spectral laugh** fires from the graveyard speakers at 75% through the Grand Ritual build, as the monument reaches maximum, just before the overhead blast.
+- **Anomaly hooks**: `setMonumentOverride(stageIdx|null)` drives the monument independently of the storm stage (wrong-storm anomaly = go spectral before the incantation). `setMonumentBlackout(true/false)` holds it at a bare ember so it's the last light dark and the first back after the blast. **Both are built but not yet wired to storm variants** — the wrong-storm and blackout-storm anomalies don't exist in the storm engine yet.
+- **Overhead strike**: all 8 slots flash full white simultaneously, then every light returns to its base/effect.
+
+### Previous 5-slot layout (superseded)
 | Slot | Base | Behavior |
 |---|---|---|
 | skeleton | orange/red fire {255,80,0} 25% | FIRE ILLUSION loop: 5-color palette, random 250–1400ms, flares & smolders; brightens 45–65 while either skeleton talks |
