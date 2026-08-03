@@ -1,3 +1,4 @@
+// Haunt CTRL v3 - The Hollow Storm at Thornfield Cemetery
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const http = require('http');
@@ -57,6 +58,9 @@ goveeSocket.bind(GOVEE_LISTEN_PORT, () => {
   try { goveeSocket.addMembership(GOVEE_MULTICAST); } catch (_) {}
   console.log(`[GOVEE] Listening on :${GOVEE_LISTEN_PORT}`);
 });
+// ip -> resolve(), pending Setup-tab connectivity probes (see /api/govee/test-ip)
+const goveeProbes = new Map();
+
 goveeSocket.on('message', (msg, rinfo) => {
   try {
     const data = JSON.parse(msg.toString());
@@ -73,6 +77,13 @@ goveeSocket.on('message', (msg, rinfo) => {
         });
         broadcastGovee();
       }
+    }
+    // Setup-tab connectivity probe — any reply from this IP proves the light is
+    // reachable and talking, not just that we fired a packet into the dark.
+    if (goveeProbes.has(rinfo.address)) {
+      const resolve = goveeProbes.get(rinfo.address);
+      goveeProbes.delete(rinfo.address);
+      resolve(true);
     }
     if (m.cmd === 'devStatus') {
       const dev = goveeDevices.find(d => d.ip === rinfo.address);
@@ -3512,6 +3523,71 @@ app.get('/api/phantom/map', (req, res) => {
     resolved[ev] = steps.map(s => ({ ...s, file: findSoundFile(s.kw) }));
   }
   res.json({ ok: true, map: PHANTOM_MAP, resolved, minGapMs: PHANTOM_MIN_GAP_MS, suppressed: phantomSuppressed });
+});
+
+// ─── Setup tab — Govee light slots ────────────────────────────────────────────
+// Flash a single IP and report whether the light actually answered. The flash is
+// the visual confirmation ("which light is this?"); the devStatus reply is the
+// proof of connectivity — UDP sends succeed even when nothing is listening.
+app.post('/api/govee/test-ip', async (req, res) => {
+  const ip = (req.body?.ip || '').trim();
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    return res.status(400).json({ ok: false, responded: false, error: 'valid IP required' });
+  }
+  const responded = new Promise((resolve) => {
+    goveeProbes.set(ip, resolve);
+    setTimeout(() => { if (goveeProbes.delete(ip)) resolve(false); }, 1500);
+  });
+  // Brief white flash so the owner can see WHICH fixture this slot drives,
+  // then ask for status so there's something to reply to.
+  goveeSend(ip, { cmd: 'turn',       data: { value: 1 } }, 0).catch(() => {});
+  goveeSend(ip, { cmd: 'colorwc',    data: { color: { r:255, g:255, b:255 }, colorTemInKelvin: 0 } }, 0).catch(() => {});
+  goveeSend(ip, { cmd: 'brightness', data: { value: 100 } }, 0).catch(() => {});
+  goveeSend(ip, { cmd: 'devStatus',  data: {} }, 0).catch(() => {});
+  const ok = await responded;
+  // Put it back to whatever the slot's base look is, if this IP is a known slot.
+  setTimeout(() => {
+    const slot = Object.keys(GOVEE_IPS).find(k => GOVEE_IPS[k] === ip);
+    const base = slot && SLOT_BASES[slot];
+    if (base) {
+      goveeSend(ip, { cmd: 'colorwc', data: { color: base.color, colorTemInKelvin: 0 } }, 1).catch(() => {});
+      goveeSend(ip, { cmd: 'brightness', data: { value: base.bri } }, 1).catch(() => {});
+    }
+  }, 700);
+  broadcastLog(`Govee test ${ip}: ${ok ? 'responded' : 'NO REPLY'}`, 'LIGHT');
+  res.json({ ok: true, ip, responded: ok });
+});
+
+// Save all slot IPs at once. Takes effect immediately — devices are registered
+// and slot ids remapped in place, so the running effects loops pick them up on
+// their next tick. No restart needed.
+app.post('/api/govee/slots/save', (req, res) => {
+  const ips = req.body?.ips || {};
+  const applied = {};
+  for (const slot of Object.keys(GOVEE_IPS)) {
+    const ip = (ips[slot] || '').trim();
+    if (ip && !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+      return res.status(400).json({ error: `invalid IP for ${slot}: ${ip}` });
+    }
+    GOVEE_IPS[slot] = ip;
+    if (!ip) { delete GOVEE_SLOT_IDS[slot]; continue; }
+    let dev = goveeDevices.find(d => d.ip === ip);
+    if (!dev) {
+      dev = {
+        id: `govee-${slot}`, name: slot, ip, model: 'Manual',
+        on: true, color: { ...(SLOT_BASES[slot]?.color || { r:255, g:255, b:255 }) },
+        brightness: SLOT_BASES[slot]?.bri ?? 100,
+      };
+      goveeDevices.push(dev);
+    }
+    GOVEE_SLOT_IDS[slot] = dev.id;
+    applied[slot] = ip;
+  }
+  saveSlotIPs();
+  broadcastGovee();
+  broadcastState();
+  broadcastLog(`Govee slot IPs saved — ${Object.keys(applied).length}/${Object.keys(GOVEE_IPS).length} assigned`, 'LIGHT');
+  res.json({ ok: true, ips: GOVEE_IPS, slotIds: GOVEE_SLOT_IDS });
 });
 
 // ─── §27 Mic gate routes ──────────────────────────────────────────────────────
