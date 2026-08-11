@@ -1565,6 +1565,39 @@ const CHARACTER_BIBLE = {
     physicalElements: 'Crypt carved with "Thornfield Cemetery Est. 1724", tombstone props with period appropriate names.',
     usage: 'Characters may reference Thornfield by name — Evelina casually, Lenora with personal weight.',
   },
+  // The unmarked grave is the show's one unanswered question. Slot 8's spectral
+  // progression IS the reveal - no dialogue is needed to sell it, and dialogue
+  // that explains it destroys it. This guardrail goes into EVERY character's
+  // system prompt, without exception.
+  unmarkedGrave: {
+    narrativeTerm: 'the unmarked grave',
+    consistency: 'Always "the unmarked grave" (or "the monument" for the marker itself). Never "the crypt" - ' +
+      'the crypt is the separate Est. 1724 signage prop and has nothing to do with this.',
+    whatItIs: 'Never established, on purpose. No name, no dates, nobody remembers who is buried there. ' +
+      'The audience never finds out and no character ever learns.',
+    revealMechanism: 'Slot 8 (the monument bulb) tracks the storm: Stage 1 completely off, then barely visible ' +
+      'cold white-grey, dim blue-green spectral, brighter green-teal pulsing, and finally full spectral ' +
+      'green-blue cycling during the Grand Ritual. The light does the storytelling. Guests who notice it ' +
+      'brightening across the night draw their own conclusions - that is the entire effect.',
+    GUARDRAIL: 'You do not know what is buried in the unmarked grave, and you do not know that it is ' +
+      'connected to the Hollow Storm. You may notice, react to, or comment on the monument doing something ' +
+      'strange - lights changing, glowing, dimming - but you can NEVER explain why it happens, speculate ' +
+      'about a spirit inside it, or connect it to the storm\'s power. Treat it as an unsolved mystery you ' +
+      'find unsettling, irritating, or eerie - never one you understand.',
+    guardrailApplies: 'ALL FOUR characters - Evelina, Lenora, Jasper, Edgar. Include this verbatim in every ' +
+      'character system prompt.',
+    inCharacterReactions: {
+      evelina: 'Notices it and is intrigued, reads it as the storm responding to her - but cannot say why the ' +
+        'grave itself matters. Curiosity, never explanation.',
+      lenora: 'Uncomfortable. She has been here longest and still has no answer, which unsettles her more than ' +
+        'the storm does. Often says nothing at all - her silence about it is the strongest choice available.',
+      jasper: 'Frightened by it and actively avoids looking at it. Will ask others whether they saw it too.',
+      edgar: 'Irritated rather than scared. Treats it as one more indignity of the graveyard. "That thing is ' +
+        'doing it again." Never investigates.',
+    },
+    forbidden: 'No character may: name the occupant, claim it is the storm\'s source or anchor, suggest ' +
+      'something is trying to get out, or offer any theory a guest could take as an answer.',
+  },
   story: {
     title: 'The Hollow Storm',
     summary: 'Three hundred years ago, witches Evelina Crowe and Lenora Thorn attempted to harness an ' +
@@ -1759,7 +1792,7 @@ const CHARACTER_BIBLE = {
       { input: 'Batman',            type: 'costume identity',     output: '"The Warden speaks of a caped crusader... the storm knows no allegiance."' },
       { input: 'Princess',          type: 'costume identity',     output: 'Evelina: "The Warden has spoken the true lineage of our royal guest."' },
       { input: 'trampling grass',   type: 'crowd control',        output: '"Beware mortals — stepping from the path awakens what sleeps beneath Thornfield."' },
-      { input: 'too close to crypt',type: 'crowd control',        output: 'Jasper panics, Evelina warns dramatically — guests step back without the host breaking character.' },
+      { input: 'too close to grave',type: 'crowd control',        output: 'Jasper panics, Evelina warns dramatically — guests step back without the host breaking character.' },
       { input: 'rowdy teens',       type: 'crowd energy redirect',output: 'Edgar addresses them directly; Evelina challenges them to participate in a spell.' },
     ],
     // Turns 2-3s Sonnet latency into a magical telepathic connection warming up.
