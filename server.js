@@ -159,55 +159,37 @@ function slotForDeviceId(id) {
 
 // The look a slot should hold RIGHT NOW. Everything is its SLOT_BASES entry
 // except the monument, which tracks the live storm stage rather than a fixed
-// base — after a flash it must return to its current spectral level, not to the
-// stage-1 "off" base.
-function currentBaseFor(slot) {
-  if (slot === 'monument') {
-    const idx = (effects.monumentOverride !== null && effects.monumentOverride !== undefined)
-      ? effects.monumentOverride
-      : Math.max(0, Math.min(MONUMENT_STAGES.length - 1, strikeIndex));
-    const st = MONUMENT_STAGES[idx];
-    return { color: st.color, bri: st.bri };
-  }
-  const b = SLOT_BASES[slot];
-  return b ? { color: b.color, bri: b.bri } : null;
-}
-
-// Post-flash restore. Slot-assigned lights go back to their OWN base colour;
-// anything not in a slot falls back to the pre-flash snapshot. Previously this
-// restored every light from the snapshot, and because devices are created with a
-// hardcoded orange, un-repainted lights all came back skeleton-coloured.
-async function restoreAfterFlash(snapshot) {
-  for (const dev of goveeDevices) {
-    const slot = slotForDeviceId(dev.id);
-    const base = slot ? currentBaseFor(slot) : null;
-    if (base) {
-      await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: base.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
-      await goveeSend(dev.ip, { cmd: 'brightness', data: { value: base.bri } }, 0).catch(() => {});
-      dev.color = { ...base.color };
-      dev.brightness = base.bri;
-      continue;
-    }
-    const snap = snapshot && snapshot.find(s => s.id === dev.id);
-    if (!snap) continue;
-    await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } }, 0).catch(() => {});
-    await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } }, 0).catch(() => {});
-    dev.color = snap.color;
-    dev.brightness = snap.brightness;
-  }
-  broadcastGovee();
-}
-
-// Which slot owns a device id, or null if it isn't assigned to one.
-function slotForDeviceId(id) {
-  return Object.keys(GOVEE_SLOT_IDS).find(s => GOVEE_SLOT_IDS[s] === id) || null;
-}
-
-// The look a slot should hold RIGHT NOW. Everything is its SLOT_BASES entry
-// except the monument, which tracks the live storm stage rather than a fixed
 // base - after a flash it must return to its current spectral level, not the
 // stage-1 off base.
+// While a MAJOR spell owns the yard, the correct look is the SPELL's look, not
+// SLOT_BASES. Restoring to base mid-spell snaps the yard out of the spell until
+// the loops drift back - and Memory is specified to never snap. Returns null
+// when the active spell doesn't touch this slot.
+function spellLookFor(slot, spellYard) {
+  const isSkel  = slot === 'skeletonLeft' || slot === 'skeletonRight';
+  const isWitch = slot === 'witchMain'    || slot === 'witchSecond';
+  const isMoon  = slot === 'moonLeft'     || slot === 'moonRight';
+  if (spellYard === 'memory') {
+    if (isSkel)  return { color: { r:255, g: 80, b:  0 }, bri:  8 }; // near-out embers
+    if (isWitch) return { color: { r:150, g:  0, b: 30 }, bri: 28 }; // deep crimson
+    return null; // Memory leaves the moon alone
+  }
+  if (spellYard === 'unraveling') {
+    if (isWitch) return { color: { r:  0, g:180, b: 60 }, bri: 30 }; // unsettling green
+    if (isMoon)  return { color: { r: 60, g:120, b:255 }, bri: 28 }; // dimmed
+    return null; // skeleton keeps fire colors, just faster
+  }
+  if (spellYard === 'grandritual') {
+    if (isSkel)  return { color: { r:255, g:120, b:  0 }, bri: 85 }; // blazing
+    if (isWitch) return { color: { r:100, g:  0, b:180 }, bri: 75 }; // mid-alternation
+    return null;
+  }
+  return null;
+}
+
 function currentBaseFor(slot) {
+  const spellLook = spellLookFor(slot, effects.spellYard);
+  if (spellLook) return spellLook;
   if (slot === 'monument') {
     const idx = (effects.monumentOverride !== null && effects.monumentOverride !== undefined)
       ? effects.monumentOverride
@@ -615,6 +597,10 @@ function stopEffects() {
   effects.cauldronMode = 'green';
   effects.spellSeq = null;
   effects.spellYard = null;
+  // Without these an ALL STOP / STRIKE DOWN mid-ritual leaves the monument
+  // pinned at full spectral cycling the next time effects start.
+  effects.monumentOverride = null;
+  effects.monumentBlackout = false;
   for (const t of effects.spellTimers) clearTimeout(t);
   effects.spellTimers = [];
   broadcastLog('Living effects OFF', 'LIGHT');
@@ -769,16 +755,6 @@ async function drainISCP() {
   try { resolve(await sendISCP(command)); } catch (e) { reject(e); }
   iscpRunning = false;
   if (iscpQueue.length > 0) setImmediate(drainISCP);
-}
-
-// ─── Debounce helper ──────────────────────────────────────────────────────────
-const debounceMap = {};
-function debounceRoute(key, ms, fn) {
-  if (debounceMap[key]) return false;
-  debounceMap[key] = true;
-  setTimeout(() => { delete debounceMap[key]; }, ms);
-  fn();
-  return true;
 }
 
 async function testConnection() {
@@ -2355,6 +2331,15 @@ const CHARACTER_BIBLE = {
 // Spell-cast: 3s green "build" phase, then the cauldron boil loop switches to
 // spell mode driven by the spell's own sequence/colors for 20s, then back to
 // green boil. NO WHITE anywhere in any spell sequence.
+// How long after the Grand Ritual's window closes to wait for the Overhead
+// blast before self-restoring. Generous - the real sequence lands well inside it.
+const GRAND_RITUAL_GRACE_MS = 15000;
+
+// Skeleton talking-flag backstop. The flag normally clears when the audio
+// process exits; this only fires if that exit never arrives.
+const SKEL_TALK_MAX_MS = 30000;
+const skelTalkTimers = { left: null, right: null };
+
 function castSpellLights(spellKey) {
   const spell = SPELLS[spellKey];
   if (!spell) return;
@@ -2477,9 +2462,23 @@ function castSpellLights(spellKey) {
         if (skelIds.length) goveeSetBrightness(s.bri, skelIds, 1).catch(() => {});
       }, 2000);
     }
-    // grandritual: spellYard stays set until the Overhead blast's
-    // applyShowScheme clears it and restores every slot to base.
+    // grandritual: the Overhead blast's applyShowScheme normally clears
+    // spellYard and restores every slot. See the safety net below for when it
+    // doesn't.
   }, 3000 + durMs);
+
+  // SAFETY NET - the Grand Ritual's cleanup lives in flashLights(4). If the
+  // Overhead never fires (spell fired from the Test tab, conductor ordering
+  // slip, storm stopped mid-ritual) the yard stays pinned at ritual intensity
+  // and phantomSuppressed stays true, killing ambient sound for the rest of the
+  // night. Recover on our own rather than depending on a different function.
+  if (spellKey === 'grandritual') {
+    track(() => {
+      if (effects.spellYard !== 'grandritual') return; // Overhead already cleaned up
+      broadcastLog('Grand Ritual ended without an Overhead strike - restoring show scheme', 'LIGHT');
+      applyShowScheme().catch(() => {});
+    }, 3000 + durMs + GRAND_RITUAL_GRACE_MS);
+  }
 }
 
 // Random picker: never grandritual, never the same spell twice in a row.
@@ -2838,9 +2837,16 @@ function fireSkeleton(side) {
   skeletonProcess.on('exit', () => { skeletonProcess = null; });
 
   // Talking flag: while set, that side's fire-illusion loop burns brighter
-  // (45–65 brightness, still fire colors). Cleared after 8s.
+  // (45–65 brightness, still fire colors). Cleared when the clip ends.
   effects.skelTalking[side] = true;
-  setTimeout(() => { effects.skelTalking[side] = false; }, 8000);
+  if (skelTalkTimers[side]) clearTimeout(skelTalkTimers[side]);
+  const clearTalk = () => {
+    effects.skelTalking[side] = false;
+    if (skelTalkTimers[side]) { clearTimeout(skelTalkTimers[side]); skelTalkTimers[side] = null; }
+  };
+  // Backstop in case the process never reports an exit.
+  skelTalkTimers[side] = setTimeout(clearTalk, SKEL_TALK_MAX_MS);
+  skeletonProcess?.on('exit', clearTalk);
   return true;
 }
 
