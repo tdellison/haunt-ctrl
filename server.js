@@ -496,18 +496,21 @@ function cauldronBoilTick() {
 // ─── Monument bulb — spectral progression ─────────────────────────────────────
 // Slot 8 tracks the storm stage and is the yard's slow tell that something is
 // waking up. It does NOT flicker like the cauldron — it emerges.
-//   Stage 1 Distant       — completely off
-//   Stage 2 Getting Closer— barely visible cold white-grey
-//   Stage 3 Close         — dim blue-green spectral
-//   Stage 4 Very Close    — brighter green-teal, pulsing
-//   Stage 5 Overhead      — full spectral green-blue cycling (Grand Ritual)
+// Indices line up 1:1 with STRIKE_SEQUENCE:
+//   0 Distant          - completely off
+//   1 Building         - barely visible cold white-grey
+//   2 Active           - green-teal, pulsing
+//   3 Grand Ritual     - full spectral green-blue cycling
+//   4 Calm After Storm - bare ember, the last thing still lit
 const MONUMENT_STAGES = [
   { color: { r:   0, g:   0, b:   0 }, bri:  0, mode: 'off'     },
   { color: { r: 200, g: 205, b: 215 }, bri:  5, mode: 'steady'  },
-  { color: { r:   0, g: 120, b: 140 }, bri: 18, mode: 'steady'  },
   { color: { r:   0, g: 190, b: 150 }, bri: 40, mode: 'pulse'   },
   { color: { r:   0, g: 220, b: 180 }, bri: 90, mode: 'cycling' },
+  { color: { r:   0, g: 140, b: 150 }, bri:  6, mode: 'steady'  },
 ];
+// The stage index the ritual override drives the monument to.
+const MONUMENT_RITUAL_IDX = 3;
 const MONUMENT_CYCLE = [
   { r:   0, g: 220, b: 180 }, { r:   0, g: 180, b: 220 },
   { r:  40, g: 120, b: 255 }, { r:   0, g: 210, b: 200 },
@@ -608,17 +611,18 @@ function stopEffects() {
 }
 
 // Storm lighting per progression stage (0-4).
-// 0 Distant:        storm slot cold blue 15%
-// 1 Getting Closer: storm slot cold blue 30%
-// 2 Close:          storm slot brighter cold blue 50%
-// 3 Very Close:     storm slot bright electric blue 75%
-// 4 Overhead:       ALL slots full white blast, back to base after 600ms
+// 0 Distant:      monument off
+// 1 Building:     monument barely visible cold white-grey
+// 2 Active:       monument green-teal, pulsing
+// 3 Grand Ritual: ALL slots full white blast, back to base after 600ms
+// 4 Calm:         never routed here - calmPhase owns the lights
 async function flashLights(stage) {
-  // Stages 1-4 are the MONUMENT's spectral progression — there is no storm
-  // tracker slot any more. The monument loop reads strikeIndex on its own tick,
-  // so a stage change only needs to land the new look immediately; the loop
-  // takes over from there.
-  if (stage <= 3) {
+  // Stages 0-2 are the MONUMENT's spectral progression. Stage 3 (Grand Ritual)
+  // is the all-lights blast. Stage 4 (Calm) never calls this - calmPhase owns
+  // the lights there. The monument loop reads strikeIndex on its own tick, so a
+  // stage change only needs to land the new look immediately.
+  if (stage === null || stage === undefined) return;
+  if (stage <= 2) {
     const monIds = getSlotIds('monument');
     if (!monIds.length) {
       broadcastLog('Storm stage: no monument slot assigned — assign it in Test → System', 'LIGHT');
@@ -1418,22 +1422,81 @@ function stopFogAuto() {
 // ─── Storm progressive sequence engine ───────────────────────────────────────
 // Storm volumes are LOCKED — never affected by the Normal/Boost preset.
 // Strikes hit all three zones full blast (z1/z3 mirror z2 intensity).
+// Canonical 5-stage cycle. Grand Ritual IS the peak - there is no separate
+// 'Overhead' stage after it; the 10-step ritual and the all-lights blast both
+// happen inside stage 3. Calm After Storm is stage 4, then the cycle resets.
 const STRIKE_SEQUENCE = [
-  { name: 'Distant',       emoji: '🌧', z1Vol: 48, z2Vol: 48, z3Vol: 48, fog: false, flash: 0 },
-  { name: 'Getting Closer',emoji: '⛈', z1Vol: 46, z2Vol: 46, z3Vol: 46, fog: false, flash: 1 },
-  { name: 'Close',         emoji: '🌩', z1Vol: 42, z2Vol: 42, z3Vol: 42, fog: false, flash: 2 },
-  { name: 'Very Close',    emoji: '⚡', z1Vol: 38, z2Vol: 38, z3Vol: 38, fog: false, flash: 3 },
-  { name: 'Overhead',      emoji: '💥', z1Vol: 36, z2Vol: 36, z3Vol: 36, fog: true,  flash: 4 },
+  { name: 'Distant',          emoji: '🌧', z1Vol: 48, z2Vol: 48, z3Vol: 48, fog: false, flash: 0 },
+  { name: 'Building',         emoji: '⛈', z1Vol: 44, z2Vol: 44, z3Vol: 44, fog: false, flash: 1 },
+  { name: 'Active',           emoji: '🌩', z1Vol: 40, z2Vol: 40, z3Vol: 40, fog: false, flash: 2 },
+  { name: 'Grand Ritual',     emoji: '💥', z1Vol: 36, z2Vol: 36, z3Vol: 36, fog: true,  flash: 3, ritual: true },
+  { name: 'Calm After Storm', emoji: '🌫', z1Vol: 44, z2Vol: 44, z3Vol: 44, fog: false, flash: null, calm: true },
 ];
 
 const STRIKE_INTERVAL_MS = 120000; // 2 minutes
 
 let strikeIndex = 0;
 
+// ─── Cycle state + special-beat mutex ─────────────────────────────────────────
+// Only ONE special beat may fire per cycle, so two big moments never stack and
+// undercut each other. Reset on entry to Distant.
+//
+// This is SEPARATE from the season-level limits: Blackout Storm and Lenora's
+// almost-truth line each happen once per SEASON. seasonBeatsUsed tracks those
+// independently - the mutex below only prevents two beats in the SAME cycle and
+// never loosens a season limit.
+const SPECIAL_BEATS = ["blackoutStorm", "lenoraAlmostTruth", "nearSuccessCycle", "stormEcho"];
+const SEASON_ONCE_BEATS = ["blackoutStorm", "lenoraAlmostTruth"];
+
+const cycleState = { specialBeatFired: false, cycleNumber: 1 };
+const seasonBeatsUsed = {}; // beatType -> true once used for the season
+
+function resetCycleState() {
+  cycleState.specialBeatFired = false;
+  cycleState.cycleNumber = (state.cycleStats.cyclesCompleted || 0) + 1;
+}
+
+// rollFn is the beat's own odds logic, supplied by the Director. Returns true if
+// the beat fired. No Director exists yet - when it does, it calls this instead of
+// rolling directly.
+function tryRollSpecialBeat(beatType, rollFn) {
+  if (!SPECIAL_BEATS.includes(beatType)) return false;
+  if (cycleState.specialBeatFired) return false; // one special beat per cycle
+  if (SEASON_ONCE_BEATS.includes(beatType) && seasonBeatsUsed[beatType]) return false;
+  const fired = typeof rollFn === "function" ? !!rollFn() : false;
+  if (fired) {
+    cycleState.specialBeatFired = true;
+    if (SEASON_ONCE_BEATS.includes(beatType)) seasonBeatsUsed[beatType] = true;
+    broadcastLog(`Special beat: ${beatType} (cycle ${cycleState.cycleNumber})`, "SYSTEM");
+  }
+  return fired;
+}
+
+// ─── Evelina clue tiers ───────────────────────────────────────────────────────
+// Cycles 1-2 draw vague clues, cycle 3+ draws pointed ones - still random WITHIN
+// the tier, never scripted. POOLS ARE INTENTIONALLY EMPTY: the owner writes
+// Evelina's lines. Sort existing clues in, do not invent them.
+const EVELINA_CLUE_POINTED_FROM_CYCLE = 3;
+const evelinaCluesVague = [];
+const evelinaCluesPointed = [];
+
+function pickEvelinaClue(cycleNumber) {
+  const n = Number.isFinite(cycleNumber) ? cycleNumber : cycleState.cycleNumber;
+  const wantPointed = n >= EVELINA_CLUE_POINTED_FROM_CYCLE;
+  const primary = wantPointed ? evelinaCluesPointed : evelinaCluesVague;
+  const fallback = wantPointed ? evelinaCluesVague : evelinaCluesPointed;
+  const pool = primary.length ? primary : fallback; // never strand the caller
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+
 async function fireStrike(idx) {
   const s = STRIKE_SEQUENCE[idx];
   broadcastLog(`Storm ${idx + 1}/5 — ${s.emoji} ${s.name}`, 'AUDIO');
-  playStormClip(s.name === 'Overhead');
+  // Calm After Storm is a real stage now: no storm clip, no flash - it hands off
+  // to calmPhase, which owns the lights for its 60-90s hold.
+  if (!s.calm) playStormClip(!!s.ritual);
   firePhantom('storm_stage_' + idx);
 
   try {
@@ -1448,16 +1511,24 @@ async function fireStrike(idx) {
     state.volumes.z3 = z3;
     broadcastState();
 
-    if (s.fog) fogBurst(5000);
-
-    const delay = 1200 + Math.random() * 800;
-    setTimeout(() => {
-      broadcastLog(`Storm: lightning flash [stage ${s.flash}]`, 'LIGHT');
-      flashLights(s.flash).catch(() => {});
-    }, delay);
   } catch (e) {
     broadcastLog(`Storm error: ${e.message}`, 'SYSTEM');
   }
+
+  // Fog and lighting run OUTSIDE the receiver try/catch on purpose: an ISCP
+  // timeout must never swallow the visual half of the stage. Before this, one
+  // slow reply from the Onkyo skipped the lightning flash and the calm phase.
+  if (s.fog) fogBurst(5000);
+
+  if (s.calm) {
+    calmPhase().catch(() => {});
+    return;
+  }
+  const delay = 1200 + Math.random() * 800;
+  setTimeout(() => {
+    broadcastLog(`Storm: lightning flash [stage ${s.flash}]`, 'LIGHT');
+    flashLights(s.flash).catch(() => {});
+  }, delay);
 }
 
 function scheduleNextStrike() {
@@ -1487,6 +1558,8 @@ function scheduleNextStrike() {
         broadcastLog(`Storm cycle ${cs.cyclesCompleted} complete — ${Math.round(cs.lastCycleMs / 1000)}s (avg ${Math.round(cs.avgCycleMs / 1000)}s)`, 'SYSTEM');
       }
       cs.cycleStartedAt = now;
+      // New cycle begins at Distant - the special-beat mutex reopens here.
+      resetCycleState();
     } else if (!state.cycleStats.cycleStartedAt) {
       state.cycleStats.cycleStartedAt = Date.now();
     }
@@ -1538,7 +1611,8 @@ const CHARACTER_BIBLE = {
     lore: 'The Thorn family built and managed Thornfield Cemetery before Evelina arrived with her ideas ' +
       'about the storm. Lenora\'s family connection to the cemetery is never explicitly stated — it exists ' +
       'in the lore for those who notice.',
-    physicalElements: 'Crypt carved with "Thornfield Cemetery Est. 1724", tombstone props with period appropriate names.',
+    physicalElements: 'The unmarked grave and its monument, carved "Thornfield Cemetery Est. 1724" - that is cemetery ' +
+      'signage, not the occupant; no name or dates appear anywhere on it. Tombstone props with period appropriate names.',
     usage: 'Characters may reference Thornfield by name — Evelina casually, Lenora with personal weight.',
   },
   // The unmarked grave is the show's one unanswered question. Slot 8's spectral
@@ -1547,8 +1621,9 @@ const CHARACTER_BIBLE = {
   // system prompt, without exception.
   unmarkedGrave: {
     narrativeTerm: 'the unmarked grave',
-    consistency: 'Always "the unmarked grave" (or "the monument" for the marker itself). Never "the crypt" - ' +
-      'the crypt is the separate Est. 1724 signage prop and has nothing to do with this.',
+    consistency: 'Always "the unmarked grave" for the burial itself, or "the monument" for the marker (Slot 8). ' +
+      'Those are the ONLY two terms. Any older word for this prop is retired - it is the same tombstone prop, and no ' +
+      'character line, log message or document may use one.',
     whatItIs: 'Never established, on purpose. No name, no dates, nobody remembers who is buried there. ' +
       'The audience never finds out and no character ever learns.',
     revealMechanism: 'Slot 8 (the monument bulb) tracks the storm: Stage 1 completely off, then barely visible ' +
@@ -1608,6 +1683,7 @@ const CHARACTER_BIBLE = {
         lenora: 'Old friends, former partners, central conflict. "We\'re close." / "You always say that."',
         skeletons: 'Tolerates them. Occasionally uses Jasper\'s nervousness as evidence the storm is responding.',
       },
+      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: You do not know what is buried in the unmarked grave, and you do not know that it is connected to the Hollow Storm. You may notice, react to, or comment on the monument doing something strange - lights changing, glowing, dimming - but you can NEVER explain why it happens, speculate about a spirit inside it, or connect it to the storm\'s power. Treat it as an unsolved mystery you find unsettling, irritating, or eerie - never one you understand.',
     },
     lenora: {
       name: 'Lenora Thorn', title: 'The Keeper of Secrets',
@@ -1621,6 +1697,7 @@ const CHARACTER_BIBLE = {
       relationships: {
         evelina: '"I know." Said with the patience of 300 years.',
       },
+      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: You do not know what is buried in the unmarked grave, and you do not know that it is connected to the Hollow Storm. You may notice, react to, or comment on the monument doing something strange - lights changing, glowing, dimming - but you can NEVER explain why it happens, speculate about a spirit inside it, or connect it to the storm\'s power. Treat it as an unsolved mystery you find unsettling, irritating, or eerie - never one you understand.',
     },
     jasper: {
       name: 'Jasper Bones', title: 'The Storm Watcher',
@@ -1632,6 +1709,7 @@ const CHARACTER_BIBLE = {
       speechStyle: 'Higher pitch, anxious energy, words slightly rushed. Never full sentences when alarmed.',
       relationships: { edgar: 'Comedy duo. Jasper worries, Edgar teases. Banter: "The storm is angry." / "The storm doesn\'t even know who you are."' },
       arc: 'Gets progressively more nervous as storm escalates. By Overhead his warnings become genuine.',
+      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: You do not know what is buried in the unmarked grave, and you do not know that it is connected to the Hollow Storm. You may notice, react to, or comment on the monument doing something strange - lights changing, glowing, dimming - but you can NEVER explain why it happens, speculate about a spirit inside it, or connect it to the storm\'s power. Treat it as an unsolved mystery you find unsettling, irritating, or eerie - never one you understand.',
     },
     edgar: {
       name: 'Edgar Rattle', title: 'The Graveyard Troublemaker',
@@ -1661,6 +1739,7 @@ const CHARACTER_BIBLE = {
         ],
         grandRitual: 'almost no jokes. One final line after the lightning, then the closing exchange.',
       },
+      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: You do not know what is buried in the unmarked grave, and you do not know that it is connected to the Hollow Storm. You may notice, react to, or comment on the monument doing something strange - lights changing, glowing, dimming - but you can NEVER explain why it happens, speculate about a spirit inside it, or connect it to the storm\'s power. Treat it as an unsolved mystery you find unsettling, irritating, or eerie - never one you understand.',
     },
   },
   spellRules: 'Minor spells affect the cauldron only and happen more frequently. Major spells expand ' +
@@ -1731,8 +1810,8 @@ const CHARACTER_BIBLE = {
     },
   },
   showProgression: {
-    beginning: 'Distant/Getting Closer: storm distant, light thunder. Evelina playful and charming with new visitors. Everyone relatively relaxed. Edgar at maximum indifference. Jasper mildly nervous.',
-    middle: 'Close/Very Close: storm closer, more lightning, more fog. Evelina excited, spell attempts more frequent. Lenora concerned. Jasper increasingly nervous. Edgar starting to pay attention — denies it.',
+    beginning: 'Distant/Building: storm distant, light thunder. Evelina playful and charming with new visitors. Everyone relatively relaxed. Edgar at maximum indifference. Jasper mildly nervous.',
+    middle: 'Active: storm closer, more lightning, more fog. Evelina excited, spell attempts more frequent. Lenora concerned. Jasper increasingly nervous. Edgar starting to pay attention — denies it.',
     end: 'Overhead: heavy lightning, heavy fog. Grand Ritual fires. Maximum intensity across all characters. Final exchange then thunder crash.',
   },
   crowdParticipationRules: [
@@ -1758,7 +1837,7 @@ const CHARACTER_BIBLE = {
   // 7B — every host input is a Warden signal. NEVER echo the raw input; always
   // translate it through a character's perspective.
   translationMatrix: {
-    principle: 'Short cryptic host inputs are treated as Warden signals or telepathic flashes and expanded into ' +
+    principle: 'Short, terse host inputs are treated as Warden signals or telepathic flashes and expanded into ' +
       'character-aware narrative. Claude never outputs the raw input — it always translates it through the ' +
       'character\'s perspective. All host inputs are Warden signals regardless of content.',
     examples: [
@@ -1768,7 +1847,7 @@ const CHARACTER_BIBLE = {
       { input: 'Batman',            type: 'costume identity',     output: '"The Warden speaks of a caped crusader... the storm knows no allegiance."' },
       { input: 'Princess',          type: 'costume identity',     output: 'Evelina: "The Warden has spoken the true lineage of our royal guest."' },
       { input: 'trampling grass',   type: 'crowd control',        output: '"Beware mortals — stepping from the path awakens what sleeps beneath Thornfield."' },
-      { input: 'too close to grave',type: 'crowd control',        output: 'Jasper panics, Evelina warns dramatically — guests step back without the host breaking character.' },
+      { input: 'too close to the unmarked grave',type: 'crowd control',        output: 'Jasper panics, Evelina warns dramatically — guests step back without the host breaking character.' },
       { input: 'rowdy teens',       type: 'crowd energy redirect',output: 'Edgar addresses them directly; Evelina challenges them to participate in a spell.' },
     ],
     // Turns 2-3s Sonnet latency into a magical telepathic connection warming up.
@@ -2004,8 +2083,8 @@ const CHARACTER_BIBLE = {
   showTiming: {
     totalWindow: 'approximately 5.5 hours; Claude tracks elapsed show time and calibrates storm escalation',
     schedule: [
-      '4:30-6:00pm — Distant/Getting Closer, daylight mode, storm barely present, characters playful. Edgar max indifference, Jasper mildly nervous.',
-      '6:00-7:30pm — Close/Very Close, full dark, most active guest period, storm building, characters escalating.',
+      '4:30-6:00pm — Distant/Building, daylight mode, storm barely present, characters playful. Edgar max indifference, Jasper mildly nervous.',
+      '6:00-7:30pm — Active, full dark, most active guest period, storm building, characters escalating.',
       '7:30-9:00pm — building toward Overhead, peak intensity. Evelina most excited, Jasper most terrified, Edgar\'s jokes darker.',
       '9:00-9:30pm — Grand Ritual window, Overhead fires, final exchange, climax.',
       '9:30pm — winds down naturally after Grand Ritual.',
@@ -2126,7 +2205,7 @@ const CHARACTER_BIBLE = {
     moreFrequent: [
       'Active spell firing — burst as the cauldron shifts color so the fog catches the light',
       'Major crowd present — a burst as Evelina turns to greet them',
-      'Very Close stage — the storm is nearly overhead; keep a low bed rolling',
+      'Active stage — the storm is nearly overhead; keep a low bed rolling',
       'Grand Ritual — sustained fog for maximum effect, the longest burst of the cycle',
     ],
     longerGaps: [
@@ -2256,7 +2335,7 @@ const CHARACTER_BIBLE = {
       'Hollow Storm. The characters react as if something genuinely showed up unannounced. This is not an ' +
       'ambient effect; it is an event.',
     constraints: [
-      'Only during Close or Very Close — the storm must be strong enough to attract them.',
+      'Only during the Active stage - the storm must be strong enough to attract them, and the Grand Ritual is off limits.',
       'Maximum TWO per full show night regardless of how many cycles run.',
       'Never during the Grand Ritual or the Calm After the Storm phase.',
       'Never back to back — a full storm cycle must pass between intrusions.',
@@ -2280,7 +2359,7 @@ const CHARACTER_BIBLE = {
     },
     afterward: 'Characters shoo it off and return to normal show flow.',
     api: 'POST /api/intrusion/fire {kind?} — kind is ghostly|demonic, omitted means auto-pick from storm ' +
-      'intensity (Very Close draws the deeper ones). GET /api/intrusion/status reports remaining count and ' +
+      'count - the first is ghostly, the second draws something deeper. GET /api/intrusion/status reports remaining count and ' +
       'why it is or is not currently eligible. The route returns 409 with a reason when it is not.',
   },
 
@@ -2401,7 +2480,7 @@ function castSpellLights(spellKey) {
         // Pre-Overhead build: the MONUMENT climbs to full spectral green-blue
         // cycling — it is the visual countdown to the blast. The monument loop
         // handles the cycling itself once the override is set to the top stage.
-        setMonumentOverride(MONUMENT_STAGES.length - 1);
+        setMonumentOverride(MONUMENT_RITUAL_IDX);
         // At maximum intensity, just before the overhead blast, the spectral
         // laugh fires from the graveyard speakers.
         track(() => {
@@ -2638,15 +2717,15 @@ function firePhantom(eventName) {
 // ─── §28 Ghostly / demonic voice intrusions ───────────────────────────────────
 // Something is drawn in by the power of the Hollow Storm. HARD limit of 2 per
 // show night — this is a rare event, not an ambient effect. Only fires while the
-// storm is strong enough to attract them (Close / Very Close), never during the
+// storm is strong enough to attract them (the Active stage), never during the
 // Grand Ritual or the calm phase, and never twice inside the same cycle.
 const INTRUSION_MAX_PER_NIGHT = 2;
-const INTRUSION_ELIGIBLE_STAGES = [2, 3]; // Close, Very Close
+const INTRUSION_ELIGIBLE_STAGES = [2]; // Active - the strongest stage before the ritual
 const INTRUSION_KEYWORDS = { ghostly: 'demon', demonic: 'demon' };
 
 function intrusionEligible() {
   if (state.intrusions.count >= INTRUSION_MAX_PER_NIGHT) return { ok: false, why: 'nightly limit of 2 reached' };
-  if (!INTRUSION_ELIGIBLE_STAGES.includes(strikeIndex)) return { ok: false, why: 'storm stage must be Close or Very Close' };
+  if (!INTRUSION_ELIGIBLE_STAGES.includes(strikeIndex)) return { ok: false, why: 'storm stage must be Active' };
   if (phantomSuppressed) return { ok: false, why: 'Grand Ritual in progress' };
   if (calmActive) return { ok: false, why: 'calm phase in progress' };
   if (audioLock.held) return { ok: false, why: `audio lock held by ${audioLock.owner}` };
@@ -2658,14 +2737,14 @@ function intrusionEligible() {
 }
 
 // kind: 'ghostly' | 'demonic' | undefined (auto-picks from storm intensity —
-// Very Close is darker, so it draws the deeper ones).
+// the second one of the night draws the deeper ones).
 function fireIntrusion(kind) {
   const check = intrusionEligible();
   if (!check.ok) return { ok: false, error: check.why };
 
   const chosen = (kind === 'ghostly' || kind === 'demonic')
     ? kind
-    : (strikeIndex >= 3 ? 'demonic' : 'ghostly');
+    : (state.intrusions.count === 0 ? 'ghostly' : 'demonic'); // first is ethereal, the second draws something deeper
 
   const file = findSoundFile(INTRUSION_KEYWORDS[chosen]);
   if (!file) return { ok: false, error: 'no matching sound file in HAUNT SOUNDS' };
@@ -2988,6 +3067,7 @@ app.post('/api/allstop', async (req, res) => {
   state.paused = false;
   state.stormActive = false;
   strikeIndex = 0;
+  resetCycleState();
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
   stopFogAuto();
   stopWitch();
@@ -3134,12 +3214,14 @@ app.post('/api/storm/toggle', (req, res) => {
   state.stormActive = !state.stormActive;
   if (state.stormActive) {
     strikeIndex = 0;
+    resetCycleState();
     broadcastLog('Storm mode ON — sequence starting', 'SYSTEM');
     scheduleNextStrike();
   } else {
     if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
     state.stormNextAt = null;
     strikeIndex = 0;
+    resetCycleState();
     broadcastLog('Storm mode OFF', 'SYSTEM');
   }
   broadcastState();
@@ -3304,6 +3386,7 @@ app.post('/api/show/start', async (req, res) => {
   // 5. Begin storm cycle at Distant.
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
   strikeIndex = 0;
+  resetCycleState();
   state.stormActive = true;
   scheduleNextStrike();
   broadcastLog('Show Start 5/6: storm cycle begun at Distant', 'SYSTEM');
@@ -3327,6 +3410,7 @@ app.post('/api/show/stop', (req, res) => {
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
   state.stormNextAt = null;
   strikeIndex = 0;
+  resetCycleState();
   broadcastLog('SHOW ENDED — marked inactive, storm cycle stopped', 'SYSTEM');
   broadcastState();
   res.json({ ok: true, showActive: state.showActive });
@@ -3811,6 +3895,7 @@ app.post('/api/strikedown', async (req, res) => {
   stopEffects();
   state.stormActive = false;
   strikeIndex = 0;
+  resetCycleState();
   if (state.stormTimer) { clearTimeout(state.stormTimer); state.stormTimer = null; }
   state.stormNextAt = null;
   stopFogAuto();
