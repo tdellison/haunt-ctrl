@@ -18,7 +18,7 @@ const wss = new WebSocketServer({ server });
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 let config = {
-  receiverIp:   '192.168.1.161',
+  receiverIp:   '192.168.1.160',
   receiverPort: 60128,
   maxVol: { z1: 60, z2: 48, z3: 44, sub: 52 },
 };
