@@ -2597,10 +2597,10 @@ async function fireWitch(clip, spellKey) {
 
 // ─── VLC Playback ─────────────────────────────────────────────────────────────
 const VLC_PATH    = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
-const STORM_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\storm';
-const AMBIENT_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\graveyard ambient';
-const SKELETON_DIR = 'C:\\Users\\tdell\\OneDrive\\Desktop\\SKELETON';
-const WITCH_DIR   = 'C:\\Users\\tdell\\OneDrive\\Desktop\\WITCH';
+const STORM_DIR   = 'C:\\haunt-ctrl-assets\\storm';
+const AMBIENT_DIR = 'C:\\haunt-ctrl-assets\\graveyard-ambient';
+const SKELETON_DIR = 'C:\\haunt-ctrl-assets\\skeleton';
+const WITCH_DIR   = 'C:\\haunt-ctrl-assets\\witch';
 const HAUNT_SOUNDS_DIR = 'C:\\haunt-ctrl-assets\\ambient-sounds';
 
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
@@ -2668,10 +2668,15 @@ const PHANTOM_MAP = {
 // First file in HAUNT SOUNDS whose name contains the keyword (case-insensitive).
 // Picks RANDOMLY among all matches so numbered variants (evil laugh 1/2/3)
 // rotate instead of always firing the first one.
+// Only real audio counts. The folder can also hold notes, manifests and stray
+// files - those must never be listed as playable or picked as a phantom sound.
+const AUDIO_EXT = /\.(mp3|wav|flac|ogg|m4a|aac|wma)$/i;
+
 function findSoundFile(keyword) {
   try {
     const kw = String(keyword).toLowerCase();
     const matches = fs.readdirSync(HAUNT_SOUNDS_DIR)
+      .filter(f => AUDIO_EXT.test(f))
       .filter(f => f.toLowerCase().includes(kw));
     if (!matches.length) return null;
     return matches[Math.floor(Math.random() * matches.length)];
@@ -3409,7 +3414,7 @@ app.post('/api/show/stop', (req, res) => {
 // ─── Haunt sounds (short overlay FX: owl, crow, wolf, chains…) ────────────────
 app.get('/api/sounds/list', (req, res) => {
   try {
-    const files = fs.readdirSync(HAUNT_SOUNDS_DIR);
+    const files = fs.readdirSync(HAUNT_SOUNDS_DIR).filter(f => AUDIO_EXT.test(f));
     res.json({ ok: true, files });
   } catch (_) {
     res.json({ ok: true, files: [] });
