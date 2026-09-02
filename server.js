@@ -2937,16 +2937,6 @@ const WITCH_MAP = {
   seance:       'WH_Spell 3_Seance_3DFX_H.mp4',
 };
 
-const FX_FILES = {
-  scream: '850479__wavewire__jumpscare_fscream.wav',
-  laugh:  '587951__noahbangs__demon-laugh-1.wav',
-  chains: '798148__kvv-audio__chainhndl_chain-metal-rattle-02_kvv-audio_free.wav',
-  crows:  '813115__qubodup__crow-caw.flac',
-  gallop: '784606__sheilaruiz6666__horse-galloping-and-neighing.mp3',
-  scythe: '165260__ramas26__scythe-sharpening-2.wav',
-  cackle: '831699__thevoicejournals__witch-cackle.wav',
-};
-
 // ─── Scene presets (kept in code — driven by AI conductor later) ──────────────
 const SCENES = {
   kids:    { z1: 44, z2: 20, z3: 16, sub: 36, light: 'orange',  bri: 60,  fog: false },
@@ -3443,14 +3433,6 @@ app.post('/api/fx/play', (req, res) => {
     goveeSetColor(255, 255, 255).then(() => {
       setTimeout(() => goveeSetColor(GOVEE_COLORS.orange.r, GOVEE_COLORS.orange.g, GOVEE_COLORS.orange.b), 250);
     });
-  }
-  if (FX_FILES[fx]) {
-    if (fxProcess) { try { fxProcess.kill(); } catch (_) {} fxProcess = null; }
-    fxProcess = spawn(VLC_PATH, [
-      path.join(AMBIENT_DIR, FX_FILES[fx]), '--intf', 'dummy', '--play-and-exit', '--no-video',
-    ], { detached: true, stdio: 'ignore' });
-    fxProcess.unref();
-    fxProcess.on('exit', () => { fxProcess = null; });
   }
   res.json({ ok: true, fx });
 });
