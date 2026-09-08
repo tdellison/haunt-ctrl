@@ -3505,16 +3505,13 @@ app.post('/api/lightning', async (req, res) => {
   try {
     await goveeSetColor(255, 255, 255);
     await goveeSetBrightness(100);
+    // Same restore path as /api/govee/lightning. This route used to replay a
+    // pre-flash snapshot, which sent every un-repainted light back to the
+    // hardcoded orange and snapped any active spell out of its look.
+    effects.suspended = true;
     setTimeout(async () => {
-      for (const snap of snapshot) {
-        const dev = goveeDevices.find(d => d.id === snap.id);
-        if (!dev) continue;
-        await goveeSend(dev.ip, { cmd: 'colorwc', data: { color: snap.color, colorTemInKelvin: 0 } });
-        await goveeSend(dev.ip, { cmd: 'brightness', data: { value: snap.brightness } });
-        dev.color = snap.color;
-        dev.brightness = snap.brightness;
-      }
-      broadcastGovee();
+      await restoreAfterFlash(snapshot);
+      effects.suspended = false;
     }, 600);
     res.json({ ok: true });
   } catch (e) { res.status(502).json({ error: e.message }); }
