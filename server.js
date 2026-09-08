@@ -1601,6 +1601,17 @@ const CHARACTERS = [
   // future 5th character: add an entry here + a CHARACTER_BIBLE.characters entry + voiceId. No structural changes needed.
 ];
 
+// SINGLE SOURCE OF TRUTH for the unmarked grave guardrail. It appears in all
+// four character prompts AND in CHARACTER_BIBLE.unmarkedGrave. It was previously
+// five separate copies of the same paragraph - revising it meant editing five
+// places, and missing one leaves the conductor reading two contradictory rules.
+// Change it HERE and every consumer follows.
+const GUARDRAIL_UNMARKED_GRAVE = 'GUARDRAIL - THE UNMARKED GRAVE: The unmarked grave does not register to you ' +
+  'as anything significant. You can technically see it exists - a stone marker like any other - but nothing about ' +
+  'it draws your attention, holds your interest, or prompts reflection. If a guest points at it or asks about it ' +
+  'directly, you perceive only an ordinary, forgettable grave - not evasion, not mystery, just nothing. You are ' +
+  'incapable of dwelling on it even if you try.';
+
 const CHARACTER_BIBLE = {
   vlcNote: 'VLC remains REQUIRED for all audio playback — ambient loop, storm clips, witch clips, ' +
     'HAUNT SOUNDS effects. Only projection VLC code was removed.',
@@ -1635,11 +1646,7 @@ const CHARACTER_BIBLE = {
       'bare ember. The light does ALL of the storytelling. Guests who notice it brightening across the night draw ' +
       'their own conclusions - that is the entire effect, and it works precisely because no character ever ' +
       'corroborates it.',
-    GUARDRAIL: 'GUARDRAIL - THE UNMARKED GRAVE: The unmarked grave does not register to you as anything ' +
-      'significant. You can technically see it exists - a stone marker like any other - but nothing about it draws ' +
-      'your attention, holds your interest, or prompts reflection. If a guest points at it or asks about it ' +
-      'directly, you perceive only an ordinary, forgettable grave - not evasion, not mystery, just nothing. You ' +
-      'are incapable of dwelling on it even if you try.',
+    GUARDRAIL: GUARDRAIL_UNMARKED_GRAVE,
     guardrailApplies: 'ALL FOUR characters - Evelina, Lenora, Jasper, Edgar. Included verbatim in every character ' +
       'system prompt as guardrailUnmarkedGrave.',
     inCharacterReactions: 'NONE. This REPLACED an earlier version that let characters notice and react to the ' +
@@ -1703,7 +1710,7 @@ const CHARACTER_BIBLE = {
         lenora: 'Old friends, former partners, central conflict. "We\'re close." / "You always say that."',
         skeletons: 'Tolerates them. Occasionally uses Jasper\'s nervousness as evidence the storm is responding.',
       },
-      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: The unmarked grave does not register to you as anything significant. You can technically see it exists - a stone marker like any other - but nothing about it draws your attention, holds your interest, or prompts reflection. If a guest points at it or asks about it directly, you perceive only an ordinary, forgettable grave - not evasion, not mystery, just nothing. You are incapable of dwelling on it even if you try.',
+      guardrailUnmarkedGrave: GUARDRAIL_UNMARKED_GRAVE,
     },
     lenora: {
       name: 'Lenora Thorn', title: 'The Keeper of Secrets',
@@ -1717,7 +1724,7 @@ const CHARACTER_BIBLE = {
       relationships: {
         evelina: '"I know." Said with the patience of 300 years.',
       },
-      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: The unmarked grave does not register to you as anything significant. You can technically see it exists - a stone marker like any other - but nothing about it draws your attention, holds your interest, or prompts reflection. If a guest points at it or asks about it directly, you perceive only an ordinary, forgettable grave - not evasion, not mystery, just nothing. You are incapable of dwelling on it even if you try.',
+      guardrailUnmarkedGrave: GUARDRAIL_UNMARKED_GRAVE,
     },
     jasper: {
       name: 'Jasper Bones', title: 'The Storm Watcher',
@@ -1739,7 +1746,7 @@ const CHARACTER_BIBLE = {
         'Grand Ritual':     'Genuine panic. Short broken phrases, not sentences. Matches the monument at full intensity. This is the one time his fear is completely sincere and nobody laughs it off.',
         'Calm After Storm': 'De-escalating. Shaky relief, counting that everyone is still there, already dreading the next one.',
       },
-      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: The unmarked grave does not register to you as anything significant. You can technically see it exists - a stone marker like any other - but nothing about it draws your attention, holds your interest, or prompts reflection. If a guest points at it or asks about it directly, you perceive only an ordinary, forgettable grave - not evasion, not mystery, just nothing. You are incapable of dwelling on it even if you try.',
+      guardrailUnmarkedGrave: GUARDRAIL_UNMARKED_GRAVE,
     },
     edgar: {
       name: 'Edgar Rattle', title: 'The Graveyard Troublemaker',
@@ -1779,7 +1786,7 @@ const CHARACTER_BIBLE = {
         ],
         grandRitual: 'almost no jokes. One final line after the lightning, then the closing exchange.',
       },
-      guardrailUnmarkedGrave: 'GUARDRAIL - THE UNMARKED GRAVE: The unmarked grave does not register to you as anything significant. You can technically see it exists - a stone marker like any other - but nothing about it draws your attention, holds your interest, or prompts reflection. If a guest points at it or asks about it directly, you perceive only an ordinary, forgettable grave - not evasion, not mystery, just nothing. You are incapable of dwelling on it even if you try.',
+      guardrailUnmarkedGrave: GUARDRAIL_UNMARKED_GRAVE,
     },
   },
   spellRules: 'Minor spells affect the cauldron only and happen more frequently. Major spells expand ' +
