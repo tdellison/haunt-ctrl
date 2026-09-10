@@ -2866,8 +2866,13 @@ function speakBlackoutLine(line) {
       .find(f => f.toLowerCase().startsWith(line.id) && f.toLowerCase().includes('blackout'));
     if (file) {
       if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
-      soundProcess = spawn(VLC_PATH, [
-        path.join(AUDIO_CACHE_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
+      const full = path.join(AUDIO_CACHE_DIR, file);
+      soundProcess = spawn('powershell', [
+        '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+        `Add-Type -AssemblyName PresentationCore; ` +
+        `$p = New-Object System.Windows.Media.MediaPlayer; ` +
+        `$p.Open([uri]'${full}'); $p.Play(); ` +
+        `Start-Sleep -Milliseconds ${BLACKOUT_LINE_GAP_MS - 200}; $p.Close()`,
       ], { detached: true, stdio: 'ignore' });
       soundProcess.unref();
       soundProcess.on('exit',  () => { soundProcess = null; });

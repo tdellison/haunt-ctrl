@@ -15,12 +15,7 @@ const LINES = [
 async function main() {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) { console.error('ELEVENLABS_API_KEY is not set'); process.exit(1); }
-  if (!fs.existsSync(VOICES_FILE)) { console.error(`Missing ${VOICES_FILE}`); process.exit(1); }
-  const voices = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8'));
-
-  const missing = LINES.filter(l => !voices[l.id]).map(l => l.id);
-  if (missing.length) { console.error(`No voice id for: ${missing.join(', ')}`); process.exit(1); }
-
+  const voices = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^\uFEFF/, ''));
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 
   for (const line of LINES) {
@@ -35,9 +30,6 @@ async function main() {
     fs.writeFileSync(out, Buffer.from(await res.arrayBuffer()));
     console.log(`${path.basename(out)}  (${fs.statSync(out).size} bytes)`);
   }
-
-  console.log('\nDone. Files in cache/audio/:');
-  for (const f of fs.readdirSync(CACHE_DIR).filter(f => f.includes('blackout'))) console.log('  ' + f);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
