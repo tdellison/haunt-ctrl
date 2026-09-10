@@ -1601,6 +1601,18 @@ const CHARACTERS = [
   // future 5th character: add an entry here + a CHARACTER_BIBLE.characters entry + voiceId. No structural changes needed.
 ];
 
+const VOICES_FILE = path.join(__dirname, 'voices.json');
+function loadVoiceIds() {
+  let map = {};
+  try { map = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8')); } catch (_) { return; }
+  let n = 0;
+  for (const c of CHARACTERS) {
+    if (map[c.id]) { c.voiceId = map[c.id]; n++; }
+  }
+  console.log(`[HAUNT] Voice IDs loaded for ${n}/${CHARACTERS.length} characters`);
+}
+loadVoiceIds();
+
 // SINGLE SOURCE OF TRUTH for the unmarked grave guardrail. It appears in all
 // four character prompts AND in CHARACTER_BIBLE.unmarkedGrave. It was previously
 // five separate copies of the same paragraph - revising it meant editing five
