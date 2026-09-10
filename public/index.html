@@ -956,6 +956,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-red btn-sm" onclick="api('/api/govee/power',{on:false})">⬛ ALL OFF</button>
       <button class="btn btn-orange btn-sm" onclick="api('/api/lights/scheme')">🎃 RESET TO SHOW SCHEME</button>
       <button class="btn btn-blue btn-sm" onclick="api('/api/calm')">🌫 CALM PHASE</button>
+      <button class="btn btn-red btn-sm" onclick="fireBlackout()">BLACKOUT STORM (TEST)</button>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
       <span style="font-size:.7em;letter-spacing:2px;text-transform:uppercase;color:var(--dim2)">✨ LIVING EFFECTS</span>
@@ -1383,6 +1384,11 @@ document.addEventListener('pointerdown', (e) => {
 });
 
 // ── API ───────────────────────────────────────────────────────────────────────
+async function fireBlackout() {
+  if (!confirm('Run the BLACKOUT STORM sequence now? (~25s, test mode)')) return;
+  await api('/api/blackout/fire', { force: true });
+}
+
 async function api(url, body) {
   if (DEMO) {
     appendLog(`[DEMO] ${url} ${body ? JSON.stringify(body) : ''}`, 'SYSTEM');
