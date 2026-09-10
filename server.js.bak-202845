@@ -32,6 +32,7 @@ let settings = {
 // Slot roles (one slot per zone — each zone is a tethered pair on ONE controller IP):
 //  1. skeleton — orange/red base, brightens when EITHER skeleton talks
 //  2. witch    — deep purple base (both witches)
+//  3. moon     — cool blue, consistent, white flash on Overhead only
 //  4. storm    — cold blue, tracks storm progression dim → electric
 //  5. cauldron — separate A19 bulb, green base RGB(0,180,0), deep red
 //                RGB(180,0,0) on spell trigger, pulses back to green after 20s
@@ -41,6 +42,7 @@ let goveeDevices = [];
 const GOVEE_IPS = {
   skeletonLeft:  '', skeletonRight: '',
   witchMain:     '', witchSecond:   '',
+  moonLeft:      '', moonRight:     '',
   cauldron:      '', monument:      '',
 };
 const GOVEE_SLOT_IDS = {};
@@ -166,13 +168,15 @@ function slotForDeviceId(id) {
 function spellLookFor(slot, spellYard) {
   const isSkel  = slot === 'skeletonLeft' || slot === 'skeletonRight';
   const isWitch = slot === 'witchMain'    || slot === 'witchSecond';
+  const isMoon  = slot === 'moonLeft'     || slot === 'moonRight';
   if (spellYard === 'memory') {
     if (isSkel)  return { color: { r:255, g: 80, b:  0 }, bri:  8 }; // near-out embers
     if (isWitch) return { color: { r:150, g:  0, b: 30 }, bri: 28 }; // deep crimson
-    return null; // Memory leaves the rest of the yard alone
+    return null; // Memory leaves the moon alone
   }
   if (spellYard === 'unraveling') {
     if (isWitch) return { color: { r:  0, g:180, b: 60 }, bri: 30 }; // unsettling green
+    if (isMoon)  return { color: { r: 60, g:120, b:255 }, bri: 28 }; // dimmed
     return null; // skeleton keeps fire colors, just faster
   }
   if (spellYard === 'grandritual') {
@@ -277,6 +281,8 @@ const SLOT_BASES = {
   skeletonRight: { color: { r:255, g: 80, b:  0 }, bri: 25 },
   witchMain:     { color: { r:100, g:  0, b:180 }, bri: 30 }, // deep purple
   witchSecond:   { color: { r:100, g:  0, b:180 }, bri: 30 },
+  moonLeft:      { color: { r: 60, g:120, b:255 }, bri: 40 }, // cool steady blue
+  moonRight:     { color: { r: 60, g:120, b:255 }, bri: 40 },
   cauldron:      { color: { r:  0, g:180, b:  0 }, bri: 60 }, // green boil
   // Monument starts the cycle completely dark — stage 1 is "off", not "dim".
   monument:      { color: { r:  0, g:140, b:150 }, bri:  0 },
@@ -287,6 +293,7 @@ const SLOT_BASES = {
 const SLOT_GROUPS = {
   skeleton: ['skeletonLeft', 'skeletonRight'],
   witch:    ['witchMain', 'witchSecond'],
+  moon:     ['moonLeft', 'moonRight'],
 };
 
 // Return Govee device IDs for named slots. Accepts individual slot names and
@@ -323,7 +330,7 @@ async function applyShowScheme() {
 //  - skeleton: flickering fire illusion (single loop, tethered pair)
 //  - witch: slow purple breathing pulse
 //  - cauldron: slow rolling boil (green) / faster red pulse during a spell
-// slots are set once by applyShowScheme; the monument is driven
+// moonlights are steady (set once by applyShowScheme); storm slots are driven
 // by flashLights. Loops only touch slots with assigned IDs and skip their
 // goveeSend while effects.suspended (e.g. during the Overhead white blast),
 // but keep rescheduling so they resume seamlessly.
@@ -694,8 +701,6 @@ let state = {
   intrusions: { count: 0, lastAt: null, lastKind: null, lastCycle: null },
   // §29 — internet health / graceful degradation.
   net: { online: true, degraded: false, lastOkAt: null, consecutiveFails: 0 },
-  // Blackout Storm — once per SEASON (season lock lives in seasonBeatsUsed).
-  blackout: { running: false, firedAt: null, step: null },
 };
 
 // ─── Sound presets ────────────────────────────────────────────────────────────
@@ -768,11 +773,6 @@ async function testConnection() {
 }
 
 // ─── State persistence ────────────────────────────────────────────────────────
-// Season-level once-only beats. Declared HERE, above saveShowState/loadShowState,
-// because loadShowState() runs at startup and touches it - declaring it further
-// down left it in the temporal dead zone and silently broke the entire restore.
-const seasonBeatsUsed = {}; // beatType -> true once used for the season
-
 const STATE_FILE = path.join(__dirname, 'show-state.json');
 function saveShowState() {
   try {
@@ -782,9 +782,6 @@ function saveShowState() {
       kidMode: state.kidMode,
       maxVol: config.maxVol,
       soundPreset,
-      // Season-level once-only beats MUST survive restarts and nights - that is
-      // what makes them once-per-SEASON rather than once-per-run.
-      seasonBeatsUsed,
     }), 'utf8');
   } catch(_) {}
 }
@@ -796,14 +793,13 @@ function loadShowState() {
     if (saved.kidMode !== undefined) state.kidMode = saved.kidMode;
     if (saved.maxVol) config.maxVol = { ...config.maxVol, ...saved.maxVol };
     if (saved.soundPreset) soundPreset = saved.soundPreset;
-    if (saved.seasonBeatsUsed) Object.assign(seasonBeatsUsed, saved.seasonBeatsUsed);
     console.log('[HAUNT] Show state restored from disk');
   } catch(_) {}
 }
 
 // ─── Govee slot IP persistence ────────────────────────────────────────────────
 const SLOTS_FILE = path.join(__dirname, 'govee-slots.json');
-const SLOT_LABELS = { skeleton:'Skeleton', witch:'Witches', cauldron:'Cauldron', monument:'Monument' };
+const SLOT_LABELS = { skeleton:'Skeleton', witch:'Witches', moon:'Moonlight', storm:'Storm', cauldron:'Cauldron' };
 function saveSlotIPs() {
   try {
     fs.writeFileSync(SLOTS_FILE, JSON.stringify(GOVEE_IPS), 'utf8');
@@ -816,6 +812,8 @@ const DEFAULT_SLOT_IPS = {
   witchMain:    '192.168.1.209',
   // skeletonRight: '',
   // witchSecond:   '',
+  // moonLeft:      '',
+  // moonRight:     '',
   // cauldron:      '',
   // monument:      '',
 };
@@ -1279,7 +1277,6 @@ function stateSnapshot() {
     micGate:          micGateSnapshot(),
     intrusions:       { count: state.intrusions.count, max: INTRUSION_MAX_PER_NIGHT, lastKind: state.intrusions.lastKind },
     net:              { online: state.net.online, degraded: state.net.degraded, lastOkAt: state.net.lastOkAt },
-    blackout:         { running: state.blackout.running, step: state.blackout.step, usedThisSeason: !!seasonBeatsUsed.blackoutStorm },
   };
 }
 
@@ -1452,6 +1449,7 @@ const SPECIAL_BEATS = ["blackoutStorm", "lenoraAlmostTruth", "nearSuccessCycle",
 const SEASON_ONCE_BEATS = ["blackoutStorm", "lenoraAlmostTruth"];
 
 const cycleState = { specialBeatFired: false, cycleNumber: 1 };
+const seasonBeatsUsed = {}; // beatType -> true once used for the season
 
 function resetCycleState() {
   cycleState.specialBeatFired = false;
@@ -1468,7 +1466,7 @@ function tryRollSpecialBeat(beatType, rollFn) {
   const fired = typeof rollFn === "function" ? !!rollFn() : false;
   if (fired) {
     cycleState.specialBeatFired = true;
-    if (SEASON_ONCE_BEATS.includes(beatType)) { seasonBeatsUsed[beatType] = true; saveShowState(); }
+    if (SEASON_ONCE_BEATS.includes(beatType)) seasonBeatsUsed[beatType] = true;
     broadcastLog(`Special beat: ${beatType} (cycle ${cycleState.cycleNumber})`, "SYSTEM");
   }
   return fired;
@@ -1833,7 +1831,7 @@ const CHARACTER_BIBLE = {
       tier: 'major',
       cauldron: 'Cycles green to purple rapidly',
       yardLighting: 'Witch lights shift from purple to a deep unsettling green pulse; skeleton fire ' +
-        'flickers faster and more erratic — storm energy reaching the far end of the yard; ' +
+        'flickers faster and more erratic — storm energy reaching the far end of the yard; moonlight dims ' +
         'slightly — something pulling energy from it; all returns to base after 20 seconds.',
       evelinaAsks: '"Reach toward it"',
       reactions: {
@@ -1847,7 +1845,7 @@ const CHARACTER_BIBLE = {
       cauldron: 'Deep crimson',
       yardLighting: 'Witch lights shift to deep crimson matching the cauldron — two witches connected by ' +
         'the same color; skeleton lights drop to very dim, almost out — memory pulling energy from ' +
-        'everything; this spell reaches inward not outward; slow fade back to ' +
+        'everything; moonlight stays steady — this spell reaches inward not outward; slow fade back to ' +
         'base over 30 seconds — not a snap back, something heavy just happened.',
       evelinaAsks: '"Remember something lost"',
       reactions: {
@@ -2534,7 +2532,11 @@ function castSpellLights(spellKey) {
     if (spell.tier === 'major' || spell.tier === 'ritual') {
       effects.spellYard = spellKey;
       broadcastLog(`${spell.name}: full-yard lighting takeover`, 'LIGHT');
-      if (spellKey === 'grandritual') {
+      if (spellKey === 'unraveling') {
+        // Moonlight dims slightly — something pulling energy from it (one-time)
+        const moonIds = getSlotIds('moon');
+        if (moonIds.length) goveeSetBrightness(28, moonIds, 1).catch(() => {});
+      } else if (spellKey === 'grandritual') {
         // Pre-Overhead build: the MONUMENT climbs to full spectral green-blue
         // cycling — it is the visual countdown to the blast. The monument loop
         // handles the cycling itself once the override is set to the top stage.
@@ -2569,9 +2571,14 @@ function castSpellLights(spellKey) {
     }
 
     if (spellKey === 'unraveling') {
-      // Snap back: release the yard. Skeleton and witch loops return to base on
-      // their next tick.
+      // Snap back: release the yard and restore the moon to base
       effects.spellYard = null;
+      const moonIds = getSlotIds('moon');
+      if (moonIds.length) {
+        const m = SLOT_BASES.moonLeft;
+        goveeSetColor(m.color.r, m.color.g, m.color.b, moonIds, 1).catch(() => {});
+        goveeSetBrightness(m.bri, moonIds, 1).catch(() => {});
+      }
     } else if (spellKey === 'memory') {
       // SLOW fade back over ~3 staged steps — not a snap. Something heavy just
       // happened; the yard exhales rather than flipping a switch.
@@ -2822,174 +2829,6 @@ function fireIntrusion(kind) {
   broadcast({ type: 'intrusion', data: { kind: chosen, file, count: state.intrusions.count } });
   broadcastState();
   return { ok: true, kind: chosen, file, count: state.intrusions.count };
-}
-
-// ─── The Blackout Storm ───────────────────────────────────────────────────────
-// ONCE PER SEASON. The storm doesn't build — it takes the yard. Everything
-// stops at once, the monument is the last light to die and the first to come
-// back, and the four of them speak in the dark before the blast.
-//
-// Season lock: seasonBeatsUsed.blackoutStorm (persisted to show-state.json).
-// Fire it through tryRollSpecialBeat('blackoutStorm', ...) once a Director
-// exists; until then it is manual-only from the Test tab.
-const BLACKOUT_LAUGH_KW = 'spectral laugh';   // dedicated file — NOT the evil laugh stingers
-const BLACKOUT_LINES = [
-  { id: 'jasper',  zone: 'z1', side: 'left',  text: '...hello?' },
-  { id: 'edgar',   zone: 'z1', side: 'right', text: 'this is new' },
-  { id: 'lenora',  zone: 'z3', side: 'right', text: 'nobody did' },
-  { id: 'evelina', zone: 'z3', side: 'left',  text: 'it’s getting stronger' },
-];
-const BLACKOUT_LINE_GAP_MS   = 3200;  // pause between lines — the dark does the work
-const BLACKOUT_SILENCE_MS    = 3500;  // dead air after the last line, before the blast
-const BLACKOUT_MONUMENT_MS   = 1400;  // monument holds its ember after everything else dies
-const BLACKOUT_BLAST_MS      = 900;
-
-// The moon/ambiance lights are Bluetooth units on a manual smart plug. There is
-// no control path from this server yet (the plug's IP/API is not wired up), so
-// this is a single seam to fill in rather than a call scattered through the
-// sequence. Until then it logs the intent so the sequence still reads correctly
-// on the show log and the host can kill the plug by hand if they want to.
-function setAmbiancePower(on) {
-  // TODO: wire to the ambiance smart plug once its control path is decided.
-  broadcastLog(`Ambiance plug: ${on ? 'ON' : 'OFF'} (no control path yet — manual)`, 'LIGHT');
-  return false;
-}
-
-// No TTS exists yet (see /api/witch/speak). If a cached clip for this beat has
-// been rendered into cache/audio/ it plays; otherwise the line is broadcast as
-// a subtitle on the show log so the sequence can be verified end to end.
-function speakBlackoutLine(line) {
-  try {
-    ensureAudioCacheDir();
-    const file = fs.readdirSync(AUDIO_CACHE_DIR)
-      .filter(f => AUDIO_EXT.test(f))
-      .find(f => f.toLowerCase().startsWith(line.id) && f.toLowerCase().includes('blackout'));
-    if (file) {
-      if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
-      soundProcess = spawn(VLC_PATH, [
-        path.join(AUDIO_CACHE_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
-      ], { detached: true, stdio: 'ignore' });
-      soundProcess.unref();
-      soundProcess.on('exit',  () => { soundProcess = null; });
-      soundProcess.on('error', () => { soundProcess = null; });
-      muteMics(BLACKOUT_LINE_GAP_MS, 'blackout line');
-      broadcastLog(`Blackout ${line.id}: ${file}`, 'AUDIO');
-      return true;
-    }
-  } catch (_) {}
-  broadcastLog(`Blackout ${line.id} (no audio): "${line.text}"`, 'AUDIO');
-  return false;
-}
-
-function blackoutEligible(force) {
-  if (state.blackout.running) return { ok: false, why: 'blackout storm already running' };
-  if (!force && seasonBeatsUsed.blackoutStorm) return { ok: false, why: 'already used this season' };
-  if (!force && phantomSuppressed) return { ok: false, why: 'Grand Ritual in progress' };
-  if (!force && calmActive) return { ok: false, why: 'calm phase in progress' };
-  return { ok: true };
-}
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// force:true skips the season lock and the stage guards — Test tab only.
-async function blackoutStorm(force = false) {
-  const check = blackoutEligible(force);
-  if (!check.ok) return { ok: false, error: check.why };
-
-  const allSlots  = Object.keys(SLOT_BASES);
-  const otherIds  = getSlotIds(...allSlots.filter(s => s !== 'monument'));
-  const monIds    = getSlotIds('monument');
-  const allIds    = getSlotIds(...allSlots);
-
-  state.blackout.running = true;
-  state.blackout.firedAt = Date.now();
-  if (!force) { seasonBeatsUsed.blackoutStorm = true; saveShowState(); }
-  acquireAudioLock('blackout', 'grand_ritual');
-  phantomSuppressed = true;          // nothing ambient speaks over this
-  effects.suspended = true;          // loops keep ticking but stay silent
-  const wasAmbient = ambientSystem.active;
-  const step = s => { state.blackout.step = s; broadcastState(); };
-
-  try {
-    // 1 — abrupt cutout. Not a fade. Every sound in the yard stops at once.
-    step('cutout');
-    broadcastLog('BLACKOUT STORM — everything cuts out', 'SYSTEM');
-    if (wasAmbient) stopAmbientSystem();
-    for (const p of [stormProcess, soundProcess, skeletonProcess, witchProcess]) {
-      if (p) { try { p.kill(); } catch (_) {} }
-    }
-    setMonumentBlackout(true);       // monument holds a bare ember
-    if (otherIds.length) await goveeSetBrightness(0, otherIds, 0).catch(() => {});
-
-    // 2 — the monument is the LAST light to go dark.
-    await sleep(BLACKOUT_MONUMENT_MS);
-    step('dark');
-    setMonumentBlackout(false);
-    setMonumentOverride(0);          // stage 0 = off
-    if (monIds.length) await goveeSetBrightness(0, monIds, 0).catch(() => {});
-
-    // 3 — the laugh. Its own file; the evil-laugh stingers are NOT a substitute.
-    await sleep(600);
-    step('laugh');
-    const laugh = findSoundFile(BLACKOUT_LAUGH_KW);
-    if (laugh) playHauntSound(laugh);
-    else broadcastLog(`Blackout: no "${BLACKOUT_LAUGH_KW}" file in HAUNT SOUNDS — laugh skipped`, 'AUDIO');
-
-    // 4 — ambiance plug off. The yard is genuinely dark now.
-    setAmbiancePower(false);
-
-    // 5 — four lines, fixed order, pauses between.
-    await sleep(2600);
-    step('lines');
-    for (const line of BLACKOUT_LINES) {
-      speakBlackoutLine(line);
-      broadcast({ type: 'blackout_line', data: line });
-      audioLock.since = Date.now();  // this beat outruns the 45s lock watchdog
-      await sleep(BLACKOUT_LINE_GAP_MS);
-    }
-
-    // 6 — dead air.
-    step('silence');
-    await sleep(BLACKOUT_SILENCE_MS);
-
-    // 7 — the blast. Every slot, full white, together.
-    step('blast');
-    audioLock.since = Date.now();
-    playStormFile(OVERHEAD_FILE);
-    const blastIds = allIds.length ? allIds : undefined;
-    if (allIds.length || goveeDevices.length) {
-      await goveeSetColor(255, 255, 255, blastIds, 0).catch(() => {});
-      await goveeSetBrightness(100, blastIds, 0).catch(() => {});
-    }
-    await sleep(BLACKOUT_BLAST_MS);
-
-    // 8 — monument first back, then the rest of the yard.
-    step('return');
-    setMonumentOverride(null);
-    setMonumentBlackout(true);       // ember returns ahead of everything else
-    if (monIds.length) {
-      await goveeSetColor(0, 140, 150, monIds, 0).catch(() => {});
-      await goveeSetBrightness(6, monIds, 0).catch(() => {});
-    }
-    await sleep(1200);
-    setMonumentBlackout(false);
-    setAmbiancePower(true);
-    effects.suspended = false;
-    await applyShowScheme().catch(() => {});
-    if (wasAmbient) await startAmbientSystem().catch(() => {});
-    broadcastLog('Blackout storm complete — yard restored', 'SYSTEM');
-    return { ok: true, forced: !!force };
-  } finally {
-    // Never strand the yard: whatever failed above, the show comes back.
-    state.blackout.running = false;
-    state.blackout.step = null;
-    effects.suspended = false;
-    effects.monumentOverride = null;
-    effects.monumentBlackout = false;
-    phantomSuppressed = false;
-    releaseAudioLock('blackout');
-    broadcastState();
-  }
 }
 
 function playStormClip(overhead) {
@@ -4047,30 +3886,6 @@ app.get('/api/intrusion/status', (req, res) => {
     eligible: check.ok,
     reason: check.ok ? null : check.why,
     eligibleStages: INTRUSION_ELIGIBLE_STAGES.map(i => STRIKE_SEQUENCE[i].name),
-  });
-});
-
-// ─── Blackout Storm ───────────────────────────────────────────────────────────
-// { force: true } bypasses the once-per-season lock for Test tab verification.
-app.post('/api/blackout/fire', async (req, res) => {
-  const force = !!(req.body && req.body.force);
-  const result = await blackoutStorm(force);
-  if (!result.ok) return res.status(409).json(result);
-  res.json(result);
-});
-
-app.get('/api/blackout/status', (req, res) => {
-  const check = blackoutEligible(false);
-  res.json({
-    ok: true,
-    running: state.blackout.running,
-    step: state.blackout.step,
-    firedAt: state.blackout.firedAt,
-    usedThisSeason: !!seasonBeatsUsed.blackoutStorm,
-    eligible: check.ok,
-    reason: check.ok ? null : check.why,
-    laughFile: findSoundFile(BLACKOUT_LAUGH_KW),
-    lines: BLACKOUT_LINES,
   });
 });
 

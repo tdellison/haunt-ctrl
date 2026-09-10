@@ -3,3 +3,36 @@
 [2026-07-25T01:20:44.297Z] [SYSTEM] Weather set manually: 40F / 20mph (fog factor 1.10)
 [2026-07-25T01:20:44.308Z] [LIGHT] Calm after the storm: fading to mist
 [2026-09-10T01:17:33.378Z] [SYSTEM] Receiver reconnected
+[2026-09-10T02:15:23.996Z] [LIGHT] Storm stage test: 🌩 Active (lights only)
+[2026-09-10T02:15:23.997Z] [LIGHT] Storm stage: no monument slot assigned — assign it in Test → System
+[2026-09-10T02:16:35.291Z] [SYSTEM] Manual storm strike
+[2026-09-10T02:16:35.292Z] [AUDIO] Storm 1/5 — 🌧 Distant
+[2026-09-10T02:16:35.293Z] [AUDIO] Mics muted 7s — storm clip
+[2026-09-10T02:16:35.293Z] [AUDIO] Storm clip: freesound_community-lightning-storm-6077.mp3
+[2026-09-10T02:16:37.769Z] [LIGHT] Storm: lightning flash [stage 0]
+[2026-09-10T02:16:37.769Z] [LIGHT] Storm stage: no monument slot assigned — assign it in Test → System
+[2026-09-10T02:16:47.145Z] [SYSTEM] Manual storm strike
+[2026-09-10T02:16:47.146Z] [AUDIO] Storm 2/5 — ⛈ Building
+[2026-09-10T02:16:47.147Z] [AUDIO] Mics muted 7s — storm clip
+[2026-09-10T02:16:47.148Z] [AUDIO] Storm clip: soundsforyou-natural-thunder-113219.mp3
+[2026-09-10T02:16:49.157Z] [LIGHT] Storm: lightning flash [stage 1]
+[2026-09-10T02:16:49.158Z] [LIGHT] Storm stage: no monument slot assigned — assign it in Test → System
+[2026-09-10T02:16:58.184Z] [SYSTEM] Manual storm strike
+[2026-09-10T02:16:58.185Z] [AUDIO] Storm 3/5 — 🌩 Active
+[2026-09-10T02:16:58.185Z] [AUDIO] Mics muted 7s — storm clip
+[2026-09-10T02:16:58.186Z] [AUDIO] Storm clip: bijan6207-thunderstorm-409071.mp3
+[2026-09-10T02:16:58.222Z] [AUDIO] Phantom: storm_stage_2 → wolf howl.mp3
+[2026-09-10T02:17:00.180Z] [LIGHT] Storm: lightning flash [stage 2]
+[2026-09-10T02:17:00.181Z] [LIGHT] Storm stage: no monument slot assigned — assign it in Test → System
+[2026-09-10T02:17:04.852Z] [SYSTEM] Manual storm strike
+[2026-09-10T02:17:04.853Z] [AUDIO] Storm 4/5 — 💥 Grand Ritual
+[2026-09-10T02:17:04.854Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-10T02:17:04.855Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-10T02:17:05.328Z] [FOG] Fog ON
+[2026-09-10T02:17:05.902Z] [AUDIO] Phantom: storm_stage_0 → crow caw.mp3
+[2026-09-10T02:17:06.234Z] [AUDIO] Phantom: storm_stage_2 → gate creak.mp3
+[2026-09-10T02:17:06.390Z] [LIGHT] Storm: lightning flash [stage 3]
+[2026-09-10T02:17:07.431Z] [LIGHT] Lights: show scheme applied
+[2026-09-10T02:17:07.432Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-10T02:17:10.242Z] [FOG] Fog OFF
+[2026-09-10T02:19:12.639Z] [LIGHT] Living effects OFF
