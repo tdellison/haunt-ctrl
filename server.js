@@ -2839,7 +2839,7 @@ const BLACKOUT_LINES = [
   { id: 'lenora',  zone: 'z3', side: 'right', text: 'nobody did' },
   { id: 'evelina', zone: 'z3', side: 'left',  text: 'it’s getting stronger' },
 ];
-const BLACKOUT_LINE_GAP_MS   = 3200;  // pause between lines — the dark does the work
+const BLACKOUT_LINE_GAP_MS   = 5000;  // pause between lines — the dark does the work
 const BLACKOUT_SILENCE_MS    = 3500;  // dead air after the last line, before the blast
 const BLACKOUT_MONUMENT_MS   = 1400;  // monument holds its ember after everything else dies
 const BLACKOUT_BLAST_MS      = 900;
