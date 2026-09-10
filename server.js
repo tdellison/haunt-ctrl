@@ -1604,7 +1604,8 @@ const CHARACTERS = [
 const VOICES_FILE = path.join(__dirname, 'voices.json');
 function loadVoiceIds() {
   let map = {};
-  try { map = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8')); } catch (_) { return; }
+  try { map = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^\uFEFF/, '')); }
+  catch (e) { console.log(`[HAUNT] voices.json not loaded: ${e.message}`); return; }
   let n = 0;
   for (const c of CHARACTERS) {
     if (map[c.id]) { c.voiceId = map[c.id]; n++; }
