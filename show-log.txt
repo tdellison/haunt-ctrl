@@ -111,3 +111,29 @@
 [2026-09-10T02:40:04.042Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
 [2026-09-10T02:40:04.043Z] [SYSTEM] Blackout storm complete — yard restored
 [2026-09-10T02:40:04.044Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T01:02:47.465Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T01:02:47.466Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T01:02:47.468Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:02:48.889Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:02:48.890Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T01:02:49.496Z] [AUDIO] Blackout: no "spectral laugh" file in HAUNT SOUNDS — laugh skipped
+[2026-09-11T01:02:49.497Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T01:02:52.167Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:02:52.168Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T01:02:57.203Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:02:57.205Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T01:03:02.248Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:03:02.250Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T01:03:07.293Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:03:07.295Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T01:03:15.812Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T01:03:15.814Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T01:03:16.852Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T01:03:16.853Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:03:18.067Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:03:18.069Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T01:03:18.458Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T01:03:18.460Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T01:03:18.461Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T01:03:18.462Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T01:03:27.767Z] [LIGHT] Living effects OFF
