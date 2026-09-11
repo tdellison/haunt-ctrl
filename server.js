@@ -2649,7 +2649,50 @@ async function fireWitch(clip, spellKey) {
 }
 
 // ─── VLC Playback ─────────────────────────────────────────────────────────────
-const VLC_PATH    = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';
+// ffplay, not VLC. VLC's dummy interface spends up to a second opening the
+// audio device, which is the entire length of a one-word character line - every
+// Blackout line came out as a half-second blip while storm clips (many seconds
+// long) were fine. ffplay starts producing sound immediately.
+//
+// PLAYER.kind selects the binary and its flags:
+//   'ffplay' (default) - fast one-shots, follows the WINDOWS DEFAULT DEVICE.
+//                        ffplay has no device-select option at all.
+//   'mpv'              - same speed, and the only one of the two that can pick
+//                        an output device (AUDIO_DEVICES below).
+// Today the Onkyo does the zone splitting and the Dell has a single output, so
+// ffplay is the right default and AUDIO_DEVICES stays empty.
+const FFPLAY_PATH = 'C:\\ffmpeg\\ffmpeg-2026-09-10-git-fd7c73d01e-full_build\\bin\\ffplay.exe';
+const MPV_PATH    = 'C:\\mpv\\mpv.exe';
+const VLC_PATH    = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';  // kept for reference/fallback
+
+const PLAYER = { kind: 'ffplay' };
+
+// zone -> output device name, ONLY honoured when PLAYER.kind === 'mpv'.
+// Populate from `mpv --audio-device=help` on the Dell if separate devices ever
+// replace the receiver's zone routing. Empty = use the default device.
+const AUDIO_DEVICES = { z1: null, z2: null, z3: null };
+
+function playerBin() {
+  return PLAYER.kind === 'mpv' ? MPV_PATH : FFPLAY_PATH;
+}
+
+// One place that knows each player's flags, so call sites just say what they
+// want rather than repeating argument lists that drift apart.
+function playerArgs(file, { loop = false, zone = null } = {}) {
+  if (PLAYER.kind === 'mpv') {
+    const args = ['--no-video', '--really-quiet', `--loop-file=${loop ? 'inf' : 'no'}`];
+    const dev = zone && AUDIO_DEVICES[zone];
+    if (dev) args.push(`--audio-device=${dev}`);
+    args.push(file);
+    return args;
+  }
+  // ffplay: -nodisp so no window, -autoexit so one-shots end on their own.
+  const args = ['-nodisp', '-autoexit', '-loglevel', 'error'];
+  if (loop) args.push('-loop', '0');
+  args.push(file);
+  return args;
+}
+
 const STORM_DIR   = 'C:\\haunt-ctrl-assets\\storm';
 const AMBIENT_DIR = 'C:\\haunt-ctrl-assets\\graveyard-ambient';
 const SKELETON_DIR = 'C:\\haunt-ctrl-assets\\skeleton';
@@ -2741,9 +2784,8 @@ function playHauntSound(filename) {
   if (!filename) return false;
   if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   try {
-    soundProcess = spawn(VLC_PATH, [
-      path.join(HAUNT_SOUNDS_DIR, filename), '--intf', 'dummy', '--play-and-exit', '--no-video',
-    ], { detached: true, stdio: 'ignore' });
+    soundProcess = spawn(playerBin(), playerArgs(path.join(HAUNT_SOUNDS_DIR, filename), { zone: 'z2' }),
+      { detached: true, stdio: 'ignore' });
     soundProcess.unref();
     soundProcess.on('exit', () => { soundProcess = null; });
     soundProcess.on('error', () => { soundProcess = null; });
@@ -2865,15 +2907,11 @@ function speakBlackoutLine(line) {
       .filter(f => AUDIO_EXT.test(f))
       .find(f => f.toLowerCase().startsWith(line.id) && f.toLowerCase().includes('blackout'));
     if (file) {
-      if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
-      const full = path.join(AUDIO_CACHE_DIR, file);
-      soundProcess = spawn('powershell', [
-        '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
-        `Add-Type -AssemblyName PresentationCore; ` +
-        `$p = New-Object System.Windows.Media.MediaPlayer; ` +
-        `$p.Open([uri]'${full}'); $p.Play(); ` +
-        `Start-Sleep -Milliseconds ${BLACKOUT_LINE_GAP_MS - 200}; $p.Close()`,
-      ], { detached: true, stdio: 'ignore' });
+      // Not killing the previous line: each is ~1s with a 5s gap, so they never
+      // overlap, and killing was what clipped them back when VLC's slow start
+      // meant a line was still warming up when the next one arrived.
+      soundProcess = spawn(playerBin(), playerArgs(path.join(AUDIO_CACHE_DIR, file), { zone: line.zone }),
+        { detached: true, stdio: 'ignore' });
       soundProcess.unref();
       soundProcess.on('exit',  () => { soundProcess = null; });
       soundProcess.on('error', () => { soundProcess = null; });
@@ -3016,9 +3054,8 @@ function playStormFile(file) {
     isOverhead ? 'overhead strike' : 'storm clip'
   );
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
-  stormProcess = spawn(VLC_PATH, [
-    path.join(STORM_DIR, file), '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
-  ], { detached: true, stdio: ['ignore','ignore','pipe'] });
+  stormProcess = spawn(playerBin(), playerArgs(path.join(STORM_DIR, file)),
+    { detached: true, stdio: ['ignore','ignore','pipe'] });
   stormProcess.unref();
   stormProcess.stderr?.on('data', d => console.error('[VLC-STORM]', d.toString().trim()));
   stormProcess.on('error', e => console.error('[VLC-STORM ERROR]', e.message));
@@ -3039,10 +3076,8 @@ function startAmbientLoop() {
   if (ambientProcess) return;
   ambientShouldRun = true;
   broadcastLog('Ambient loop started', 'AUDIO');
-  ambientProcess = spawn(VLC_PATH, [
-    path.join(AMBIENT_DIR, AMBIENT_FILE),
-    '--intf', 'dummy', '--loop', '--no-video',
-  ], { stdio: 'ignore' });
+  ambientProcess = spawn(playerBin(), playerArgs(path.join(AMBIENT_DIR, AMBIENT_FILE), { loop: true }),
+    { stdio: 'ignore' });
   ambientProcess.on('exit', (code) => {
     ambientProcess = null;
     broadcastState();
@@ -3095,10 +3130,8 @@ function playWitchClip(clip) {
   const key  = WITCH_MAP[clip] ? clip : keys[Math.floor(Math.random() * keys.length)];
   if (witchProcess) { try { witchProcess.kill(); } catch (_) {} witchProcess = null; }
   broadcastLog(`Witch clip: ${key}`, 'WITCH');
-  witchProcess = spawn(VLC_PATH, [
-    path.join(WITCH_DIR, WITCH_MAP[key]),
-    '--intf', 'dummy', '--play-and-exit', '--no-video',
-  ], { detached: true, stdio: 'ignore' });
+  witchProcess = spawn(playerBin(), playerArgs(path.join(WITCH_DIR, WITCH_MAP[key]), { zone: 'z3' }),
+    { detached: true, stdio: 'ignore' });
   witchProcess.unref();
   witchProcess.on('exit', () => { witchProcess = null; });
 }
@@ -3125,10 +3158,8 @@ function fireWitchSide(side) {
   if (!filename) return false;
   if (witchSideProcess) { try { witchSideProcess.kill(); } catch (_) {} witchSideProcess = null; }
   broadcastLog(`Witch ${side === 'left' ? 'MAIN (left)' : '2 (right)'} triggered`, 'WITCH');
-  witchSideProcess = spawn(VLC_PATH, [
-    path.join(WITCH_DIR, filename),
-    '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
-  ], { detached: true, stdio: 'ignore' });
+  witchSideProcess = spawn(playerBin(), playerArgs(path.join(WITCH_DIR, filename), { zone: 'z3' }),
+    { detached: true, stdio: 'ignore' });
   witchSideProcess.unref();
   witchSideProcess.on('exit', () => { witchSideProcess = null; });
   return true;
@@ -3139,10 +3170,8 @@ function fireSkeleton(side) {
   if (!filename) return false;
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
   broadcastLog(`Skeleton ${side} triggered`, 'AUDIO');
-  skeletonProcess = spawn(VLC_PATH, [
-    path.join(SKELETON_DIR, filename),
-    '--intf', 'dummy', '--play-and-exit', '--no-loop', '--no-repeat', '--no-video',
-  ], { detached: true, stdio: 'ignore' });
+  skeletonProcess = spawn(playerBin(), playerArgs(path.join(SKELETON_DIR, filename), { zone: 'z1' }),
+    { detached: true, stdio: 'ignore' });
   skeletonProcess.unref();
   skeletonProcess.on('exit', () => { skeletonProcess = null; });
 
@@ -4218,6 +4247,14 @@ setInterval(async () => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = 3000;
 server.listen(PORT, () => {
+  // A missing player binary fails silently - spawn errors are swallowed by the
+  // per-process error handlers and the yard just goes quiet. Say so at startup
+  // instead of letting it be discovered mid-show.
+  if (fs.existsSync(playerBin())) {
+    console.log(`[HAUNT] Audio player: ${PLAYER.kind} (${playerBin()})`);
+  } else {
+    console.log(`[HAUNT] *** AUDIO PLAYER MISSING: ${playerBin()} - NOTHING WILL PLAY ***`);
+  }
   console.log(`[HAUNT] HAUNT CTRL v3 on http://localhost:${PORT}`);
   testConnection();
   startNetMonitor(); // §29 — internet health / degraded-mode switching
