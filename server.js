@@ -2539,16 +2539,18 @@ function castSpellLights(spellKey) {
         // cycling — it is the visual countdown to the blast. The monument loop
         // handles the cycling itself once the override is set to the top stage.
         setMonumentOverride(MONUMENT_RITUAL_IDX);
-        // At maximum intensity, just before the overhead blast, the spectral
-        // laugh fires from the graveyard speakers.
+        // At maximum intensity, just before the overhead blast, a laugh fires
+        // from the graveyard speakers. This is the ORDINARY evil-laugh pool - the
+        // dedicated spectral laugh (BLACKOUT_LAUGH_KW) belongs to the Blackout
+        // Storm ALONE and must never play anywhere else.
         track(() => {
           if (effects.spellYard !== 'grandritual') return;
-          const file = findSoundFile(BLACKOUT_LAUGH_KW);
+          const file = findSoundFile('evil laugh');
           if (file) {
             playHauntSound(file);
-            broadcastLog(`Monument at maximum — spectral laugh (${file})`, 'AUDIO');
+            broadcastLog(`Monument at maximum - laugh (${file})`, 'AUDIO');
           } else {
-            broadcastLog('Monument at maximum — no spectral laugh file found in HAUNT SOUNDS', 'AUDIO');
+            broadcastLog('Monument at maximum - no evil laugh file found in HAUNT SOUNDS', 'AUDIO');
           }
         }, Math.round(durMs * 0.75));
       }
