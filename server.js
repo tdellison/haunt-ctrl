@@ -2543,7 +2543,7 @@ function castSpellLights(spellKey) {
         // laugh fires from the graveyard speakers.
         track(() => {
           if (effects.spellYard !== 'grandritual') return;
-          const file = findSoundFile('demon');
+          const file = findSoundFile(BLACKOUT_LAUGH_KW);
           if (file) {
             playHauntSound(file);
             broadcastLog(`Monument at maximum — spectral laugh (${file})`, 'AUDIO');
@@ -2874,7 +2874,7 @@ function fireIntrusion(kind) {
 // Season lock: seasonBeatsUsed.blackoutStorm (persisted to show-state.json).
 // Fire it through tryRollSpecialBeat('blackoutStorm', ...) once a Director
 // exists; until then it is manual-only from the Test tab.
-const BLACKOUT_LAUGH_KW = 'spectral laugh';   // dedicated file — NOT the evil laugh stingers
+const BLACKOUT_LAUGH_KW = 'ghostly laugh';   // dedicated file — NOT the evil laugh stingers
 const BLACKOUT_LINES = [
   { id: 'jasper',  zone: 'z1', side: 'left',  text: '...hello?' },
   { id: 'edgar',   zone: 'z1', side: 'right', text: 'who did that?' },
