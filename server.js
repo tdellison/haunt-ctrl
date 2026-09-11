@@ -2877,7 +2877,7 @@ function fireIntrusion(kind) {
 const BLACKOUT_LAUGH_KW = 'spectral laugh';   // dedicated file — NOT the evil laugh stingers
 const BLACKOUT_LINES = [
   { id: 'jasper',  zone: 'z1', side: 'left',  text: '...hello?' },
-  { id: 'edgar',   zone: 'z1', side: 'right', text: 'this is new' },
+  { id: 'edgar',   zone: 'z1', side: 'right', text: 'who did that?' },
   { id: 'lenora',  zone: 'z3', side: 'right', text: 'nobody did' },
   { id: 'evelina', zone: 'z3', side: 'left',  text: 'it’s getting stronger' },
 ];

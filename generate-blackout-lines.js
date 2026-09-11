@@ -1,4 +1,4 @@
-﻿const fs   = require('fs');
+const fs   = require('fs');
 const path = require('path');
 
 const CACHE_DIR   = path.join(__dirname, 'cache', 'audio');
@@ -7,7 +7,7 @@ const MODEL_ID    = 'eleven_multilingual_v2';
 
 const LINES = [
   { id: 'jasper',  text: '...hello?' },
-  { id: 'edgar',   text: 'this is new' },
+  { id: 'edgar',   text: 'who did that?' },
   { id: 'lenora',  text: 'nobody did' },
   { id: 'evelina', text: "it's getting stronger" },
 ];
@@ -18,7 +18,8 @@ async function main() {
   const voices = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^\uFEFF/, ''));
   fs.mkdirSync(CACHE_DIR, { recursive: true });
 
-  for (const line of LINES) {
+  const only = process.argv[2];
+  for (const line of LINES.filter(l => !only || l.id === only)) {
     const out = path.join(CACHE_DIR, `${line.id}-blackout.mp3`);
     process.stdout.write(`${line.id}: "${line.text}" ... `);
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voices[line.id]}`, {
