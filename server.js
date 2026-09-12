@@ -889,6 +889,7 @@ function enqueueSensor(zone, cooldownOverride) {
   const now = Date.now();
   const burst = (now - lastSensorAt) < SENSOR_BURST_MS;
   lastSensorAt = now;
+  recordSensorTrip(now);
   sensorQueue.push({ zone, priority, cooldownOverride, at: now });
   if (burst || sensorBusy) broadcastLog(`Sensor zone ${zone} queued`, 'SYSTEM');
   drainSensorQueue();
@@ -2701,6 +2702,105 @@ const SKELETON_DIR = 'C:\\haunt-ctrl-assets\\skeleton';
 const WITCH_DIR   = 'C:\\haunt-ctrl-assets\\witch';
 const HAUNT_SOUNDS_DIR = 'C:\\haunt-ctrl-assets\\ambient-sounds';
 
+// --- Dialogue transcripts ---------------------------------------------------
+// Every character line the show produces gets written to disk as JSONL, one
+// object per line. The point is next season: this year's real, in-yard dialogue
+// becomes the few-shot corpus for a local LLM, so the capture has to be running
+// before the first real test, not bolted on after a night worth keeping.
+//
+// Two copies of every entry, because they answer different questions:
+//   transcripts/<character>.jsonl        — everything Evelina ever said (voice)
+//   transcripts/full-nights/<date>.jsonl — one night in order (conversation)
+// Append-only, never rotated, never rewritten. Disk is cheap; a lost night is not.
+const TRANSCRIPT_DIR   = 'C:\\haunt-ctrl-assets\\transcripts';
+const TRANSCRIPT_NIGHT_DIR = path.join(TRANSCRIPT_DIR, 'full-nights');
+const TRANSCRIPT_CHARACTERS = ['evelina', 'lenora', 'jasper', 'edgar'];
+
+// A show runs past midnight, so the calendar date is the wrong key — Nov 1st at
+// 00:30 is still Halloween night. The night rolls over at 5am local instead.
+const NIGHT_ROLLOVER_HOUR = 5;
+function showNightKey(when) {
+  const d = new Date(when || Date.now());
+  if (d.getHours() < NIGHT_ROLLOVER_HOUR) d.setDate(d.getDate() - 1);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Rolling window of sensor trip times, so a line can record how busy the yard
+// actually was when it was spoken — the difference between a line delivered to a
+// crowd and the same line muttered to an empty driveway.
+const PIR_WINDOW_MS = 5 * 60 * 1000;
+let sensorTrips = [];
+function recordSensorTrip(at) {
+  sensorTrips.push(at);
+  const cutoff = at - PIR_WINDOW_MS;
+  while (sensorTrips.length && sensorTrips[0] < cutoff) sensorTrips.shift();
+}
+function pirActivity(now) {
+  const cutoff = now - PIR_WINDOW_MS;
+  const recent = sensorTrips.filter(t => t >= cutoff).length;
+  // Bands, not raw counts: what a future prompt actually wants to condition on.
+  let level = 'idle';
+  if (recent >= 8)      level = 'busy';
+  else if (recent >= 3) level = 'active';
+  else if (recent >= 1) level = 'light';
+  return {
+    level,
+    tripsLast5Min: recent,
+    secondsSinceLastTrip: lastSensorAt ? Math.round((now - lastSensorAt) / 1000) : null,
+    esp32Online: esp32.online,
+    sensorsArmed: state.sensorsArmed,
+  };
+}
+
+function ensureTranscriptDirs() {
+  fs.mkdirSync(TRANSCRIPT_NIGHT_DIR, { recursive: true });
+}
+
+// The one place a spoken line is recorded. Every current and future path that
+// produces character dialogue calls this — scripted beats today, the AI
+// conductor's generated lines tomorrow. Adding a second writer is how the
+// corpus ends up with holes in it.
+//
+//   character — one of TRANSCRIPT_CHARACTERS
+//   line      — what was actually said
+//   trigger   — why it was said: guest_mic | proactive | quiet_mutter |
+//               scripted | sensor | warden | cross_character
+//   context   — what prompted it (host note, guest speech, beat name), or null
+//   extra     — anything else worth keeping with this entry
+function logDialogue({ character, line, trigger = 'unknown', context = null, extra = null }) {
+  const id = String(character || '').toLowerCase();
+  if (!line) return null;
+  const now = Date.now();
+  const stage = STRIKE_SEQUENCE[strikeIndex] || {};
+  const entry = {
+    ts: new Date(now).toISOString(),
+    night: showNightKey(now),
+    character: id,
+    line: String(line),
+    trigger,
+    context: context || null,
+    stormStage: { index: strikeIndex, name: stage.name || null },
+    pir: pirActivity(now),
+    showElapsedMs: state.showStartedAt ? now - state.showStartedAt : null,
+  };
+  if (extra && typeof extra === 'object') entry.extra = extra;
+
+  // A transcript write must never be able to take the show down mid-beat.
+  try {
+    ensureTranscriptDirs();
+    const row = JSON.stringify(entry) + '\n';
+    if (TRANSCRIPT_CHARACTERS.includes(id)) {
+      fs.appendFileSync(path.join(TRANSCRIPT_DIR, `${id}.jsonl`), row, 'utf8');
+    }
+    fs.appendFileSync(path.join(TRANSCRIPT_NIGHT_DIR, `${entry.night}.jsonl`), row, 'utf8');
+  } catch (e) {
+    console.error('[TRANSCRIPT] write failed:', e.message);
+    broadcastLog(`Transcript write failed: ${e.message}`, 'SYSTEM');
+  }
+  return entry;
+}
+
 // Drop these audio files in the SKELETON folder — edit the filenames here if yours differ
 const SKELETON_FILES = { left: 'skeleton-left.wav', right: 'skeleton-right.wav' };
 
@@ -2903,6 +3003,15 @@ function setAmbiancePower(on) {
 // been rendered into cache/audio/ it plays; otherwise the line is broadcast as
 // a subtitle on the show log so the sequence can be verified end to end.
 function speakBlackoutLine(line) {
+  // Logged whether or not a clip exists: the line was spoken by the show either
+  // way, and the corpus wants what was said, not how it was rendered.
+  logDialogue({
+    character: line.id,
+    line: line.text,
+    trigger: 'scripted',
+    context: 'blackout storm sequence',
+    extra: { beat: 'blackoutStorm', zone: line.zone },
+  });
   try {
     ensureAudioCacheDir();
     const file = fs.readdirSync(AUDIO_CACHE_DIR)
@@ -3539,14 +3648,64 @@ app.post('/api/spell/test', (req, res) => {
 // TODO (October): ElevenLabs integration — synthesize `text` with the main
 // witch voice, pan LEFT, play through z3. Requires ELEVENLABS_API_KEY.
 app.post('/api/witch/speak', (req, res) => {
-  const { text } = req.body;
+  const { text, character, trigger, context } = req.body;
   if (!text) return res.status(400).json({ error: 'text required' });
   broadcastLog(`Witch speak (placeholder): "${text}"`, 'WITCH');
+  // Logged before the TTS attempt. A line that failed to synthesise is still a
+  // line the show generated, and that is what next year's corpus is made of.
+  logDialogue({
+    character: character || 'evelina',
+    line: text,
+    trigger: trigger || 'proactive',
+    context: context || null,
+  });
   if (!process.env.ELEVENLABS_API_KEY) {
     return res.json({ ok: false, error: 'ElevenLabs not configured yet' });
   }
   // TODO: real ElevenLabs synthesis goes here
   res.json({ ok: false, error: 'ElevenLabs not configured yet' });
+});
+
+// --- Dialogue transcripts ---------------------------------------------------
+// The AI conductor logs every generated line here. It is a separate route from
+// the speak/playback paths on purpose: a line generated by an agent that then
+// loses the audio lock, times out, or is cut by a storm mute still belongs in
+// the corpus, and the agent knows things the playback path never sees (which
+// guest utterance prompted it, which model wrote it).
+app.post('/api/dialogue/log', (req, res) => {
+  const { character, line, trigger, context, extra } = req.body || {};
+  if (!character) return res.status(400).json({ error: 'character required' });
+  if (!line)      return res.status(400).json({ error: 'line required' });
+  const entry = logDialogue({ character, line, trigger, context, extra });
+  broadcastLog(`${String(character).toUpperCase()}: "${line}"`, 'DIALOGUE');
+  res.json({ ok: true, entry });
+});
+
+// Proof the capture is actually running, without opening files on the Dell.
+app.get('/api/transcripts/status', (req, res) => {
+  const night = showNightKey();
+  const count = (file) => {
+    try {
+      const txt = fs.readFileSync(file, 'utf8');
+      return txt.split('\n').filter(l => l.trim()).length;
+    } catch (_) { return 0; }
+  };
+  const characters = {};
+  for (const id of TRANSCRIPT_CHARACTERS) {
+    characters[id] = count(path.join(TRANSCRIPT_DIR, `${id}.jsonl`));
+  }
+  let nights = [];
+  try {
+    nights = fs.readdirSync(TRANSCRIPT_NIGHT_DIR).filter(f => f.endsWith('.jsonl')).sort();
+  } catch (_) {}
+  res.json({
+    dir: TRANSCRIPT_DIR,
+    writable: (() => { try { ensureTranscriptDirs(); return true; } catch (_) { return false; } })(),
+    tonight: { night, lines: count(path.join(TRANSCRIPT_NIGHT_DIR, `${night}.jsonl`)) },
+    characters,
+    nightsOnDisk: nights,
+    pir: pirActivity(Date.now()),
+  });
 });
 
 // Character bible — for the AI conductor
