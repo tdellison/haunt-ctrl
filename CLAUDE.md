@@ -162,3 +162,18 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
   - Norton Program Control already had Node.js on Allow, so that layer was never the problem.
   - Norton VPN adapters are installed on the Dell. They were disconnected during the show setup. If that VPN ever auto-connects it will reroute traffic and break both the phone UI and Govee UDP discovery — disable auto-connect before show night.
 - iOS Safari will send `192.168.1.168:3000` to Google search; type the full `http://192.168.1.168:3000`. Bookmark it to avoid the issue entirely.
+
+## Dialogue transcripts (built)
+**Why it exists**: this season's real, in-yard dialogue is the few-shot corpus for next year's local LLM. It had to be capturing before the first real test, not bolted on after a night worth keeping.
+- **`logDialogue({character, line, trigger, context, extra})` is the ONE write point.** Every path that produces character speech calls it - scripted beats now, the AI conductor's generated lines later. A second writer is how the corpus ends up with holes; do not add one.
+- **Written twice, JSONL, append-only, never rotated**: `C:\haunt-ctrl-assets\transcripts\<character>.jsonl` (one character's whole voice) and `transcripts\full-nights\<YYYY-MM-DD>.jsonl` (one night in order - the conversation).
+- **Each entry**: `ts`, `night`, `character`, `line`, `trigger`, `context`, `stormStage {index,name}`, `pir {level, tripsLast5Min, secondsSinceLastTrip, esp32Online, sensorsArmed}`, `showElapsedMs`, optional `extra`.
+- **`trigger` vocabulary**: `guest_mic` / `proactive` / `quiet_mutter` / `scripted` / `sensor` / `warden` / `cross_character`.
+- **Night rolls over at 5am** (`NIGHT_ROLLOVER_HOUR`), not midnight - Nov 1st at 00:30 is still Halloween night and belongs in one file.
+- **PIR level bands** (`pirActivity`): idle / light (1+) / active (3+) / busy (8+ trips in 5 min). Bands, not raw counts, because that is what a future prompt conditions on. Fed by `recordSensorTrip()` in `enqueueSensor`.
+- **Writes are wrapped in try/catch** - a transcript failure logs and must never interrupt a show beat.
+- **Backup**: the transcripts live OUTSIDE the repo, so they would otherwise be on one disk with no backup. `backupTranscripts()` mirrors them into `<repo>\transcripts\` every 15 min (copy-on-size-change) so they ride along on every push. `POST /api/transcripts/backup` forces it at the end of a night. **Do not gitignore `transcripts/`** - that mirror IS the backup.
+- **Routes**: `POST /api/dialogue/log` (the conductor's entry point - a line that was generated but then lost the audio lock or got cut still belongs in the corpus), `GET /api/transcripts/status` (proof capture is live), `POST /api/transcripts/backup`.
+- **Wired producers today**: only `speakBlackoutLine` (the four Blackout Storm lines, `trigger: 'scripted'`) and the `/api/witch/speak` placeholder. Nothing else generates text yet.
+- **Deliberately NOT logged**: `fireSkeleton` / `fireWitchSide` / `playWitchClip` play pre-recorded clips with no text - filenames would be noise in a few-shot corpus.
+- Gotcha: `BLACKOUT_LINES` uses a curly apostrophe, so the corpus contains U+2019. Normalise when parsing.
