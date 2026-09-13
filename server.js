@@ -2757,6 +2757,38 @@ function ensureTranscriptDirs() {
   fs.mkdirSync(TRANSCRIPT_NIGHT_DIR, { recursive: true });
 }
 
+// The transcripts live outside the repo, which means they are on exactly one
+// disk and in no backup. That is fine for a log and unacceptable for the only
+// copy of a season of real dialogue, so a mirror is kept inside the repo where
+// it rides along on every push. Copy-on-change only: a no-op most of the time.
+const TRANSCRIPT_BACKUP_DIR = path.join(__dirname, 'transcripts');
+const TRANSCRIPT_BACKUP_MS  = 15 * 60 * 1000;
+function backupTranscripts() {
+  let copied = 0;
+  try {
+    if (!fs.existsSync(TRANSCRIPT_DIR)) return { copied: 0, skipped: 'no transcripts yet' };
+    const pairs = [[TRANSCRIPT_DIR, TRANSCRIPT_BACKUP_DIR],
+                   [TRANSCRIPT_NIGHT_DIR, path.join(TRANSCRIPT_BACKUP_DIR, 'full-nights')]];
+    for (const [src, dst] of pairs) {
+      if (!fs.existsSync(src)) continue;
+      fs.mkdirSync(dst, { recursive: true });
+      for (const f of fs.readdirSync(src)) {
+        if (!f.endsWith('.jsonl')) continue;
+        const from = path.join(src, f), to = path.join(dst, f);
+        // Size is enough: these files only ever grow, one appended line at a time.
+        const a = fs.statSync(from).size;
+        const b = fs.existsSync(to) ? fs.statSync(to).size : -1;
+        if (a !== b) { fs.copyFileSync(from, to); copied++; }
+      }
+    }
+  } catch (e) {
+    console.error('[TRANSCRIPT] backup failed:', e.message);
+    return { copied, error: e.message };
+  }
+  return { copied };
+}
+setInterval(backupTranscripts, TRANSCRIPT_BACKUP_MS);
+
 // The one place a spoken line is recorded. Every current and future path that
 // produces character dialogue calls this — scripted beats today, the AI
 // conductor's generated lines tomorrow. Adding a second writer is how the
@@ -3681,6 +3713,14 @@ app.post('/api/dialogue/log', (req, res) => {
   res.json({ ok: true, entry });
 });
 
+// Manual mirror, for the end of a night worth keeping. The interval already
+// runs; this is for "push it now, before I close the laptop".
+app.post('/api/transcripts/backup', (req, res) => {
+  const r = backupTranscripts();
+  broadcastLog(`Transcripts mirrored to repo: ${r.copied} file(s)`, 'SYSTEM');
+  res.json({ ok: !r.error, ...r, dir: TRANSCRIPT_BACKUP_DIR });
+});
+
 // Proof the capture is actually running, without opening files on the Dell.
 app.get('/api/transcripts/status', (req, res) => {
   const night = showNightKey();
@@ -3704,6 +3744,7 @@ app.get('/api/transcripts/status', (req, res) => {
     tonight: { night, lines: count(path.join(TRANSCRIPT_NIGHT_DIR, `${night}.jsonl`)) },
     characters,
     nightsOnDisk: nights,
+    backupDir: TRANSCRIPT_BACKUP_DIR,
     pir: pirActivity(Date.now()),
   });
 });
