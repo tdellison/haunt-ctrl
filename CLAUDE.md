@@ -116,6 +116,14 @@ Three tabs: **SHOW** (minimal: zone level tiles, Normal/Boost, pause, ALL STOP, 
 - Owner will report dialed-in brightness values after outdoor testing → lock into SLOT_BASES.
 - Smart plugs: DROPPED — owner controls them via their own app (background fire glow or other colors), not server-controlled.
 
+## Lily audio routing — cross-platform boundary (`lily/`, built)
+Dev/test happens on TWO machines: the **Windows laptop** (fast iteration) and the **Linux OptiPlex** (the real show machine after the migration). The Lily integration is cross-platform EXCEPT Classic BT audio to her onboard speaker — that's Linux-only tooling (`bluetoothctl`/BlueZ + `wpctl`/PipeWire) with no Windows equivalent, so it lives behind a swappable interface:
+- **`lily/audioRouter.js`** — the selector + interface contract (`pair`, `connect`, `routeAudioOutput`, `playBuffer`, `disconnect`, all async). Call sites import ONLY this. Selection: `LILY_AUDIO_ROUTER` env (`linux`/`stub`) overrides, else `process.platform`.
+- **`lily/audioRouter.linux.js`** — the real one: bluetoothctl pair/trust/connect with stale-pairing recovery (remove + retry once), `wpctl status` patience loop until the bluez sink publishes, `wpctl set-default`, wake-tone prepend (ffmpeg-generated ~350ms low tone so the speaker's amp doesn't clip the first word). **NOT yet validated on the OptiPlex** — reconcile against spec §2.2 there; ffplay/ffmpeg from PATH on Linux (not the Dell's pinned path).
+- **`lily/audioRouter.windows.js`** — laptop stub: same surface, logs what it would have done, plays buffers through the laptop speakers for audible feedback (pass `playLocalBuffer` to reuse the server's player pipeline, or it falls back to FFPLAY_PATH). NEVER shells to bluetoothctl/wpctl.
+- **THE RULE: no file except `audioRouter.linux.js` may reference bluetoothctl or wpctl.** Everything else in the Lily work (BLE GATT movement/lighting/safety via `@abandonware/noble`, dialogue, agent logic) is built OS-agnostic so laptop-built work moves to Linux unchanged.
+- Nothing in server.js imports this yet — it's the foundation for the Lily integration (Part 2); wire it in when §2.2/2.3 land.
+
 ## Phase 2 additions (built)
 - **Voice input on Host Context**: 🎤 button beside SEND on the SHOW tab, Web Speech API (Chrome/Safari only — button hidden + note shown when unsupported). Tap to record (button turns red), transcript fills the field live, tap again or 3s silence auto-sends via the existing `/api/context` path.
 - **One-tap Show Start** (`POST /api/show/start`): fog warmup → applyShowScheme + effects → ambient → sensors armed (`state.sensorsArmed`) → storm cycle reset to Distant → `state.showActive`/`state.showStartedAt` set (elapsed tracking). `POST /api/show/stop` marks inactive + stops storm cycle (NOT a teardown — that's ALL STOP/STRIKE DOWN). SHOW tab has a green ▶ START SHOW button that flips to red ■ END SHOW with a live elapsed readout.
