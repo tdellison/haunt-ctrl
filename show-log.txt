@@ -137,3 +137,178 @@
 [2026-09-11T01:03:18.461Z] [SYSTEM] Blackout storm complete — yard restored
 [2026-09-11T01:03:18.462Z] [AUDIO] Audio lock released by blackout
 [2026-09-11T01:03:27.767Z] [LIGHT] Living effects OFF
+[2026-09-11T01:07:03.040Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T01:07:03.042Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T01:07:03.044Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:07:04.457Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:07:04.458Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T01:07:05.064Z] [AUDIO] Blackout: no "spectral laugh" file in HAUNT SOUNDS — laugh skipped
+[2026-09-11T01:07:05.065Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T01:07:07.731Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:07:07.733Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T01:07:12.764Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:07:12.766Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T01:07:17.789Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:07:17.791Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T01:07:22.827Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:07:22.828Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T01:07:31.355Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T01:07:31.356Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T01:07:32.350Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T01:07:32.352Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:07:33.560Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:07:33.562Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T01:07:33.950Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T01:07:33.953Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T01:07:33.954Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T01:07:33.956Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T01:20:49.167Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T01:20:49.169Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T01:20:49.170Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:20:50.582Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:20:50.584Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T01:20:51.192Z] [AUDIO] Blackout: no "spectral laugh" file in HAUNT SOUNDS — laugh skipped
+[2026-09-11T01:20:51.194Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T01:20:55.100Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:20:55.103Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T01:21:01.475Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:21:01.477Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T01:21:07.760Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:21:07.762Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T01:21:14.047Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:21:14.049Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T01:21:22.561Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T01:21:22.563Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T01:21:24.835Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T01:21:24.837Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:21:26.049Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:21:26.050Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T01:21:26.451Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T01:21:26.454Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T01:21:26.455Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T01:21:26.456Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T01:29:09.576Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T01:29:09.578Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T01:29:09.580Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:29:11.004Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:29:11.006Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T01:29:11.632Z] [AUDIO] Blackout: no "spectral laugh" file in HAUNT SOUNDS — laugh skipped
+[2026-09-11T01:29:11.633Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T01:29:16.021Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:29:16.023Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T01:29:22.424Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:29:22.426Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T01:29:28.831Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:29:28.833Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T01:29:35.132Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T01:29:35.134Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T01:29:43.654Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T01:29:43.656Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T01:29:45.978Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T01:29:45.980Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T01:29:47.193Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T01:29:47.194Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T01:29:47.600Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T01:29:47.603Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T01:29:47.604Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T01:29:47.606Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T22:52:10.120Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T22:52:10.122Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T22:52:10.123Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T22:52:11.530Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T22:52:11.531Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T22:52:12.144Z] [AUDIO] Blackout: no "ghostly laugh" file in HAUNT SOUNDS — laugh skipped
+[2026-09-11T22:52:12.145Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T22:52:16.269Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:52:16.271Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T22:52:22.344Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:52:22.345Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T22:52:28.478Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:52:28.480Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T22:52:34.700Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:52:34.701Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T22:52:43.209Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T22:52:43.211Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T22:52:45.295Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T22:52:45.296Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T22:52:46.509Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T22:52:46.511Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T22:52:46.914Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T22:52:46.916Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T22:52:46.917Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T22:52:46.918Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T22:57:18.390Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T22:57:18.393Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T22:57:18.394Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T22:57:19.818Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T22:57:19.820Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T22:57:20.423Z] [AUDIO] Blackout: no "ghostly laugh" file in HAUNT SOUNDS — laugh skipped
+[2026-09-11T22:57:20.424Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T22:57:24.126Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:57:24.128Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T22:57:30.275Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:57:30.277Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T22:57:36.513Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:57:36.515Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T22:57:43.115Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T22:57:43.116Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T22:57:51.641Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T22:57:51.642Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T22:57:53.789Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T22:57:53.790Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T22:57:55.002Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T22:57:55.004Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T22:57:55.413Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T22:57:55.415Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T22:57:55.416Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T22:57:55.417Z] [AUDIO] Audio lock released by blackout
+[2026-09-11T23:04:02.129Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-11T23:04:02.131Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-11T23:04:02.132Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T23:04:03.547Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T23:04:03.549Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-11T23:04:05.283Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-11T23:04:09.008Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T23:04:09.010Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-11T23:04:15.102Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T23:04:15.103Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-11T23:04:21.150Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T23:04:21.151Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-11T23:04:27.290Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-11T23:04:27.291Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-11T23:04:35.803Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-11T23:04:35.804Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-11T23:04:37.892Z] [LIGHT] Monument: released to storm stage
+[2026-09-11T23:04:37.893Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-11T23:04:39.105Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-11T23:04:39.106Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-11T23:04:39.512Z] [LIGHT] Lights: show scheme applied
+[2026-09-11T23:04:39.513Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-11T23:04:39.514Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-11T23:04:39.515Z] [AUDIO] Audio lock released by blackout
+[2026-09-12T23:54:07.037Z] [AUDIO] Audio lock acquired by blackout (grand_ritual)
+[2026-09-12T23:54:07.039Z] [SYSTEM] BLACKOUT STORM — everything cuts out
+[2026-09-12T23:54:07.040Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-12T23:54:08.460Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-12T23:54:08.460Z] [LIGHT] Monument: spectral override → stage 1
+[2026-09-12T23:54:26.821Z] [LIGHT] Ambiance plug: OFF (no control path yet — manual)
+[2026-09-12T23:54:30.490Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-12T23:54:30.491Z] [AUDIO] Blackout jasper: jasper-blackout.mp3
+[2026-09-12T23:54:36.558Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-12T23:54:36.559Z] [AUDIO] Blackout edgar: edgar-blackout.mp3
+[2026-09-12T23:54:42.632Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-12T23:54:42.633Z] [AUDIO] Blackout lenora: lenora-blackout.mp3
+[2026-09-12T23:54:48.726Z] [AUDIO] Mics muted 5s — blackout line
+[2026-09-12T23:54:48.726Z] [AUDIO] Blackout evelina: evelina-blackout.mp3
+[2026-09-12T23:54:57.236Z] [AUDIO] Mics muted 7s — overhead strike
+[2026-09-12T23:54:57.237Z] [AUDIO] Storm clip: 646912__alexdarek__lightning-strike-2.wav
+[2026-09-12T23:54:59.272Z] [LIGHT] Monument: released to storm stage
+[2026-09-12T23:54:59.273Z] [LIGHT] Monument: blackout hold ON — last to go dark
+[2026-09-12T23:55:00.485Z] [LIGHT] Monument: blackout hold OFF — first to return
+[2026-09-12T23:55:00.487Z] [LIGHT] Ambiance plug: ON (no control path yet — manual)
+[2026-09-12T23:55:00.891Z] [LIGHT] Lights: show scheme applied
+[2026-09-12T23:55:00.893Z] [LIGHT] Living effects ON — skeleton fire, witch breathing, cauldron boil, monument spectral
+[2026-09-12T23:55:00.893Z] [SYSTEM] Blackout storm complete — yard restored
+[2026-09-12T23:55:00.894Z] [AUDIO] Audio lock released by blackout
+[2026-09-13T00:14:37.008Z] [SYSTEM] Receiver reconnected
+[2026-09-13T00:29:37.025Z] [SYSTEM] Receiver reconnected
