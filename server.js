@@ -26,6 +26,10 @@ let config = {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 let settings = {
   hapticFeedback: true,
+  // Lily (Lethal Lily animatronic) is OPTIONAL — if her BLE or BT audio is
+  // unreliable on show night, the rest of the show must not go down with her.
+  // Agents/routes must skip her cleanly when this is false or she's unreachable.
+  lilyEnabled: false,
 };
 
 // ─── Govee Devices ────────────────────────────────────────────────────────────
@@ -1599,7 +1603,9 @@ let lastMajorAt = 0; // timestamp of last major spell — majors max once per 30
 const CHARACTERS = [
   { id:'evelina', name:'Evelina Crowe', zone:'z3', channel:'left',  hasMic:true,  isStatic:false, voiceId:null },
   { id:'lenora',  name:'Lenora Thorn',  zone:'z3', channel:'right', hasMic:false, isStatic:true,  voiceId:null },
-  { id:'jasper',  name:'Jasper Bones',  zone:'z1', channel:'left',  hasMic:true,  isStatic:false, voiceId:null },
+  // Jasper's guest mic was DROPPED (2026 budget decision) — he reacts to
+  // PIR-sensed presence only. Evelina's is the only guest-facing mic this year.
+  { id:'jasper',  name:'Jasper Bones',  zone:'z1', channel:'left',  hasMic:false, isStatic:false, voiceId:null },
   { id:'edgar',   name:'Edgar Rattle',  zone:'z1', channel:'right', hasMic:false, isStatic:false, voiceId:null },
   // future 5th character: add an entry here + a CHARACTER_BIBLE.characters entry + voiceId. No structural changes needed.
 ];
@@ -1744,7 +1750,7 @@ const CHARACTER_BIBLE = {
     },
     jasper: {
       name: 'Jasper Bones', title: 'The Storm Watcher',
-      position: 'Left skeleton near driveway', zone: 'z1', speaker: 'Front Left — has mic for passive eavesdropping (later)',
+      position: 'Left skeleton near driveway', zone: 'z1', speaker: 'Front Left — NO mic (dropped for 2026, budget); reacts to PIR-sensed presence only',
       personality: 'Nervous, superstitious, always worried, sees danger everywhere.',
       goal: 'Wants everyone to prepare for disaster.',
       whyTalksToGuests: 'Constantly seeking confirmation. "Did you hear that thunder? It\'s getting closer isn\'t it?"',
