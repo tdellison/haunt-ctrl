@@ -2670,10 +2670,12 @@ async function fireWitch(clip, spellKey) {
 //                        an output device (AUDIO_DEVICES below).
 // Today the Onkyo does the zone splitting and the Dell has a single output, so
 // ffplay is the right default and AUDIO_DEVICES stays empty.
-const FFPLAY_PATH = 'C:\\ffmpeg\\ffmpeg-2026-09-10-git-fd7c73d01e-full_build\\bin\\ffplay.exe';
-const MPV_PATH    = 'C:\\mpv\\mpv.exe';
-const VLC_PATH    = 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe';  // kept for reference/fallback
-
+// Windows (the Dell) uses pinned install paths; Linux (the OptiPlex) uses the
+// distro packages. One file runs on both - never hardcode one OS's paths.
+const IS_WINDOWS = process.platform === 'win32';
+const FFPLAY_PATH = IS_WINDOWS ? 'C:\\ffmpeg\\ffmpeg-2026-09-10-git-fd7c73d01e-full_build\\bin\\ffplay.exe' : '/usr/bin/ffplay';
+const MPV_PATH    = IS_WINDOWS ? 'C:\\mpv\\mpv.exe' : '/usr/bin/mpv';
+const VLC_PATH    = IS_WINDOWS ? 'C:\\Program Files\\VideoLAN\\VLC\\vlc.exe' : 'vlc';  // kept for reference/fallback
 const PLAYER = { kind: 'ffplay' };
 
 // zone -> output device name, ONLY honoured when PLAYER.kind === 'mpv'.
@@ -2702,11 +2704,15 @@ function playerArgs(file, { loop = false, zone = null } = {}) {
   return args;
 }
 
-const STORM_DIR   = 'C:\\haunt-ctrl-assets\\storm';
-const AMBIENT_DIR = 'C:\\haunt-ctrl-assets\\graveyard-ambient';
-const SKELETON_DIR = 'C:\\haunt-ctrl-assets\\skeleton';
-const WITCH_DIR   = 'C:\\haunt-ctrl-assets\\witch';
-const HAUNT_SOUNDS_DIR = 'C:\\haunt-ctrl-assets\\ambient-sounds';
+// Local (never cloud-synced) asset root: C:\haunt-ctrl-assets on the Dell,
+// ~/haunt-ctrl-assets on the OptiPlex. HAUNT_ASSETS_DIR overrides both.
+const ASSETS_ROOT = process.env.HAUNT_ASSETS_DIR ||
+  (IS_WINDOWS ? 'C:\\haunt-ctrl-assets' : path.join(require('os').homedir(), 'haunt-ctrl-assets'));
+const STORM_DIR   = path.join(ASSETS_ROOT, 'storm');
+const AMBIENT_DIR = path.join(ASSETS_ROOT, 'graveyard-ambient');
+const SKELETON_DIR = path.join(ASSETS_ROOT, 'skeleton');
+const WITCH_DIR   = path.join(ASSETS_ROOT, 'witch');
+const HAUNT_SOUNDS_DIR = path.join(ASSETS_ROOT, 'ambient-sounds');
 
 // --- Dialogue transcripts ---------------------------------------------------
 // Every character line the show produces gets written to disk as JSONL, one
@@ -2718,7 +2724,7 @@ const HAUNT_SOUNDS_DIR = 'C:\\haunt-ctrl-assets\\ambient-sounds';
 //   transcripts/<character>.jsonl        — everything Evelina ever said (voice)
 //   transcripts/full-nights/<date>.jsonl — one night in order (conversation)
 // Append-only, never rotated, never rewritten. Disk is cheap; a lost night is not.
-const TRANSCRIPT_DIR   = 'C:\\haunt-ctrl-assets\\transcripts';
+const TRANSCRIPT_DIR   = path.join(ASSETS_ROOT, 'transcripts');
 const TRANSCRIPT_NIGHT_DIR = path.join(TRANSCRIPT_DIR, 'full-nights');
 const TRANSCRIPT_CHARACTERS = ['evelina', 'lenora', 'jasper', 'edgar'];
 
@@ -3244,8 +3250,10 @@ function stopAmbientLoop() {
   ambientShouldRun = false;
   if (ambientProcess) {
     try {
-      // Windows-safe kill: taskkill terminates VLC and any child processes
-      spawn('taskkill', ['/pid', ambientProcess.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
+      // Windows-safe kill: taskkill terminates the player and any child processes.
+      // Linux has no taskkill (spawning it would emit an unhandled ENOENT error).
+      if (IS_WINDOWS) spawn('taskkill', ['/pid', ambientProcess.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
+      else ambientProcess.kill();
     } catch (_) {}
     ambientProcess = null;
     broadcastLog('Ambient loop stopped', 'AUDIO');
