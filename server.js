@@ -40,7 +40,7 @@ let settings = {
 //  5. cauldron — separate A19 bulb, green base RGB(0,180,0), deep red
 //                RGB(180,0,0) on spell trigger, pulses back to green after 20s
 let goveeDevices = [];
-// 8 slots — 6 floods + 2 A19 bulbs. Each is its own controller IP.
+// 6 slots — the moon slots (5/6) were cut; ambiance lights are outside haunt-ctrl.
 // The storm-tracker slot was removed; storm stages now drive the monument bulb.
 const GOVEE_IPS = {
   skeletonLeft:  '', skeletonRight: '',
@@ -1841,7 +1841,7 @@ const CHARACTER_BIBLE = {
       cauldron: 'Cycles green to purple rapidly',
       yardLighting: 'Witch lights shift from purple to a deep unsettling green pulse; skeleton fire ' +
         'flickers faster and more erratic — storm energy reaching the far end of the yard; ' +
-        'slightly — something pulling energy from it; all returns to base after 20 seconds.',
+        'all returns to base after 20 seconds.',
       evelinaAsks: '"Reach toward it"',
       reactions: {
         lenora: 'Genuinely concerned: "Evelina — not that one" — she knows this one actually does something.',
