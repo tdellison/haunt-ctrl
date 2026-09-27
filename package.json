@@ -7,10 +7,16 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@abandonware/noble": "^1.9.2-26",
     "express": "^4.18.2",
     "ws": "^8.16.0"
   },
   "devDependencies": {
     "playwright": "^1.60.0"
+  },
+  "allowScripts": {
+    "@abandonware/noble@1.9.2-26": true,
+    "@abandonware/bluetooth-hci-socket@0.5.3-12": true,
+    "usb@2.18.0": true
   }
 }
