@@ -1030,6 +1030,67 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
   </div>
 
+  <!-- Lily -->
+  <div class="panel" id="lily-panel">
+    <div class="panel-title"><span class="pt-icon">🏮</span>Lily</div>
+    <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="lily-status">—</span></div>
+    <div class="info-row"><span class="info-key">Lantern</span><span class="info-val" id="lily-lantern">—</span></div>
+    <div class="info-row"><span class="info-key">Speaker</span><span class="info-val" id="lily-audio">—</span></div>
+    <div class="info-row"><span class="info-key">Last reply</span><span class="info-val" id="lily-notify">—</span></div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+      <button class="btn btn-green btn-sm" id="lily-enabled-btn" onclick="lilyToggleEnabled()">SHOW USE: OFF</button>
+      <button class="btn btn-blue btn-sm" onclick="lilyScan()">🔍 SCAN (10s)</button>
+      <button class="btn btn-green btn-sm" onclick="lilyConnect()">🔗 CONNECT</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/disconnect')">✕ DISCONNECT</button>
+    </div>
+    <div id="lily-scan-results" style="font-size:.76em;font-family:'Courier New',monospace;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:.72em;color:var(--dim2)">Motion (BLE)</label>
+      <input class="raw-input" id="lily-ble-addr" placeholder="AA:BB:CC:DD:EE:FF" style="flex:1;min-width:150px"/>
+    </div>
+
+    <div class="panel-title" style="font-size:.8em;margin-top:6px">Movement</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-amber btn-sm" id="lily-arm-btn" onclick="lilyToggleArm()">ARM MOTORS</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/move',{action:'none'})">■ STOP</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="lily-moves"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <label style="font-size:.72em;color:var(--dim2)">Probe byte</label>
+      <select id="lily-probe" class="raw-input" style="width:110px"></select>
+      <button class="btn btn-purple btn-sm" onclick="lilyProbe()">▶ PROBE</button>
+      <button class="btn btn-purple btn-sm" onclick="lilyProbeNext()">NEXT ▶</button>
+    </div>
+
+    <div class="panel-title" style="font-size:.8em">Lantern</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-orange btn-sm" onclick="api('/api/lily/mood',{mood:'calm'})">CALM</button>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/lily/mood',{mood:'wary'})">WARY</button>
+      <button class="btn btn-amber btn-sm" onclick="api('/api/lily/mood',{mood:'ward'})">WARD</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/mood',{mood:'off'})">OFF</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input type="color" id="lily-color" value="#ff7820" style="width:44px;height:34px;background:none;border:none"/>
+      <input type="range" id="lily-bri" min="0" max="255" value="160" style="flex:1;min-width:100px"/>
+      <select id="lily-mode" class="raw-input" style="width:90px"><option>static</option><option>pulse</option><option>strobe</option></select>
+      <button class="btn btn-green btn-sm" onclick="lilyLantern()">SET</button>
+    </div>
+
+    <div class="panel-title" style="font-size:.8em">Voice / speaker</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input class="raw-input" id="lily-audio-addr" placeholder="speaker address" style="flex:1;min-width:150px"/>
+      <button class="btn btn-green btn-sm" onclick="lilyAudio(true)">PAIR + CONNECT</button>
+      <button class="btn btn-green btn-sm" onclick="lilyAudio(false)">CONNECT</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/audio/disconnect')">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-purple btn-sm" onclick="api('/api/lily/audio/test',{})">🔊 TEST CLIP (jaw check)</button>
+      <label style="font-size:.72em;color:var(--dim2)">Prop vol</label>
+      <input type="range" id="lily-vol" min="0" max="100" value="100" style="width:110px" onchange="api('/api/lily/volume',{volume:+this.value})"/>
+    </div>
+  </div>
+
   <!-- Audio -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">🔊</span>Audio<span class="ambient-dot" id="ambient-dot"></span></div>
@@ -1422,9 +1483,100 @@ async function apiGet(url) {
 
 function demoLog(msg, cat) { if (DEMO) appendLog(msg, cat); }
 
+// ── Lily ──────────────────────────────────────────────────────────────────────
+let lilyState = null;
+function renderLily(l) {
+  if (!l) return;
+  lilyState = l;
+  const st = l.connected ? `CONNECTED (${l.driver})${l.armed ? ' · ARMED' : ' · disarmed'} · ${l.movement}`
+    : l.connecting ? 'connecting…'
+    : l.reconnecting ? `reconnecting (try ${l.reconnectAttempts})…` : `not connected (${l.driver})`;
+  document.getElementById('lily-status').textContent = st + (l.lastError ? ` — ${l.lastError}` : '');
+  const ln = l.lantern || {};
+  document.getElementById('lily-lantern').textContent = `${l.mood || '—'} · rgb(${ln.r},${ln.g},${ln.b}) · ${ln.brightness} · ${ln.mode}`;
+  const a = l.audio || {};
+  document.getElementById('lily-audio').textContent = (a.routed ? 'ready' : a.connected ? 'connected, not routed' : 'not connected')
+    + (a.address ? ` · ${a.address}` : '') + (a.lastError ? ` — ${a.lastError}` : '');
+  document.getElementById('lily-notify').textContent = l.lastNotify ? l.lastNotify.hex : '—';
+  const eb = document.getElementById('lily-enabled-btn');
+  eb.textContent = `SHOW USE: ${l.enabled ? 'ON' : 'OFF'}`;
+  eb.classList.toggle('active', !!l.enabled);
+  const ab = document.getElementById('lily-arm-btn');
+  ab.textContent = l.armed ? 'DISARM MOTORS' : 'ARM MOTORS';
+  ab.classList.toggle('active', !!l.armed);
+  const bi = document.getElementById('lily-ble-addr');
+  if (l.address && !bi.value && document.activeElement !== bi) bi.value = l.address;
+  const ai = document.getElementById('lily-audio-addr');
+  if (a.address && !ai.value && document.activeElement !== ai) ai.value = a.address;
+  const mv = document.getElementById('lily-moves');
+  if (!mv.childElementCount && l.movements) {
+    l.movements.filter(m => m !== 'none').forEach(m => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-orange btn-sm';
+      b.textContent = m.replace(/_/g, ' ').toUpperCase();
+      b.onclick = () => api('/api/lily/move', { action: m });
+      mv.appendChild(b);
+    });
+  }
+}
+async function lilyInit() {
+  const r = await apiGet('/api/lily/status');
+  if (!r?.ok) return;
+  const sel = document.getElementById('lily-probe');
+  if (!sel.childElementCount) (r.probeValues || []).forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = '0x' + v.toString(16).toUpperCase().padStart(2, '0');
+    sel.appendChild(o);
+  });
+  renderLily(r.lily);
+}
+async function lilyScan() {
+  const box = document.getElementById('lily-scan-results');
+  box.textContent = 'Scanning 10s…';
+  const r = await api('/api/lily/scan', { seconds: 10 });
+  if (!r?.ok) { box.textContent = r?.error || 'scan failed'; return; }
+  box.innerHTML = '';
+  if (!r.devices.length) { box.textContent = 'Nothing found — is Lily powered on?'; return; }
+  r.devices.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'info-row';
+    row.style.cursor = 'pointer';
+    row.innerHTML = `<span class="info-key" style="width:auto">${d.likelyLily ? '🏮' : '·'} ${d.address}</span><span class="info-val"></span>`;
+    row.querySelector('.info-val').textContent = `${d.name || '(no name)'} ${d.rssi != null ? d.rssi + 'dBm' : ''} — tap: motion · long-press: speaker`;
+    row.onclick = () => { document.getElementById('lily-ble-addr').value = d.address; };
+    row.oncontextmenu = (e) => { e.preventDefault(); document.getElementById('lily-audio-addr').value = d.address; };
+    box.appendChild(row);
+  });
+}
+function lilyConnect() {
+  const address = document.getElementById('lily-ble-addr').value.trim();
+  api('/api/lily/connect', address ? { address } : {});
+}
+function lilyToggleEnabled() { api('/api/lily/enabled', { enabled: !(lilyState && lilyState.enabled) }); }
+function lilyToggleArm() { api('/api/lily/arm', { enabled: !(lilyState && lilyState.armed) }); }
+function lilyProbe() { api('/api/lily/probe', { value: +document.getElementById('lily-probe').value }); }
+function lilyProbeNext() {
+  const sel = document.getElementById('lily-probe');
+  sel.selectedIndex = (sel.selectedIndex + 1) % sel.options.length;
+  lilyProbe();
+}
+function lilyLantern() {
+  const hex = document.getElementById('lily-color').value;
+  api('/api/lily/lantern', {
+    r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16),
+    brightness: +document.getElementById('lily-bri').value, mode: document.getElementById('lily-mode').value,
+  });
+}
+function lilyAudio(pair) {
+  const address = document.getElementById('lily-audio-addr').value.trim();
+  api('/api/lily/audio/connect', { ...(address ? { address } : {}), pair });
+}
+lilyInit();
+
 // ── State sync ────────────────────────────────────────────────────────────────
 function applyState(s) {
   appState = { ...appState, ...s };
+  if (s.lily) renderLily(s.lily);
 
   document.getElementById('dot-rx').className      = 'dot ' + (s.connected     ? 'on'  : 'off');
   document.getElementById('dot-fog').className     = 'dot ' + (s.fogActive     ? 'fog' : '');

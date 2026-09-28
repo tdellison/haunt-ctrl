@@ -47,7 +47,7 @@ class WindowsLilyAudioRouterStub {
   }
 
   async routeAudioOutput() {
-    this.log('would route audio to Lily here (wpctl set-default on Linux)');
+    this.log('would route Lily playback to her sink here (Linux; system default untouched)');
   }
 
   async playBuffer(audioBuffer) {
@@ -70,6 +70,10 @@ class WindowsLilyAudioRouterStub {
       // Feedback is a nicety; a missing ffplay must never fail the caller.
       this.log(`local playback unavailable (${e.message}) - logged only`);
     }
+  }
+
+  async playFile(file) {
+    this.log(`would play ${file} through Lily's onboard speaker`);
   }
 
   async disconnect() {

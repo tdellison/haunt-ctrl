@@ -29,8 +29,17 @@ let settings = {
   // Lily (Lethal Lily animatronic) is OPTIONAL — if her BLE or BT audio is
   // unreliable on show night, the rest of the show must not go down with her.
   // Agents/routes must skip her cleanly when this is false or she's unreachable.
-  lilyEnabled: false,
+  lilyEnabled: false,   // mirrored from lily-config.json by the Lily controller
 };
+
+// Lily controller (lily/index.js) — created in the Lily section below. Declared
+// up here so stateSnapshot() can read it before that section runs.
+let lily = null;
+function lilySafeStop() {
+  // ALL STOP / shutdown / strike down: stop and disarm her motors. Harmless
+  // (and silent) when she isn't connected.
+  if (lily) lily.arm(false).catch(() => {});
+}
 
 // ─── Govee Devices ────────────────────────────────────────────────────────────
 // Slot roles (one slot per zone — each zone is a tethered pair on ONE controller IP):
@@ -1285,6 +1294,7 @@ function stateSnapshot() {
     intrusions:       { count: state.intrusions.count, max: INTRUSION_MAX_PER_NIGHT, lastKind: state.intrusions.lastKind },
     net:              { online: state.net.online, degraded: state.net.degraded, lastOkAt: state.net.lastOkAt },
     blackout:         { running: state.blackout.running, step: state.blackout.step, usedThisSeason: !!seasonBeatsUsed.blackoutStorm },
+    lily:             lily ? lily.status() : null,
   };
 }
 
@@ -3364,6 +3374,60 @@ const SCENES = {
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
+// ─── Lily (Lethal Lily) ───────────────────────────────────────────────────────
+// All of her lives in lily/. These routes are the Test tab's handle on her;
+// the Witch Agent will call the same controller once the conductor exists.
+// Every failure answers 409 with the reason — she is never a hard dependency.
+lily = require('./lily').createLily({
+  log: (m) => broadcastLog(`Lily: ${m}`, 'SYSTEM'),
+  onChange: () => { settings.lilyEnabled = lily.enabled; broadcastState(); },
+});
+settings.lilyEnabled = lily.enabled;
+
+const lilyRoute = (fn) => async (req, res) => {
+  try { res.json({ ok: true, lily: await fn(req.body || {}) }); }
+  catch (e) { broadcastLog(`Lily: ${e.message}`, 'SYSTEM'); res.status(409).json({ ok: false, error: e.message }); }
+};
+const intIn = (v, name, min, max) => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${name} must be ${min}-${max}`);
+  return n;
+};
+
+app.get('/api/lily/status', (req, res) => res.json({ ok: true, lily: lily.status(), probeValues: lily.probeValues() }));
+app.post('/api/lily/enabled', lilyRoute(async ({ enabled }) => lily.setEnabled(enabled)));
+app.post('/api/lily/scan', async (req, res) => {
+  try {
+    const secs = Math.min(30, Math.max(3, parseInt(req.body?.seconds, 10) || 10));
+    broadcastLog(`Lily: scanning Bluetooth for ${secs}s…`, 'SYSTEM');
+    res.json({ ok: true, devices: await lily.scan(secs) });
+  } catch (e) { res.status(409).json({ ok: false, error: e.message }); }
+});
+app.post('/api/lily/connect',    lilyRoute(async ({ address }) => lily.connect(address)));
+app.post('/api/lily/disconnect', lilyRoute(async () => lily.disconnect()));
+app.post('/api/lily/arm',        lilyRoute(async ({ enabled }) => lily.arm(enabled)));
+app.post('/api/lily/move',       lilyRoute(async ({ action }) => lily.move(action)));
+app.post('/api/lily/probe',      lilyRoute(async ({ value }) => lily.probe(intIn(value, 'value', 0, 255))));
+app.post('/api/lily/mood',       lilyRoute(async ({ mood }) => lily.setMood(mood)));
+app.post('/api/lily/lantern',    lilyRoute(async (b) => lily.lantern({
+  r: intIn(b.r, 'r', 0, 255), g: intIn(b.g, 'g', 0, 255), b: intIn(b.b, 'b', 0, 255),
+  brightness: intIn(b.brightness, 'brightness', 0, 255), mode: b.mode || 'static',
+})));
+app.post('/api/lily/volume',     lilyRoute(async ({ volume }) => lily.volume(intIn(volume, 'volume', 0, 100))));
+app.post('/api/lily/media',      lilyRoute(async ({ serial }) => lily.playMedia(intIn(serial, 'serial', 0, 65535))));
+app.post('/api/lily/audio/connect',    lilyRoute(async ({ address, pair }) => lily.audioConnect(address, { pair: !!pair })));
+app.post('/api/lily/audio/disconnect', lilyRoute(async () => lily.audioDisconnect()));
+// Test clip through her speaker — loud on purpose: it doubles as the
+// "is her jaw audio-reactive?" check (spec 2.6).
+app.post('/api/lily/audio/test', lilyRoute(async ({ file }) => {
+  const name = path.basename(file || 'evil laugh 1.mp3');
+  const full = path.join(HAUNT_SOUNDS_DIR, name);
+  if (!fs.existsSync(full)) throw new Error(`No such test sound: ${name}`);
+  if (!lily.status().audio.routed) throw new Error('Lily speaker not connected');
+  lily.playFile(full).catch(e => broadcastLog(`Lily: test playback failed: ${e.message}`, 'SYSTEM'));
+  return lily.status();
+}));
+
 app.post('/api/onkyo/command', async (req, res) => {
   const { command } = req.body;
   if (!command) return res.status(400).json({ error: 'command required' });
@@ -3469,6 +3533,7 @@ app.post('/api/fog/kill', async (req, res) => {
 });
 
 app.post('/api/allstop', async (req, res) => {
+  lilySafeStop();
   broadcastLog('ALL STOP', 'SYSTEM');
   stopEffects();
   state.paused = false;
@@ -3500,6 +3565,7 @@ app.post('/api/allstop', async (req, res) => {
 });
 
 app.post('/api/shutdown', async (req, res) => {
+  lilySafeStop();
   broadcastLog('Shutdown sequence initiated', 'SYSTEM');
   stopEffects();
   stopFogAuto();
@@ -4369,6 +4435,7 @@ app.get('/api/system/info', (req, res) => {
 });
 
 app.post('/api/strikedown', async (req, res) => {
+  lilySafeStop();
   broadcastLog('STRIKE DOWN — lights to white, all else stopping', 'SYSTEM');
   // Stop all timers (effects first so loops don't fight the final white)
   stopEffects();

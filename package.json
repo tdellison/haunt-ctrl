@@ -9,6 +9,7 @@
   "dependencies": {
     "@abandonware/noble": "^1.9.2-26",
     "express": "^4.18.2",
+    "node-ble": "^1.13.0",
     "ws": "^8.16.0"
   },
   "devDependencies": {

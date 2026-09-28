@@ -69,6 +69,7 @@ class LinuxLilyAudioRouter {
     this.o = { ...DEFAULTS, ...opts };
     this.address = opts.deviceAddress || null;
     this.sinkId = null;
+    this.sinkName = null;
     this.wakeTonePath = path.join(os.tmpdir(), 'lily-wake-tone.wav');
     this.isReal = true;
   }
@@ -163,32 +164,47 @@ class LinuxLilyAudioRouter {
     if (!res.ok) return null;
     const sinksBlock = res.out.split(/Sinks:/i)[1];
     if (!sinksBlock) return null;
-    const lines = sinksBlock.split('\n');
-    for (const line of lines) {
+    const macToken = this.address ? this.address.replace(/:/g, '_').toUpperCase() : null;
+    for (const line of sinksBlock.split('\n')) {
       if (/Sources:|Filters:|Streams:/i.test(line)) break; // end of Sinks block
       const m = line.match(/(\d+)\.\s+(.+?)(\s+\[|$)/);
       if (!m) continue;
-      const name = m[2].trim();
-      const macToken = this.address ? this.address.replace(/:/g, '_') : null;
-      if (name.toLowerCase().includes(this.o.deviceName.toLowerCase()) ||
-          /bluez/i.test(name) ||
-          (macToken && line.includes(macToken))) {
-        return parseInt(m[1], 10);
+      const id = parseInt(m[1], 10);
+      // The friendly name in `wpctl status` is whatever Lily advertises, so
+      // the reliable match is the node name, which BlueZ builds from the MAC
+      // (bluez_output.AA_BB_CC_DD_EE_FF.1). Never grab some other bluez sink.
+      if (macToken) {
+        const name = await this._sinkName(id);
+        if (name && name.toUpperCase().includes(macToken)) return id;
+      } else if (m[2].toLowerCase().includes(this.o.deviceName.toLowerCase())) {
+        return id;
       }
     }
     return null;
   }
 
+  // Resolve the PipeWire node.name for a wpctl id — ffplay targets a sink by
+  // NAME (PULSE_SINK), never by the numeric id, which changes between runs.
+  async _sinkName(id) {
+    const res = await this._wpctl(['inspect', String(id)]);
+    const m = res.ok && res.out.match(/node\.name = "([^"]+)"/);
+    return m ? m[1] : null;
+  }
+
+  // Lily's sink is made the target of LILY'S playback only. It is deliberately
+  // NOT made the system default: the rest of the show plays through the
+  // default output (to the Onkyo), and a set-default here would silently
+  // reroute every skeleton, storm and ambient sound into Lily's speaker.
   async routeAudioOutput() {
     if (this.sinkId === null) await this._waitForSink();
-    const res = await this._wpctl(['set-default', String(this.sinkId)]);
-    if (!res.ok) throw new Error(`wpctl set-default ${this.sinkId} failed: ${res.out.trim()}`);
+    this.sinkName = await this._sinkName(this.sinkId);
+    if (!this.sinkName) throw new Error(`Could not resolve node name for Lily sink ${this.sinkId}`);
     // Unity gain (spec 2.2.4): Lily's jaw appears audio-reactive to loudness
     // through her own speaker — a quiet line level may mean NO jaw movement at
     // all, so 1.0 is a functional requirement to verify, not a nicety.
     const vol = await this._wpctl(['set-volume', String(this.sinkId), '1.0']);
     if (!vol.ok) this.o.log(`set-volume 1.0 failed (${vol.out.trim().slice(0, 80)}) - jaw sync may suffer`);
-    this.o.log(`Default sink -> Lily (id ${this.sinkId}), volume 1.0`);
+    this.o.log(`Lily playback -> ${this.sinkName} (id ${this.sinkId}), volume 1.0; system default untouched`);
   }
 
   async _ensureWakeTone() {
@@ -206,11 +222,27 @@ class LinuxLilyAudioRouter {
   }
 
   _playFile(file) {
+    if (!this.sinkName) return Promise.reject(new Error('Lily audio not routed - connect her speaker first'));
+    // PULSE_SINK pins this one ffplay to Lily's sink via pipewire-pulse.
+    // XDG_RUNTIME_DIR: the systemd service starts without the user session's
+    // runtime dir, and without it ffplay cannot find PipeWire at all.
+    const env = {
+      ...process.env,
+      SDL_AUDIODRIVER: 'pulseaudio',
+      PULSE_SINK: this.sinkName,
+      XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`,
+    };
     return new Promise((resolve, reject) => {
-      const p = spawn(this.o.ffplayBin, ['-nodisp', '-autoexit', '-loglevel', 'error', file]);
+      const p = spawn(this.o.ffplayBin, ['-nodisp', '-autoexit', '-loglevel', 'error', file], { env });
       p.on('error', reject);
       p.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`ffplay exit ${code}`)));
     });
+  }
+
+  // Play an existing audio file through Lily (wake tone first) — test clips.
+  async playFile(file) {
+    if (await this._ensureWakeTone()) await this._playFile(this.wakeTonePath);
+    await this._playFile(file);
   }
 
   async playBuffer(audioBuffer) {
@@ -228,6 +260,7 @@ class LinuxLilyAudioRouter {
     if (!this.address) return;
     await this._bt(['disconnect', this.address]);
     this.sinkId = null;
+    this.sinkName = null;
     this.o.log(`Disconnected ${this.address}`);
   }
 }

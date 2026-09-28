@@ -28,7 +28,12 @@ class MockLily {
     this.firmware = 'mock-1.0';
   }
 
-  async connect() {
+  async scan() {
+    return [{ address: 'AA:BB:CC:DD:EE:FF', name: 'Lily (mock)', rssi: -50, likelyLily: true }];
+  }
+
+  async connect(address) {
+    if (address) this.address = address;
     // Real adapter: scan -> connect -> VERIFY ae00 service present -> subscribe
     // ae02 -> queryVersion (missing reply is non-fatal) -> connected, DISARMED.
     this.connected = true;
@@ -54,6 +59,20 @@ class MockLily {
     }
     this.movement = action;
     this.log(`movement -> ${action}`);
+    return this.snapshot();
+  }
+
+  async probeMovement(rawByte) {
+    this._requireConnected();
+    if (!this.armed && rawByte !== 0) throw new Error('Movement is disarmed — arm motors first');
+    this.movement = rawByte === 0 ? 'none' : `probe:0x${rawByte.toString(16).toUpperCase()}`;
+    this.log(`probe movement -> ${this.movement}`);
+    return this.snapshot();
+  }
+
+  async playMedia(serial) {
+    this._requireConnected();
+    this.log(`play on-prop media file ${serial}`);
     return this.snapshot();
   }
 
@@ -98,6 +117,7 @@ class MockLily {
   snapshot() {
     return {
       driver: 'mock',
+      address: this.address || null,
       connected: this.connected,
       armed: this.armed,
       movement: this.movement,
