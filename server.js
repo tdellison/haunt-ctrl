@@ -39,6 +39,7 @@ function lilySafeStop() {
   // ALL STOP / shutdown / strike down: stop and disarm her motors. Harmless
   // (and silent) when she isn't connected.
   if (lily) lily.arm(false).catch(() => {});
+  try { lilyTalk.stop(); } catch (_) {}   // and stop listening
 }
 
 // ─── Govee Devices ────────────────────────────────────────────────────────────
@@ -1116,6 +1117,7 @@ function getModel(requestType) {
 // #19 — Nightly token budget. Rates are per million tokens; update here if
 // pricing changes.
 const TOKEN_RATES = {
+  'claude-opus-5': { in: 5.00, out: 25.00 },  // Lily's talk loop (lily/talk.js)
   [MODEL_HAIKU]:  { in: 1.00,  out: 5.00  },
   [MODEL_SONNET]: { in: 3.00,  out: 15.00 },
 };
@@ -3550,6 +3552,36 @@ lily = require('./lily').createLily({
 });
 settings.lilyEnabled = lily.enabled;
 
+// ─── API keys (secrets.json, gitignored — never in the repo) ──────────────────
+const SECRETS_FILE = path.join(__dirname, 'secrets.json');
+let secrets = {};
+try { secrets = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8')); } catch (_) {}
+const anthropicKey = () => process.env.ANTHROPIC_API_KEY || secrets.anthropicApiKey || null;
+app.get('/api/secrets', (req, res) => res.json({
+  ok: true, anthropic: !!anthropicKey(), elevenlabs: !!(process.env.ELEVENLABS_API_KEY || secrets.elevenLabsApiKey),
+}));
+app.post('/api/secrets', (req, res) => {
+  const { anthropicApiKey, elevenLabsApiKey } = req.body || {};
+  if (typeof anthropicApiKey === 'string' && anthropicApiKey.trim()) secrets.anthropicApiKey = anthropicApiKey.trim();
+  if (typeof elevenLabsApiKey === 'string' && elevenLabsApiKey.trim()) secrets.elevenLabsApiKey = elevenLabsApiKey.trim();
+  try { fs.writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), { mode: 0o600 }); }
+  catch (e) { return res.status(500).json({ error: e.message }); }
+  broadcastLog('API keys saved', 'SYSTEM');
+  res.json({ ok: true, anthropic: !!anthropicKey(), elevenlabs: !!secrets.elevenLabsApiKey });
+});
+
+// Lily conversation: hear a guest, answer with one of her own stored clips.
+const lilyTalk = require('./lily/talk').createTalk({
+  lily,
+  log: (m) => broadcastLog(`Lily talk: ${m}`, 'SYSTEM'),
+  logDialogue,
+  micsMuted,
+  getApiKey: anthropicKey,
+  trackTokens,
+  guardrail: GUARDRAIL_UNMARKED_GRAVE,
+  onChange: () => broadcast({ type: 'lilyTalk', data: lilyTalk.status() }),
+});
+
 const lilyRoute = (fn) => async (req, res) => {
   try { res.json({ ok: true, lily: await fn(req.body || {}) }); }
   catch (e) { broadcastLog(`Lily: ${e.message}`, 'SYSTEM'); res.status(409).json({ ok: false, error: e.message }); }
@@ -3560,6 +3592,23 @@ const intIn = (v, name, min, max) => {
   return n;
 };
 
+app.get('/api/lily/talk', async (req, res) => res.json({
+  ok: true, talk: lilyTalk.status(), clips: lilyTalk.clips(), sources: await lilyTalk.listSources(),
+}));
+app.post('/api/lily/talk/start',   lilyRoute(async ({ source }) => lilyTalk.start(source)));
+app.post('/api/lily/talk/stop',    lilyRoute(async () => lilyTalk.stop()));
+app.post('/api/lily/talk/say',     lilyRoute(async ({ text }) => lilyTalk.say(text)));
+app.post('/api/lily/talk/reset',   lilyRoute(async () => lilyTalk.resetConversation()));
+app.post('/api/lily/talk/clip',    lilyRoute(async ({ serial, text }) => lilyTalk.setClipText(Number(serial), text)));
+app.post('/api/lily/talk/catalog', async (req, res) => {
+  const { from = 1, to = 60, source } = req.body || {};
+  try {
+    lilyTalk.buildCatalog({ from: Number(from), to: Number(to), source })
+      .then(r => broadcastLog(`Lily talk: catalog done — ${r.found} clips`, 'SYSTEM'))
+      .catch(e => broadcastLog(`Lily talk: catalog failed — ${e.message}`, 'SYSTEM'));
+    res.json({ ok: true, started: true });
+  } catch (e) { res.status(409).json({ ok: false, error: e.message }); }
+});
 app.get('/api/lily/status', (req, res) => res.json({ ok: true, lily: lily.status(), probeValues: lily.probeValues() }));
 app.post('/api/lily/enabled', lilyRoute(async ({ enabled }) => lily.setEnabled(enabled)));
 app.post('/api/lily/scan', async (req, res) => {

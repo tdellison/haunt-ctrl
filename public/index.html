@@ -1089,6 +1089,31 @@ body::before { animation:scanlines 10s linear infinite; }
       <label style="font-size:.72em;color:var(--dim2)">Prop vol</label>
       <input type="range" id="lily-vol" min="0" max="100" value="100" style="width:110px" onchange="api('/api/lily/volume',{volume:+this.value})"/>
     </div>
+
+    <div class="panel-title" style="font-size:.8em;margin-top:10px">Talk to Lily (her own voice)</div>
+    <div class="info-row"><span class="info-key">Talk</span><span class="info-val" id="talk-status">—</span></div>
+    <div class="info-row"><span class="info-key">Heard</span><span class="info-val" id="talk-heard">—</span></div>
+    <div class="info-row"><span class="info-key">Answered</span><span class="info-val" id="talk-reply">—</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <label style="font-size:.72em;color:var(--dim2)">Mic</label>
+      <select id="talk-mic" class="raw-input" style="flex:1;min-width:180px"></select>
+      <button class="btn btn-green btn-sm" onclick="talkStart()">🎤 START LISTENING</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/talk/stop')">■ STOP</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input class="raw-input" id="talk-text" placeholder="…or type what a guest says" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')talkSay()"/>
+      <button class="btn btn-purple btn-sm" onclick="talkSay()">SAY</button>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/lily/talk/reset')">NEW GUEST</button>
+    </div>
+    <div style="font-size:.72em;color:var(--dim2);margin-bottom:6px">Catalog: plays each of her built-in clips and writes down what she says. Put the mic right next to her, keep the room quiet.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <label style="font-size:.72em;color:var(--dim2)">Clips</label>
+      <input class="raw-input" id="cat-from" value="1" style="width:56px"/>
+      <label style="font-size:.72em;color:var(--dim2)">to</label>
+      <input class="raw-input" id="cat-to" value="60" style="width:56px"/>
+      <button class="btn btn-amber btn-sm" onclick="talkCatalog()">📜 BUILD CATALOG</button>
+    </div>
+    <div id="talk-clips" style="font-size:.76em;font-family:'Courier New',monospace;max-height:260px;overflow:auto"></div>
   </div>
 
   <!-- Audio -->
@@ -1250,6 +1275,18 @@ body::before { animation:scanlines 10s linear infinite; }
 
 <!-- ─── SETUP ─── -->
 <div class="pane" id="pane-setup">
+
+  <!-- API keys -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🔑</span>API Keys</div>
+    <div class="info-row"><span class="info-key">Stored</span><span class="info-val" id="keys-status">—</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <input class="raw-input" type="password" id="key-anthropic" placeholder="Anthropic (Claude) key" style="flex:1;min-width:180px" autocomplete="off"/>
+      <input class="raw-input" type="password" id="key-eleven" placeholder="ElevenLabs key" style="flex:1;min-width:180px" autocomplete="off"/>
+      <button class="btn btn-green btn-sm" onclick="saveKeys()">💾 SAVE KEYS</button>
+    </div>
+    <div style="font-size:.72em;color:var(--dim2);margin-top:6px">Saved only on this server (secrets.json) — never shown again or sent to GitHub.</div>
+  </div>
 
   <!-- Audio zones -->
   <div class="panel">
@@ -1428,6 +1465,7 @@ function connectWS() {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'state')    applyState(msg.data);
+        if (msg.type === 'lilyTalk') { renderTalk(msg.data); if (!msg.data.cataloging && msg.data.phase !== 'thinking') talkLoad(); }
         if (msg.type === 'config')   applyConfig(msg.data);
         if (msg.type === 'log')      appendLog(msg.msg, msg.category);
         if (msg.type === 'govee')    applyGovee(msg.data);
@@ -1624,6 +1662,69 @@ async function saveZones() {
   if (r?.ok) loadZones();
 }
 loadZones();
+
+// ── Lily talk + API keys ──────────────────────────────────────────────────────
+function renderTalk(t) {
+  if (!t) return;
+  const cat = t.cataloging ? ` · cataloging clip ${t.cataloging.at} (${t.cataloging.found} found)` : '';
+  document.getElementById('talk-status').textContent =
+    `${t.phase}${t.listening ? ' (mic on)' : ''} · ${t.clips} clips · ${t.hasKey ? 'key ok' : 'NO API KEY'}${cat}` +
+    (t.lastError ? ` — ${t.lastError}` : '');
+  document.getElementById('talk-heard').textContent = t.lastHeard || '—';
+  const r = t.lastReply;
+  document.getElementById('talk-reply').textContent = r ? `#${r.clip} "${r.text}"${r.lantern ? ` · ${r.lantern}` : ''}${r.move ? ` · ${r.move}` : ''}` : '—';
+}
+async function talkLoad() {
+  const r = await apiGet('/api/lily/talk');
+  if (!r?.ok) return;
+  renderTalk(r.talk);
+  const sel = document.getElementById('talk-mic');
+  const cur = sel.value;
+  sel.innerHTML = '';
+  r.sources.forEach(s => { const o = document.createElement('option'); o.value = s.name; o.textContent = s.description; sel.appendChild(o); });
+  if (cur) sel.value = cur;
+  const box = document.getElementById('talk-clips');
+  box.innerHTML = '';
+  r.clips.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'info-row';
+    const play = document.createElement('button');
+    play.className = 'btn btn-purple btn-sm'; play.textContent = '▶ ' + c.serial;
+    play.onclick = () => api('/api/lily/media', { serial: c.serial });
+    const txt = document.createElement('span');
+    txt.className = 'info-val'; txt.style.cursor = 'pointer'; txt.title = 'tap to correct the words';
+    txt.textContent = `${c.text} (${((c.durationMs || 0) / 1000).toFixed(1)}s)`;
+    txt.onclick = async () => {
+      const t = prompt(`What does clip ${c.serial} say?`, c.text);
+      if (t != null) { await api('/api/lily/talk/clip', { serial: c.serial, text: t }); talkLoad(); }
+    };
+    row.append(play, txt);
+    box.appendChild(row);
+  });
+}
+function talkStart() { api('/api/lily/talk/start', { source: document.getElementById('talk-mic').value || undefined }); }
+function talkSay() {
+  const el = document.getElementById('talk-text');
+  const text = el.value.trim();
+  if (text) { api('/api/lily/talk/say', { text }); el.value = ''; }
+}
+function talkCatalog() {
+  api('/api/lily/talk/catalog', {
+    from: +document.getElementById('cat-from').value || 1, to: +document.getElementById('cat-to').value || 60,
+    source: document.getElementById('talk-mic').value || undefined,
+  });
+}
+async function keysLoad() {
+  const r = await apiGet('/api/secrets');
+  if (r?.ok) document.getElementById('keys-status').textContent = `Claude: ${r.anthropic ? 'saved' : 'missing'} · ElevenLabs: ${r.elevenlabs ? 'saved' : 'missing'}`;
+}
+async function saveKeys() {
+  const a = document.getElementById('key-anthropic'), e = document.getElementById('key-eleven');
+  await api('/api/secrets', { anthropicApiKey: a.value, elevenLabsApiKey: e.value });
+  a.value = ''; e.value = '';
+  keysLoad(); talkLoad();
+}
+talkLoad(); keysLoad();
 
 // ── State sync ────────────────────────────────────────────────────────────────
 function applyState(s) {
