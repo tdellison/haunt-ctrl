@@ -2678,8 +2678,9 @@ async function fireWitch(clip, spellKey) {
 //                        ffplay has no device-select option at all.
 //   'mpv'              - same speed, and the only one of the two that can pick
 //                        an output device (AUDIO_DEVICES below).
-// Today the Onkyo does the zone splitting and the Dell has a single output, so
-// ffplay is the right default and AUDIO_DEVICES stays empty.
+// The Onkyo does NOT split zones: it picks ONE input per zone and cannot pull
+// separate zones out of one mixed feed. Zone isolation therefore needs one
+// computer output per zone - see "Per-zone output routing" below (Linux).
 // Windows (the Dell) uses pinned install paths; Linux (the OptiPlex) uses the
 // distro packages. One file runs on both - never hardcode one OS's paths.
 const IS_WINDOWS = process.platform === 'win32';
@@ -2693,13 +2694,139 @@ const PLAYER = { kind: 'ffplay' };
 // replace the receiver's zone routing. Empty = use the default device.
 const AUDIO_DEVICES = { z1: null, z2: null, z3: null };
 
+// ─── Per-zone output routing (Linux) ──────────────────────────────────────────
+// Each zone has its own USB audio cable into its own Onkyo analog input:
+//   z1 skeletons -> PC      z2 graveyard -> CBL/SAT      z3 witches -> GAME
+// and each Onkyo zone is set to that input. Every sound is then played to its
+// zone's cable, so skeletons, graveyard and witches never bleed into each
+// other; zone volumes/ducking keep going through the Onkyo exactly as before.
+//
+// audio-zones.json (per machine, gitignored) maps zone -> 'port:<USB bus path>'
+// or an exact PipeWire node name. Port binding is the default because
+// identical cables report identical serials - the USB PORT is what tells them
+// apart, so each cable must stay in its labelled port.
+//
+// A zone with no mapping, or whose cable is unplugged, falls back to the
+// default output - the old single-cable behaviour - with a log line, so a
+// missing cable is loud in the log but never silences the show.
+// zone 'all' (storm, Grand Ritual) plays to every mapped zone at once.
+const ROUTED_ZONES = ['z1', 'z2', 'z3'];
+const ZONE_ROUTING_FILE = path.join(__dirname, 'audio-zones.json');
+let zoneRouting = { z1: null, z2: null, z3: null };
+let audioSinks = [];            // [{ name, description, busPath }] from pw-dump
+const zoneFallbackWarned = {};
+
+function loadZoneRouting() {
+  try { zoneRouting = { ...zoneRouting, ...JSON.parse(fs.readFileSync(ZONE_ROUTING_FILE, 'utf8')) }; } catch (_) {}
+}
+function saveZoneRouting() {
+  try { fs.writeFileSync(ZONE_ROUTING_FILE, JSON.stringify(zoneRouting, null, 2)); } catch (e) {
+    console.error(`[AUDIO] could not save ${ZONE_ROUTING_FILE}: ${e.message}`);
+  }
+}
+
+// The systemd service may start without the user session's runtime dir, and
+// without it ffplay/pw-dump cannot find PipeWire at all.
+const AUDIO_ENV = IS_WINDOWS ? process.env : {
+  ...process.env,
+  XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`,
+};
+
+function refreshAudioSinks() {
+  if (IS_WINDOWS) return Promise.resolve(audioSinks);
+  return new Promise((resolve) => {
+    require('child_process').execFile('pw-dump', [], { env: AUDIO_ENV, maxBuffer: 16 * 1024 * 1024, timeout: 5000 }, (err, out) => {
+      if (err) return resolve(audioSinks);
+      try {
+        const objs = JSON.parse(out);
+        const devices = {};
+        for (const o of objs) if (o.type === 'PipeWire:Interface:Device') devices[o.id] = o.info?.props || {};
+        audioSinks = objs
+          .filter(o => o.info?.props?.['media.class'] === 'Audio/Sink')
+          .map(o => {
+            const p = o.info.props;
+            return {
+              name: p['node.name'],
+              description: p['node.description'] || p['node.name'],
+              busPath: (devices[p['device.id']] || {})['device.bus-path'] || null,
+            };
+          });
+      } catch (_) {}
+      resolve(audioSinks);
+    });
+  });
+}
+
+// zone -> PipeWire node name, or null (= default output).
+function zoneSinkName(zone) {
+  const want = zoneRouting[zone];
+  if (!want) return null;
+  const sink = want.startsWith('port:')
+    ? audioSinks.find(s => s.busPath === want.slice(5))
+    : audioSinks.find(s => s.name === want);
+  return sink ? sink.name : null;
+}
+
+function playerEnv(zone) {
+  if (IS_WINDOWS || !zone) return AUDIO_ENV;
+  const sink = zoneSinkName(zone);
+  if (!sink) {
+    if (zoneRouting[zone] && !zoneFallbackWarned[zone]) {
+      zoneFallbackWarned[zone] = true;
+      broadcastLog(`Audio: ${zone} cable (${zoneRouting[zone]}) not found - using default output`, 'SYSTEM');
+    }
+    return AUDIO_ENV;
+  }
+  zoneFallbackWarned[zone] = false;
+  // PULSE_SINK pins this one ffplay to the zone's cable via pipewire-pulse.
+  return { ...AUDIO_ENV, SDL_AUDIODRIVER: 'pulseaudio', PULSE_SINK: sink };
+}
+
+// Several player processes behind one ChildProcess-shaped handle, so the
+// storm/ritual call sites keep their single kill()/on('exit') bookkeeping.
+class MultiPlayer extends require('events').EventEmitter {
+  constructor(procs) {
+    super();
+    this.procs = procs;
+    this.pid = procs[0].pid;
+    this.stderr = procs[0].stderr;
+    let left = procs.length;
+    let errored = false;
+    for (const p of procs) {
+      p.on('exit', (code) => { if (--left === 0) this.emit('exit', code); });
+      p.on('error', (e) => { if (!errored) { errored = true; this.emit('error', e); } });
+    }
+  }
+  kill() { for (const p of this.procs) { try { p.kill(); } catch (_) {} } }
+  unref() { for (const p of this.procs) p.unref(); }
+}
+
+// THE way to start a player: resolves the zone to its cable. zone 'all' fans
+// out to every distinct mapped cable (one process each, started together).
+function spawnPlayer(file, { loop = false, zone = null, lavfi = false } = {}, opts = {}) {
+  if (zone === 'all' && !IS_WINDOWS && PLAYER.kind === 'ffplay') {
+    const sinks = [...new Set(ROUTED_ZONES.map(zoneSinkName).filter(Boolean))];
+    if (sinks.length > 1) {
+      return new MultiPlayer(sinks.map(sink => spawn(playerBin(), playerArgs(file, { loop, lavfi }), {
+        ...opts, env: { ...AUDIO_ENV, SDL_AUDIODRIVER: 'pulseaudio', PULSE_SINK: sink },
+      })));
+    }
+    zone = null;
+  }
+  return spawn(playerBin(), playerArgs(file, { loop, zone, lavfi }), { ...opts, env: playerEnv(zone) });
+}
+
+loadZoneRouting();
+refreshAudioSinks();
+if (!IS_WINDOWS) setInterval(refreshAudioSinks, 15000);
+
 function playerBin() {
   return PLAYER.kind === 'mpv' ? MPV_PATH : FFPLAY_PATH;
 }
 
 // One place that knows each player's flags, so call sites just say what they
 // want rather than repeating argument lists that drift apart.
-function playerArgs(file, { loop = false, zone = null } = {}) {
+function playerArgs(file, { loop = false, zone = null, lavfi = false } = {}) {
   if (PLAYER.kind === 'mpv') {
     const args = ['--no-video', '--really-quiet', `--loop-file=${loop ? 'inf' : 'no'}`];
     const dev = zone && AUDIO_DEVICES[zone];
@@ -2710,6 +2837,7 @@ function playerArgs(file, { loop = false, zone = null } = {}) {
   // ffplay: -nodisp so no window, -autoexit so one-shots end on their own.
   const args = ['-nodisp', '-autoexit', '-loglevel', 'error'];
   if (loop) args.push('-loop', '0');
+  if (lavfi) args.push('-f', 'lavfi');   // generated source (test tones), not a file
   args.push(file);
   return args;
 }
@@ -2940,7 +3068,7 @@ function playHauntSound(filename) {
   if (!filename) return false;
   if (soundProcess) { try { soundProcess.kill(); } catch (_) {} soundProcess = null; }
   try {
-    soundProcess = spawn(playerBin(), playerArgs(path.join(HAUNT_SOUNDS_DIR, filename), { zone: 'z2' }),
+    soundProcess = spawnPlayer(path.join(HAUNT_SOUNDS_DIR, filename), { zone: 'z2' },
       { detached: true, stdio: 'ignore' });
     soundProcess.unref();
     soundProcess.on('exit', () => { soundProcess = null; });
@@ -3075,7 +3203,7 @@ function speakBlackoutLine(line) {
       // Not killing the previous line: each is ~1s with a 5s gap, so they never
       // overlap, and killing was what clipped them back when VLC's slow start
       // meant a line was still warming up when the next one arrived.
-      soundProcess = spawn(playerBin(), playerArgs(path.join(AUDIO_CACHE_DIR, file), { zone: line.zone }),
+      soundProcess = spawnPlayer(path.join(AUDIO_CACHE_DIR, file), { zone: line.zone },
         { detached: true, stdio: 'ignore' });
       soundProcess.unref();
       soundProcess.on('exit',  () => { soundProcess = null; });
@@ -3219,7 +3347,7 @@ function playStormFile(file) {
     isOverhead ? 'overhead strike' : 'storm clip'
   );
   broadcastLog(`Storm clip: ${file}`, 'AUDIO');
-  stormProcess = spawn(playerBin(), playerArgs(path.join(STORM_DIR, file)),
+  stormProcess = spawnPlayer(path.join(STORM_DIR, file), { zone: 'all' },
     { detached: true, stdio: ['ignore','ignore','pipe'] });
   stormProcess.unref();
   stormProcess.stderr?.on('data', d => console.error('[VLC-STORM]', d.toString().trim()));
@@ -3241,7 +3369,7 @@ function startAmbientLoop() {
   if (ambientProcess) return;
   ambientShouldRun = true;
   broadcastLog('Ambient loop started', 'AUDIO');
-  ambientProcess = spawn(playerBin(), playerArgs(path.join(AMBIENT_DIR, AMBIENT_FILE), { loop: true }),
+  ambientProcess = spawnPlayer(path.join(AMBIENT_DIR, AMBIENT_FILE), { loop: true, zone: 'z2' },
     { stdio: 'ignore' });
   ambientProcess.on('exit', (code) => {
     ambientProcess = null;
@@ -3297,7 +3425,7 @@ function playWitchClip(clip) {
   const key  = WITCH_MAP[clip] ? clip : keys[Math.floor(Math.random() * keys.length)];
   if (witchProcess) { try { witchProcess.kill(); } catch (_) {} witchProcess = null; }
   broadcastLog(`Witch clip: ${key}`, 'WITCH');
-  witchProcess = spawn(playerBin(), playerArgs(path.join(WITCH_DIR, WITCH_MAP[key]), { zone: 'z3' }),
+  witchProcess = spawnPlayer(path.join(WITCH_DIR, WITCH_MAP[key]), { zone: 'z3' },
     { detached: true, stdio: 'ignore' });
   witchProcess.unref();
   witchProcess.on('exit', () => { witchProcess = null; });
@@ -3325,7 +3453,7 @@ function fireWitchSide(side) {
   if (!filename) return false;
   if (witchSideProcess) { try { witchSideProcess.kill(); } catch (_) {} witchSideProcess = null; }
   broadcastLog(`Witch ${side === 'left' ? 'MAIN (left)' : '2 (right)'} triggered`, 'WITCH');
-  witchSideProcess = spawn(playerBin(), playerArgs(path.join(WITCH_DIR, filename), { zone: 'z3' }),
+  witchSideProcess = spawnPlayer(path.join(WITCH_DIR, filename), { zone: 'z3' },
     { detached: true, stdio: 'ignore' });
   witchSideProcess.unref();
   witchSideProcess.on('exit', () => { witchSideProcess = null; });
@@ -3337,7 +3465,7 @@ function fireSkeleton(side) {
   if (!filename) return false;
   if (skeletonProcess) { try { skeletonProcess.kill(); } catch (_) {} skeletonProcess = null; }
   broadcastLog(`Skeleton ${side} triggered`, 'AUDIO');
-  skeletonProcess = spawn(playerBin(), playerArgs(path.join(SKELETON_DIR, filename), { zone: 'z1' }),
+  skeletonProcess = spawnPlayer(path.join(SKELETON_DIR, filename), { zone: 'z1' },
     { detached: true, stdio: 'ignore' });
   skeletonProcess.unref();
   skeletonProcess.on('exit', () => { skeletonProcess = null; });
@@ -3373,6 +3501,44 @@ const SCENES = {
 };
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+
+// ─── Audio zone routing ───────────────────────────────────────────────────────
+// Setup for the per-zone cables (see "Per-zone output routing"). Values are
+// 'port:<bus path>', an exact sink node name, or null for the default output.
+function zoneRoutingSnapshot() {
+  const zones = {};
+  for (const z of ROUTED_ZONES) zones[z] = { mapped: zoneRouting[z], sink: zoneSinkName(z) };
+  return { zones, sinks: audioSinks };
+}
+app.get('/api/audio/zones', async (req, res) => {
+  await refreshAudioSinks();
+  res.json({ ok: true, ...zoneRoutingSnapshot() });
+});
+app.post('/api/audio/zones', async (req, res) => {
+  for (const z of ROUTED_ZONES) {
+    if (req.body[z] === undefined) continue;
+    const v = req.body[z];
+    if (v !== null && (typeof v !== 'string' || !v.trim())) return res.status(400).json({ error: `${z}: bad value` });
+    zoneRouting[z] = v ? v.trim() : null;
+    zoneFallbackWarned[z] = false;
+  }
+  saveZoneRouting();
+  await refreshAudioSinks();
+  const snap = zoneRoutingSnapshot();
+  broadcastLog(`Audio zones: ${ROUTED_ZONES.map(z => `${z}=${snap.zones[z].sink || 'default'}`).join(' ')}`, 'SYSTEM');
+  res.json({ ok: true, ...snap });
+});
+// A 2-second tone to one zone (or 'all') — a different pitch per zone, so
+// "which speakers did that come out of" is answerable by ear.
+const ZONE_TEST_HZ = { z1: 440, z2: 330, z3: 550, all: 660 };
+app.post('/api/audio/zones/test', (req, res) => {
+  const zone = req.body.zone;
+  if (!ZONE_TEST_HZ[zone]) return res.status(400).json({ error: 'zone must be z1/z2/z3/all' });
+  const src = `sine=f=${ZONE_TEST_HZ[zone]}:d=2`;
+  spawnPlayer(src, { zone, lavfi: true }, { stdio: 'ignore' });
+  broadcastLog(`Audio: test tone -> ${zone} (${zone === 'all' ? 'every zone' : zoneSinkName(zone) || 'default output'})`, 'SYSTEM');
+  res.json({ ok: true });
+});
 
 // ─── Lily (Lethal Lily) ───────────────────────────────────────────────────────
 // All of her lives in lily/. These routes are the Test tab's handle on her;

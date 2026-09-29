@@ -1251,6 +1251,18 @@ body::before { animation:scanlines 10s linear infinite; }
 <!-- ─── SETUP ─── -->
 <div class="pane" id="pane-setup">
 
+  <!-- Audio zones -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🔈</span>Audio Zones (one cable per zone)</div>
+    <div style="font-size:.72em;color:var(--dim2);margin-bottom:8px">Pick the USB cable feeding each Onkyo zone. Each cable must stay in its labelled USB port. TEST plays a tone to that zone only.</div>
+    <div id="zone-rows"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-green btn-sm" onclick="saveZones()">💾 SAVE</button>
+      <button class="btn btn-blue btn-sm" onclick="loadZones()">↻ RESCAN CABLES</button>
+      <button class="btn btn-purple btn-sm" onclick="api('/api/audio/zones/test',{zone:'all'})">🔊 TEST ALL</button>
+    </div>
+  </div>
+
   <!-- Receiver -->
   <div class="panel">
     <div class="panel-title"><span class="pt-icon">📻</span>TX-NR838 Receiver</div>
@@ -1572,6 +1584,46 @@ function lilyAudio(pair) {
   api('/api/lily/audio/connect', { ...(address ? { address } : {}), pair });
 }
 lilyInit();
+
+// ── Audio zones ───────────────────────────────────────────────────────────────
+const ZONE_LABELS = { z1: 'Z1 Skeletons (PC)', z2: 'Z2 Graveyard (CBL/SAT)', z3: 'Z3 Witches (GAME)' };
+async function loadZones() {
+  const r = await apiGet('/api/audio/zones');
+  if (!r?.ok) return;
+  const box = document.getElementById('zone-rows');
+  box.innerHTML = '';
+  Object.keys(ZONE_LABELS).forEach(z => {
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px';
+    const label = document.createElement('label');
+    label.textContent = ZONE_LABELS[z];
+    label.style.minWidth = '170px';
+    const sel = document.createElement('select');
+    sel.id = 'zone-' + z;
+    sel.className = 'raw-input';
+    sel.style.cssText = 'flex:1;min-width:180px';
+    const opts = [{ v: '', t: 'Default output (no cable picked)' }]
+      .concat(r.sinks.filter(k => k.busPath).map(k => ({ v: 'port:' + k.busPath, t: `${k.description} — USB ${k.busPath.split('-usb-')[1] || k.busPath}` })));
+    const cur = r.zones[z].mapped || '';
+    if (cur && !opts.some(o => o.v === cur)) opts.push({ v: cur, t: `${cur} (NOT PLUGGED IN)` });
+    opts.forEach(o => { const e = document.createElement('option'); e.value = o.v; e.textContent = o.t; sel.appendChild(e); });
+    sel.value = cur;
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-purple btn-sm';
+    btn.textContent = 'TEST';
+    btn.onclick = () => api('/api/audio/zones/test', { zone: z });
+    row.append(label, sel, btn);
+    box.appendChild(row);
+  });
+}
+async function saveZones() {
+  const body = {};
+  Object.keys(ZONE_LABELS).forEach(z => { body[z] = document.getElementById('zone-' + z).value || null; });
+  const r = await api('/api/audio/zones', body);
+  if (r?.ok) loadZones();
+}
+loadZones();
 
 // ── State sync ────────────────────────────────────────────────────────────────
 function applyState(s) {
