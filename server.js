@@ -2952,7 +2952,7 @@ setInterval(backupTranscripts, TRANSCRIPT_BACKUP_MS);
 //               scripted | sensor | warden | cross_character
 //   context   — what prompted it (host note, guest speech, beat name), or null
 //   extra     — anything else worth keeping with this entry
-function logDialogue({ character, line, trigger = 'unknown', context = null, extra = null }) {
+function logDialogue({ character, line, trigger = 'unknown', context = null, extra = null, engine = null }) {
   const id = String(character || '').toLowerCase();
   if (!line) return null;
   const now = Date.now();
@@ -2963,6 +2963,7 @@ function logDialogue({ character, line, trigger = 'unknown', context = null, ext
     character: id,
     line: String(line),
     trigger,
+    engine: engine || null,   // 'claude' | 'llama' | null (scripted / pre-recorded)
     context: context || null,
     stormStage: { index: strikeIndex, name: stage.name || null },
     pir: pirActivity(now),
@@ -3551,6 +3552,45 @@ lily = require('./lily').createLily({
   onChange: () => { settings.lilyEnabled = lily.enabled; broadcastState(); },
 });
 settings.lilyEnabled = lily.enabled;
+
+// ─── AI engines: Claude / Llama routing + Llama skeleton lines ────────────────
+// Fixed-rule routing (ai/router.js). Llama writes Jasper/Edgar: a pre-written
+// line bank for storm events/banter/muttering (instant), and reactions to the
+// witches and Lily started the moment her line is known. See ai/skeletons.js.
+const { resolveEngine, ROUTES } = require('./ai/router');
+const llama = require('./ai/llama').createLlama({ log: (m) => broadcastLog(m, 'SYSTEM') });
+const skeletonLines = require('./ai/skeletons').createSkeletonLines({
+  llama,
+  bible: CHARACTER_BIBLE,
+  guardrail: GUARDRAIL_UNMARKED_GRAVE,
+  getStage: () => (STRIKE_SEQUENCE[strikeIndex] || STRIKE_SEQUENCE[0]).name,
+  stageNames: STRIKE_SEQUENCE.map(st => st.name),
+  log: (m) => broadcastLog(`Llama: ${m}`, 'SYSTEM'),
+});
+if (!IS_WINDOWS) {
+  llama.warm().then(ok => { if (ok) skeletonLines.refill(); });
+  setInterval(() => { if (llama.status().ready) skeletonLines.refill(); }, 15000);
+}
+const aiRoute = (fn) => async (req, res) => {
+  try { res.json({ ok: true, ...(await fn(req.body || {}, req)) }); }
+  catch (e) { res.status(409).json({ ok: false, error: e.message }); }
+};
+app.get('/api/ai/status', (req, res) => res.json({
+  ok: true, llama: llama.status(), bank: skeletonLines.status(), routes: ROUTES,
+}));
+app.get('/api/ai/engine', (req, res) => res.json({ ok: true, engine: resolveEngine(req.query.character, req.query.trigger) }));
+app.get('/api/ai/prompt', (req, res) => res.json({ ok: true, prompt: skeletonLines.systemPrompt(String(req.query.character || 'jasper')) || null }));
+// Test/one-off line (waits on Llama — NOT for live beats; those use take/react).
+app.post('/api/ai/line', aiRoute(async ({ character = 'jasper', kind, stage, event }) =>
+  ({ result: await skeletonLines.line({ character, kind, stage, event }) })));
+// Instant pre-written line, or null when the bank is empty.
+app.post('/api/ai/take', aiRoute(async ({ character = 'jasper', kind = 'banter' }) =>
+  ({ result: skeletonLines.take({ character, kind }) })));
+// A skeleton's answer to a witch/Lily line that is about to play.
+app.post('/api/ai/react', aiRoute(async ({ to = 'evelina', line, stage, character }) => {
+  if (!line) throw new Error('line required');
+  return { result: await skeletonLines.react({ to, line, stage, character }) };
+}));
 
 // ─── API keys (secrets.json, gitignored — never in the repo) ──────────────────
 const SECRETS_FILE = path.join(__dirname, 'secrets.json');

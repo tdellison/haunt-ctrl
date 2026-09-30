@@ -1030,6 +1030,25 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
   </div>
 
+  <!-- Skeleton lines (Llama) -->
+  <div class="panel" id="llama-panel">
+    <div class="panel-title"><span class="pt-icon">🦙</span>Skeleton Lines (Llama)</div>
+    <div class="info-row"><span class="info-key">Llama</span><span class="info-val" id="llama-status">—</span></div>
+    <div class="info-row"><span class="info-key">Ready lines</span><span class="info-val" id="llama-bank">—</span></div>
+    <div class="info-row"><span class="info-key">Result</span><span class="info-val" id="llama-out">—</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <select id="llama-char" class="raw-input" style="width:100px"><option>jasper</option><option>edgar</option></select>
+      <select id="llama-kind" class="raw-input" style="width:130px"><option>thunder</option><option>lightning</option><option>fog</option><option>banter</option><option>quiet_mutter</option></select>
+      <button class="btn btn-green btn-sm" onclick="llamaTake()">⚡ INSTANT LINE</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="llama-to" class="raw-input" style="width:100px"><option>evelina</option><option>lily</option><option>lenora</option></select>
+      <input class="raw-input" id="llama-line" placeholder="what she says…" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')llamaReact()"/>
+      <select id="llama-stage" class="raw-input" style="width:140px"><option>Distant</option><option>Building</option><option>Active</option><option>Grand Ritual</option><option>Calm After Storm</option></select>
+      <button class="btn btn-purple btn-sm" onclick="llamaReact()">💬 SKELETON REACTS</button>
+    </div>
+  </div>
+
   <!-- Lily -->
   <div class="panel" id="lily-panel">
     <div class="panel-title"><span class="pt-icon">🏮</span>Lily</div>
@@ -1725,6 +1744,35 @@ async function saveKeys() {
   keysLoad(); talkLoad();
 }
 talkLoad(); keysLoad();
+
+// ── Skeleton lines (Llama) ────────────────────────────────────────────────────
+async function llamaLoad() {
+  const r = await apiGet('/api/ai/status');
+  if (!r?.ok) return;
+  const l = r.llama;
+  document.getElementById('llama-status').textContent =
+    `${l.ready ? 'ready' : 'NOT READY'} · ${l.model} · avg ${l.avgMs ? (l.avgMs / 1000).toFixed(1) + 's' : '—'}${l.busy ? ' · writing' : ''}${l.lastError ? ' — ' + l.lastError : ''}`;
+  const c = r.bank.counts;
+  document.getElementById('llama-bank').textContent = `${r.bank.stage}: ` +
+    Object.keys(c).map(id => `${id} ` + Object.values(c[id]).reduce((a, b) => a + b, 0) + `/${Object.keys(c[id]).length * r.bank.perSlot}`).join(' · ');
+}
+async function llamaTake() {
+  const t0 = performance.now();
+  const r = await api('/api/ai/take', { character: document.getElementById('llama-char').value, kind: document.getElementById('llama-kind').value });
+  const ms = Math.round(performance.now() - t0);
+  document.getElementById('llama-out').textContent = r?.result ? `${r.result.character} (${ms} ms): ${r.result.line}` : `none ready yet (${ms} ms) — the bank is still writing`;
+  llamaLoad();
+}
+async function llamaReact() {
+  const line = document.getElementById('llama-line').value.trim();
+  if (!line) return;
+  document.getElementById('llama-out').textContent = 'writing…';
+  const r = await api('/api/ai/react', { to: document.getElementById('llama-to').value, line, stage: document.getElementById('llama-stage').value });
+  document.getElementById('llama-out').textContent = r?.result
+    ? `${r.result.character} (${(r.result.ms / 1000).toFixed(1)} s): ${r.result.line || '… (stays silent)'}` : (r?.error || 'failed');
+  llamaLoad();
+}
+llamaLoad(); setInterval(llamaLoad, 10000);
 
 // ── State sync ────────────────────────────────────────────────────────────────
 function applyState(s) {
