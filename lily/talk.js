@@ -1,15 +1,18 @@
 // ─── Lily talk — hear a guest, answer with one of HER OWN built-in clips ──────
 //
-// Lily speaks only in her factory voice: the sound files stored on the prop,
-// played over BLE (playMedia). No TTS. The loop is:
+// Two voice modes (switchable, persisted in lily-talk.json):
+//
+//   'voice' (default) — Claude WRITES her line, ElevenLabs speaks it in her
+//     designed voice (voices.json "lily"), played through HER speaker over
+//     Classic BT; falls back to the witch zone (z3) when her speaker isn't
+//     connected, so a test is never silent.
+//   'clips' — she answers only with the sound files stored on the prop,
+//     played over BLE (playMedia); Claude picks the clip from the catalog
+//     (lily/clips.json), built by buildCatalog(): play each serial, record her
+//     speaker, transcribe. She can never "say" a line she doesn't have.
 //
 //   mic (ffmpeg, pulse) -> energy VAD -> WAV -> whisper.cpp -> text
-//   -> Claude picks { clip serial, lantern mood, movement }
-//   -> lantern + movement + playMedia(serial)
-//
-// Claude can only choose a clip from the catalog (lily/clips.json), which is
-// built by buildCatalog(): play each serial, record what comes out of her
-// speaker, and transcribe it. So she can never "say" a line she doesn't have.
+//   -> Claude { line | clip, lantern mood, movement } -> lantern + movement + speech
 //
 // Nothing here throws into a show beat; every failure lands in status.lastError
 // and the log. Movement still obeys the interlock — if her motors are not
@@ -36,6 +39,9 @@ const MAX_UTTER_MS = 12000;
 const PREROLL_FRAMES = 15;         // keep 300 ms before the trigger
 const DEFAULT_CLIP_MS = 4000;      // hold time when a clip's length is unknown
 const HISTORY_TURNS = 8;
+const SETTINGS_FILE = path.join(__dirname, '..', 'lily-talk.json');   // per machine, gitignored
+const TTS_MODEL = process.env.LILY_TTS_MODEL || 'eleven_flash_v2_5';   // lowest-latency ElevenLabs model
+const MAX_LINE_WORDS = 30;
 
 const AUDIO_ENV = {
   ...process.env,
@@ -105,8 +111,52 @@ function systemPrompt(clips, guardrail) {
   ].filter(Boolean).join('\n\n');
 }
 
+// Voice mode: Lily writes her own words, so this carries her character, her
+// friction with Evelina, and the length/format rules for speech.
+function voicePrompt(guardrail) {
+  return [
+    'You are Lethal Lily, a lantern-bearing witch at Thornfield Cemetery (est. 1724) on Halloween night, during ' +
+    'the Hollow Storm. You stand with the witches Evelina Crowe (charming, curious, overconfident — she keeps ' +
+    'trying to complete a dangerous ritual) and Lenora Thorn (wise, dry). Two skeletons, Jasper and Edgar, ' +
+    'watch from behind you.',
+    'Character: watchful and protective, eerie and dry, a little amused by mortals, never cruel to children. ' +
+    'Your lantern is your mood. You guard Evelina from her own recklessness and are not shy about scolding her — ' +
+    'when she pushes too far you push back ("Enough. Do it again, and do it right this time."). You bicker with ' +
+    'her, but you are on her side.',
+    `You are SPEAKING OUT LOUD to guests. Reply with ONE short spoken line, under ${MAX_LINE_WORDS} words: no ` +
+    'stage directions, no asterisks, no emoji, no quotation marks around the whole line. Keep it natural and ' +
+    'in the moment; talk WITH the guest, answer what they said. Kids get warmth under the eeriness.',
+    'Also pick your lantern mood: calm (friendly, settled), wary (uneasy, suspicious, teasing threat), ward ' +
+    '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
+    'And a movement while you speak: none, head_only, arms_only, torso_only, head_and_torso, torso_and_arms, all. ' +
+    'Prefer small gestures (head_only) for ordinary replies; save "all" for big moments.',
+    guardrail || '',
+  ].filter(Boolean).join('\n\n');
+}
+
+// ElevenLabs text-to-speech -> mp3 bytes.
+async function elevenTts(text, voiceId, apiKey) {
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(15000),
+    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+    body: JSON.stringify({ text, model_id: TTS_MODEL }),
+  });
+  if (!r.ok) {
+    let detail = '';
+    try { const b = await r.json(); detail = b.detail?.message || b.detail?.status || JSON.stringify(b.detail || b); } catch (_) {}
+    throw new Error(`ElevenLabs ${r.status}${detail ? `: ${String(detail).slice(0, 160)}` : ''}`);
+  }
+  return Buffer.from(await r.arrayBuffer());
+}
+
 function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted = () => false,
-  getApiKey = () => process.env.ANTHROPIC_API_KEY, trackTokens = () => {}, guardrail = '', onChange = () => {} }) {
+  getApiKey = () => process.env.ANTHROPIC_API_KEY, trackTokens = () => {}, guardrail = '', onChange = () => {},
+  getElevenKey = () => process.env.ELEVENLABS_API_KEY, getVoiceId = () => null,
+  playFallback = null }) {   // (file) => Promise — plays in the witch zone when her speaker is not connected
+  let settings = { mode: 'voice' };
+  try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch (_) {}
+  const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (_) {} };
   let clips = [];
   try { clips = JSON.parse(fs.readFileSync(CLIPS_FILE, 'utf8')); } catch (_) {}
   const saveClips = () => {
@@ -136,7 +186,18 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     return client;
   }
 
-  const schema = () => ({
+  const MOVES = ['none', 'head_only', 'arms_only', 'torso_only', 'head_and_torso', 'torso_and_arms', 'all'];
+  const voiceSchema = {
+    type: 'object',
+    properties: {
+      line: { type: 'string' },
+      lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
+      move: { type: 'string', enum: MOVES },
+    },
+    required: ['line', 'lantern', 'move'],
+    additionalProperties: false,
+  };
+  const schema = () => settings.mode === 'voice' ? voiceSchema : ({
     type: 'object',
     properties: {
       clip: { type: 'integer', enum: [0, ...clips.map(c => c.serial)] },
@@ -156,7 +217,8 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: schema() } },
-      system: [{ type: 'text', text: systemPrompt(clips, guardrail), cache_control: { type: 'ephemeral' } }],
+      system: [{ type: 'text', text: settings.mode === 'voice' ? voicePrompt(guardrail) : systemPrompt(clips, guardrail),
+        cache_control: { type: 'ephemeral' } }],
       messages,
     });
     trackTokens(response.model || MODEL, response.usage?.input_tokens, response.usage?.output_tokens);
@@ -168,8 +230,49 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     return choice;
   }
 
+  // Voice mode: speak `text` in her ElevenLabs voice through her own speaker
+  // (or the witch zone when her speaker isn't connected), moving while she talks.
+  async function speakLine(text, { lantern, move } = {}) {
+    const key = getElevenKey();
+    const voiceId = getVoiceId();
+    if (!key) throw new Error('No ElevenLabs key — add it in Setup → API Keys');
+    if (!voiceId) throw new Error('No voice ID for "lily" in voices.json');
+    const st = lily.status();
+    const audio = await elevenTts(text, voiceId, key);
+    const file = path.join(os.tmpdir(), `lily-say-${Date.now()}.mp3`);
+    fs.writeFileSync(file, audio);
+    if (lantern && lantern !== 'keep' && st.connected) await lily.setMood(lantern).catch(e => log(`lantern: ${e.message}`));
+    let moved = false;
+    if (move && move !== 'none' && st.connected && st.armed) {
+      moved = await lily.move(move).then(() => true).catch(e => { log(`move: ${e.message}`); return false; });
+    }
+    const where = st.audio && st.audio.routed ? 'her speaker' : 'witch zone';
+    set({ phase: 'speaking' });
+    busyUntil = Date.now() + 60000;             // deaf until playback ends (+ tail below)
+    try {
+      if (where === 'her speaker') await lily.playFile(file);
+      else if (playFallback) await playFallback(file);
+      else throw new Error('Lily speaker not connected and no fallback output');
+    } finally {
+      busyUntil = Date.now() + 700;
+      try { fs.unlinkSync(file); } catch (_) {}
+      if (moved) await lily.move('none').catch(() => {});
+    }
+    return where;
+  }
+
   // Act out a choice: lantern, then movement for the clip's length, then clip.
   async function perform(choice, heard) {
+    if (settings.mode === 'voice') {
+      const line = String(choice.line || '').replace(/\*[^*]*\*/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!line) { set({ lastReply: { heard, text: '(stayed silent)' } }); return; }
+      set({ lastReply: { heard, text: line, lantern: choice.lantern, move: choice.move } });
+      logDialogue({ character: 'lily', line, trigger: 'guest_mic', context: heard, engine: 'claude',
+        extra: { mode: 'voice', lantern: choice.lantern, move: choice.move } });
+      const where = await speakLine(line, choice);
+      set({ lastReply: { ...status.lastReply, where } });
+      return;
+    }
     const clip = clips.find(c => c.serial === choice.clip);
     if (!clip) { set({ lastReply: { heard, clip: 0, text: '(stayed silent)' } }); return; }
     const st = lily.status();
@@ -182,7 +285,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     }
     await lily.playMedia(clip.serial);
     logDialogue({ character: 'lily', line: clip.text, trigger: 'guest_mic', context: heard,
-      extra: { clip: clip.serial, lantern: choice.lantern, move: choice.move } });
+      engine: 'claude', extra: { mode: 'clips', clip: clip.serial, lantern: choice.lantern, move: choice.move } });
     set({ phase: 'speaking', lastReply: { heard, clip: clip.serial, text: clip.text, lantern: choice.lantern, move: choice.move } });
     await new Promise(r => setTimeout(r, holdMs));
     if (moved) await lily.move('none').catch(() => {});
@@ -194,10 +297,12 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     busy = true;
     try {
       set({ phase: 'thinking', lastHeard: heard, lastError: null });
-      if (!clips.length) throw new Error('No clips catalogued yet — run BUILD CATALOG first');
-      if (!lily.status().connected) throw new Error('Lily is not connected');
+      if (settings.mode === 'clips') {
+        if (!clips.length) throw new Error('No clips catalogued yet — run BUILD CATALOG first');
+        if (!lily.status().connected) throw new Error('Lily is not connected');
+      }
       const choice = await decide(heard);
-      log(`heard "${heard}" -> clip ${choice.clip}, ${choice.lantern}, ${choice.move}`);
+      log(`heard "${heard}" -> ${settings.mode === 'voice' ? `"${choice.line}"` : `clip ${choice.clip}`}, ${choice.lantern}, ${choice.move}`);
       await perform(choice, heard);
       return status.lastReply;
     } catch (e) {
@@ -295,7 +400,31 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   }
 
   const api = {
-    status: () => ({ ...status, clips: clips.length, model: MODEL, hasKey: !!getApiKey() }),
+    status: () => ({
+      ...status, mode: settings.mode, clips: clips.length, model: MODEL, hasKey: !!getApiKey(),
+      hasVoiceKey: !!getElevenKey(), voiceId: getVoiceId() || null,
+    }),
+    setMode(mode) {
+      if (!['voice', 'clips'].includes(mode)) throw new Error('mode must be voice or clips');
+      settings.mode = mode; saveSettings();
+      history.length = 0;                      // the other mode's replies would confuse the next turn
+      set({});
+      return api.status();
+    },
+    // Voice test with no Claude call: say exactly this text in her voice.
+    async speak(text) {
+      if (busy) throw new Error('Lily is still answering');
+      busy = true;
+      try {
+        const line = String(text || '').trim().slice(0, 400);
+        if (!line) throw new Error('text required');
+        set({ lastError: null, lastReply: { heard: '(typed)', text: line } });
+        const where = await speakLine(line);
+        set({ lastReply: { heard: '(typed)', text: line, where } });
+        return api.status();
+      } catch (e) { set({ lastError: e.message }); throw e; }
+      finally { busy = false; set({ phase: status.listening ? 'listening' : 'idle' }); }
+    },
     clips: () => clips,
     listSources,
 

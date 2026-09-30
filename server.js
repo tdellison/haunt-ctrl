@@ -3620,6 +3620,16 @@ const lilyTalk = require('./lily/talk').createTalk({
   trackTokens,
   guardrail: GUARDRAIL_UNMARKED_GRAVE,
   onChange: () => broadcast({ type: 'lilyTalk', data: lilyTalk.status() }),
+  getElevenKey: () => process.env.ELEVENLABS_API_KEY || secrets.elevenLabsApiKey || null,
+  getVoiceId: () => {
+    try { return JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^\uFEFF/, '')).lily || null; } catch (_) { return null; }
+  },
+  // Her speaker not connected yet: speak through the witch zone instead.
+  playFallback: (file) => new Promise((resolve) => {
+    const p = spawnPlayer(file, { zone: 'z3' }, { stdio: 'ignore' });
+    p.on('exit', resolve);
+    p.on('error', resolve);
+  }),
 });
 
 const lilyRoute = (fn) => async (req, res) => {
@@ -3639,6 +3649,8 @@ app.post('/api/lily/talk/start',   lilyRoute(async ({ source }) => lilyTalk.star
 app.post('/api/lily/talk/stop',    lilyRoute(async () => lilyTalk.stop()));
 app.post('/api/lily/talk/say',     lilyRoute(async ({ text }) => lilyTalk.say(text)));
 app.post('/api/lily/talk/reset',   lilyRoute(async () => lilyTalk.resetConversation()));
+app.post('/api/lily/talk/mode',    lilyRoute(async ({ mode }) => lilyTalk.setMode(mode)));
+app.post('/api/lily/talk/speak',   lilyRoute(async ({ text }) => lilyTalk.speak(text)));
 app.post('/api/lily/talk/clip',    lilyRoute(async ({ serial, text }) => lilyTalk.setClipText(Number(serial), text)));
 app.post('/api/lily/talk/catalog', async (req, res) => {
   const { from = 1, to = 60, source } = req.body || {};

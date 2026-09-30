@@ -1109,7 +1109,15 @@ body::before { animation:scanlines 10s linear infinite; }
       <input type="range" id="lily-vol" min="0" max="100" value="100" style="width:110px" onchange="api('/api/lily/volume',{volume:+this.value})"/>
     </div>
 
-    <div class="panel-title" style="font-size:.8em;margin-top:10px">Talk to Lily (her own voice)</div>
+    <div class="panel-title" style="font-size:.8em;margin-top:10px">Talk to Lily</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-purple btn-sm" id="talk-mode-voice" onclick="api('/api/lily/talk/mode',{mode:'voice'})">🗣 ELEVENLABS VOICE</button>
+      <button class="btn btn-amber btn-sm" id="talk-mode-clips" onclick="api('/api/lily/talk/mode',{mode:'clips'})">📼 BUILT-IN CLIPS</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input class="raw-input" id="talk-speak" placeholder="voice test: exact words for Lily to say (no Claude)" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')talkSpeak()"/>
+      <button class="btn btn-purple btn-sm" onclick="talkSpeak()">🔊 SPEAK</button>
+    </div>
     <div class="info-row"><span class="info-key">Talk</span><span class="info-val" id="talk-status">—</span></div>
     <div class="info-row"><span class="info-key">Heard</span><span class="info-val" id="talk-heard">—</span></div>
     <div class="info-row"><span class="info-key">Answered</span><span class="info-val" id="talk-reply">—</span></div>
@@ -1686,12 +1694,19 @@ loadZones();
 function renderTalk(t) {
   if (!t) return;
   const cat = t.cataloging ? ` · cataloging clip ${t.cataloging.at} (${t.cataloging.found} found)` : '';
+  const voice = t.mode === 'voice';
+  document.getElementById('talk-mode-voice').classList.toggle('active', voice);
+  document.getElementById('talk-mode-clips').classList.toggle('active', !voice);
+  const ready = voice
+    ? `ElevenLabs ${t.hasVoiceKey ? 'key ok' : 'NO KEY'} · voice ${t.voiceId ? 'set' : 'MISSING'}`
+    : `${t.clips} clips`;
   document.getElementById('talk-status').textContent =
-    `${t.phase}${t.listening ? ' (mic on)' : ''} · ${t.clips} clips · ${t.hasKey ? 'key ok' : 'NO API KEY'}${cat}` +
+    `${t.phase}${t.listening ? ' (mic on)' : ''} · ${voice ? 'voice' : 'clips'} mode · ${ready} · Claude ${t.hasKey ? 'key ok' : 'NO KEY'}${cat}` +
     (t.lastError ? ` — ${t.lastError}` : '');
   document.getElementById('talk-heard').textContent = t.lastHeard || '—';
   const r = t.lastReply;
-  document.getElementById('talk-reply').textContent = r ? `#${r.clip} "${r.text}"${r.lantern ? ` · ${r.lantern}` : ''}${r.move ? ` · ${r.move}` : ''}` : '—';
+  document.getElementById('talk-reply').textContent = r
+    ? `${r.clip ? '#' + r.clip + ' ' : ''}"${r.text}"${r.lantern ? ` · ${r.lantern}` : ''}${r.move ? ` · ${r.move}` : ''}${r.where ? ` · via ${r.where}` : ''}` : '—';
 }
 async function talkLoad() {
   const r = await apiGet('/api/lily/talk');
@@ -1720,6 +1735,11 @@ async function talkLoad() {
     row.append(play, txt);
     box.appendChild(row);
   });
+}
+function talkSpeak() {
+  const el = document.getElementById('talk-speak');
+  const text = el.value.trim();
+  if (text) { api('/api/lily/talk/speak', { text }); el.value = ''; }
 }
 function talkStart() { api('/api/lily/talk/start', { source: document.getElementById('talk-mic').value || undefined }); }
 function talkSay() {
