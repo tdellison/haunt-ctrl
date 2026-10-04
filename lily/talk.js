@@ -104,8 +104,8 @@ function systemPrompt(clips, guardrail) {
     'if the input is empty noise or clearly not addressed to her.',
     'Also pick her lantern mood: calm (friendly, settled), wary (uneasy, suspicious, teasing threat), ward ' +
     '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
-    'And a movement for while she speaks: none, head_only, arms_only, torso_only, head_and_torso, torso_and_arms, all. ' +
-    'Prefer small gestures (head_only) for ordinary replies; save "all" for big moments.',
+    'And a movement for while she speaks: none, head, eyes, arm, head_and_eyes, head_and_arm, all. ' +
+    'Prefer head or head_and_eyes for ordinary replies; save arm and all for big moments.',
     guardrail || '',
     'HER CLIPS:\n' + (catalog || '(none catalogued yet)'),
   ].filter(Boolean).join('\n\n');
@@ -128,8 +128,9 @@ function voicePrompt(guardrail) {
     'in the moment; talk WITH the guest, answer what they said. Kids get warmth under the eeriness.',
     'Also pick your lantern mood: calm (friendly, settled), wary (uneasy, suspicious, teasing threat), ward ' +
     '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
-    'And a movement while you speak: none, head_only, arms_only, torso_only, head_and_torso, torso_and_arms, all. ' +
-    'Prefer small gestures (head_only) for ordinary replies; save "all" for big moments.',
+    'And a movement while you speak (your mouth always moves with your words): none, head (turn and tilt), ' +
+    'eyes, arm (your free left arm beckons and gestures — your lantern arm stays still), head_and_eyes, ' +
+    'head_and_arm, all. Prefer head or head_and_eyes for ordinary replies; save arm and all for big moments.',
     'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), excited (delight, good news), angry (scolding ' +
     'Evelina, or someone being rude), whisper (secrets, menace up close), ominous (warnings about the storm). ' +
     'Use the strong tones sparingly so they land.',
@@ -204,7 +205,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     return client;
   }
 
-  const MOVES = ['none', 'head_only', 'arms_only', 'torso_only', 'head_and_torso', 'torso_and_arms', 'all'];
+  const MOVES = Object.keys(require('./protocol').MOVEMENT);
   const voiceSchema = {
     type: 'object',
     properties: {
@@ -221,7 +222,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     properties: {
       clip: { type: 'integer', enum: [0, ...clips.map(c => c.serial)] },
       lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
-      move: { type: 'string', enum: ['none', 'head_only', 'arms_only', 'torso_only', 'head_and_torso', 'torso_and_arms', 'all'] },
+      move: { type: 'string', enum: MOVES },
     },
     required: ['clip', 'lantern', 'move'],
     additionalProperties: false,

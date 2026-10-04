@@ -14,17 +14,17 @@ assert.strictEqual(p.crc8([]), 0x00, 'CRC-8 of empty input');
 assert.strictEqual(p.crc8([0x00]), 0x00, 'CRC-8 of single zero byte');
 
 // Framing shape: 2-byte tag + 8-byte padded payload + 1-byte CRC = 11 bytes.
-const move = p.cmdSetMovement('head_only');
+const move = p.cmdSetMovement('head');
 assert.strictEqual(move.length, 11, 'framed command length');
 assert.strictEqual(move[0], 0xAA, 'tag byte 0');
 assert.strictEqual(move[1], 0xCA, 'movement tag byte 1');
-assert.strictEqual(move[2], 0x01, 'payload starts with the movement byte (trailing-zero padding)');
+assert.strictEqual(move[2], 0x10, 'payload starts with the movement byte (head = 0x10 on Lily; trailing-zero padding)');
 assert.strictEqual(move[10], p.crc8(move.slice(0, 10)), 'CRC covers tag+payload');
 
 // Enum names and raw values both accepted; junk rejected.
 assert.deepStrictEqual(p.cmdSetMovement(255), p.cmdSetMovement('all'), 'name and byte agree');
 assert.throws(() => p.cmdSetMovement('moonwalk'), /Unknown movement/, 'bad movement name rejected');
-assert.throws(() => p.cmdSetMovement(3), /Unknown movement/, 'non-enum byte rejected (use cmdProbeMovement)');
+assert.throws(() => p.cmdSetMovement(4), /Unknown movement/, 'non-enum byte rejected (use cmdProbeMovement)');
 
 // Tag/payload validation.
 assert.throws(() => p.buildCommand('BBF9', '01'), /must be 4 hex chars starting with AA/, 'non-AA tag rejected');
