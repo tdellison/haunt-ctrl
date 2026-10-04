@@ -17,9 +17,13 @@ const { MockLily } = require('./mockLily');
 const { createLilyAudioRouter } = require('./audioRouter');
 const { MOVEMENT, probeMovementValues } = require('./protocol');
 
-// Lantern mood states (spec 2.1.5). Colours are deliberately OUTSIDE Evelina's
-// spell palette (blue / amber-gold / green-purple / crimson) — STARTING values,
-// to be dialled in by eye on the real lantern, then locked here.
+// Lantern mood states (spec 2.1.5). VERIFIED ON REAL LILY 2026-10-04: her
+// lantern is GREEN ONLY — the RGB command (AAF4) changes nothing on any channel,
+// in or out of live mode. Only the MODE (AAF2) works, and on Lily the modes are
+// effects, not Ultra Skelly's names: 1 = flame, 2 = blinking, 3 = light moving
+// downward (0 and 4 = no change). So the moods are carried by the effect:
+// calm = flame, wary = downward sweep, ward = blinking. The RGB values below are
+// kept in case a colour command turns up, but they do nothing today.
 const LANTERN_MOODS = {
   calm: { r: 255, g: 120, b: 30,  brightness: 110, mode: 'static' }, // soft candle
   wary: { r: 0,   g: 210, b: 200, brightness: 170, mode: 'pulse'  }, // uneasy cyan

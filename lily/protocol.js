@@ -50,6 +50,7 @@ const MOVEMENT = {
 };
 
 const LIGHT_CHANNEL = { torso: 0, head: 1 };
+// Ultra Skelly names. On LILY (verified 2026-10-04): 1 = flame, 2 = blinking, 3 = light moving downward.
 const LIGHT_MODE    = { static: 1, strobe: 2, pulse: 3 };
 
 // Eye icon table — kept for protocol completeness only. Lily's eyes are
