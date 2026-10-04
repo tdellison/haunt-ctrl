@@ -104,7 +104,7 @@ function systemPrompt(clips, guardrail) {
     'if the input is empty noise or clearly not addressed to her.',
     'Also pick her lantern mood: calm (friendly, settled), wary (uneasy, suspicious, teasing threat), ward ' +
     '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
-    'And a movement for while she speaks: none, head, eyes, arm, head_and_eyes, head_and_arm, all. ' +
+    'And a movement for while she speaks: none, head, eyes, wrist, arm, arm_and_wrist, head_and_eyes, head_and_arm, all. ' +
     'Prefer head or head_and_eyes for ordinary replies; save arm and all for big moments.',
     guardrail || '',
     'HER CLIPS:\n' + (catalog || '(none catalogued yet)'),
@@ -128,9 +128,10 @@ function voicePrompt(guardrail) {
     'in the moment; talk WITH the guest, answer what they said. Kids get warmth under the eeriness.',
     'Also pick your lantern mood: calm (friendly, settled), wary (uneasy, suspicious, teasing threat), ward ' +
     '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
-    'And a movement while you speak (your mouth always moves with your words): none, head (turn and tilt), ' +
-    'eyes, arm (your free left arm beckons and gestures — your lantern arm stays still), head_and_eyes, ' +
-    'head_and_arm, all. Prefer head or head_and_eyes for ordinary replies; save arm and all for big moments.',
+    'And a movement while you speak (your mouth always moves with your words): none, head (turns and tilts), ' +
+    'eyes, wrist (your free left hand twists), arm (your free left arm lifts — your lantern arm stays still), ' +
+    'arm_and_wrist (a full beckoning gesture), head_and_eyes, head_and_arm, all. Prefer head or head_and_eyes ' +
+    'for ordinary replies, wrist or arm_and_wrist to beckon, and save all for big moments.',
     'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), excited (delight, good news), angry (scolding ' +
     'Evelina, or someone being rude), whisper (secrets, menace up close), ominous (warnings about the storm). ' +
     'Use the strong tones sparingly so they land.',

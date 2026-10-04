@@ -37,15 +37,19 @@ const TAGS = {
 // Ultra Skelly names; whether her firmware maps them onto these same values or
 // uses extra ones is a real-hardware question. probeMovementValues() below
 // exists to map that out systematically — do not assume the names apply as-is.
-// LILY's movement bits, mapped one value at a time on the real prop
-// (2026-10-04). Movement only animates WHILE SHE PLAYS SOUND; her mouth always
-// follows the audio regardless. 1 and 2 both drive the LEFT arm (the lantern
-// arm never moves); 16 = head turn/tilt; 32 = eyes; 4, 8, 64, 128 = nothing.
-// Bits combine (255 = everything). The Ultra Skelly names (head_only = 1,
-// torso_only = 4 …) were WRONG for Lily — "head_only" moved her arm.
+// LILY's movement bits, mapped one value at a time on the real prop and
+// confirmed against her official app (2026-10-04): 0x01 = wrist/hand twist,
+// 0x02 = arm/elbow lift (her free LEFT arm — the lantern arm never moves),
+// 0x10 = head (turns left/right and tilts on its own pattern), 0x20 = eyes;
+// 4, 8, 64, 128 = nothing. Bits combine (0xFF = everything). Movement only
+// animates WHILE SHE PLAYS SOUND, her mouth always follows the audio, and there
+// is NO positional control (no "look right") — the app has none either.
+// The Ultra Skelly names (head_only = 1 …) were WRONG for Lily.
 const MOVEMENT = {
   none: 0,
-  arm: 0x03,
+  wrist: 0x01,
+  arm: 0x02,
+  arm_and_wrist: 0x03,
   head: 0x10,
   eyes: 0x20,
   head_and_eyes: 0x30,
