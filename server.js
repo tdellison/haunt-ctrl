@@ -3650,7 +3650,7 @@ app.post('/api/lily/talk/stop',    lilyRoute(async () => lilyTalk.stop()));
 app.post('/api/lily/talk/say',     lilyRoute(async ({ text }) => lilyTalk.say(text)));
 app.post('/api/lily/talk/reset',   lilyRoute(async () => lilyTalk.resetConversation()));
 app.post('/api/lily/talk/mode',    lilyRoute(async ({ mode }) => lilyTalk.setMode(mode)));
-app.post('/api/lily/talk/speak',   lilyRoute(async ({ text }) => lilyTalk.speak(text)));
+app.post('/api/lily/talk/speak',   lilyRoute(async ({ text, tone }) => lilyTalk.speak(text, tone)));
 app.post('/api/lily/talk/clip',    lilyRoute(async ({ serial, text }) => lilyTalk.setClipText(Number(serial), text)));
 app.post('/api/lily/talk/catalog', async (req, res) => {
   const { from = 1, to = 60, source } = req.body || {};

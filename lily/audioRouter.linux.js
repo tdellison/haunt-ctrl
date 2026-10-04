@@ -263,7 +263,10 @@ class LinuxLilyAudioRouter {
     if (!(await this._ensureWakeTone())) return null;
     const out = path.join(os.tmpdir(), `lily-joined-${Date.now()}.wav`);
     const res = await run(this.o.ffmpegBin, ['-y', '-loglevel', 'error', '-i', this.wakeTonePath, '-i', file,
-      '-filter_complex', '[0:a]aresample=44100,aformat=channel_layouts=stereo[a];[1:a]aresample=44100,aformat=channel_layouts=stereo[b];[a][b]concat=n=2:v=0:a=1[o]',
+      // silenceremove trims any lead-in silence/breath from the line (Eleven v3
+      // adds some) so the words always start right where the hum ends — her
+      // movement keys off the hum and would otherwise run ahead of the voice.
+      '-filter_complex', '[0:a]aresample=44100,aformat=channel_layouts=stereo[a];[1:a]silenceremove=start_periods=1:start_threshold=-40dB:start_silence=0.05,aresample=44100,aformat=channel_layouts=stereo[b];[a][b]concat=n=2:v=0:a=1[o]',
       '-map', '[o]', out], this.o.cmdTimeoutMs);
     return res.ok ? out : null;
   }

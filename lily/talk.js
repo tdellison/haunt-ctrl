@@ -130,17 +130,34 @@ function voicePrompt(guardrail) {
     '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
     'And a movement while you speak: none, head_only, arms_only, torso_only, head_and_torso, torso_and_arms, all. ' +
     'Prefer small gestures (head_only) for ordinary replies; save "all" for big moments.',
+    'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), angry (scolding ' +
+    'Evelina, or someone being rude), whisper (secrets, menace up close), ominous (warnings about the storm). ' +
+    'Use the strong tones sparingly so they land.',
     guardrail || '',
   ].filter(Boolean).join('\n\n');
 }
 
+// Delivery tones. 'normal' stays on the fast model; the expressive tones use
+// Eleven v3, which reads a leading audio tag ([sweetly], [angrily]) as a
+// performance cue (v3 stability: 0 creative / 0.5 natural / 1 robust).
+const TONES = {
+  normal:   { model: TTS_MODEL },
+  sweet:    { model: 'eleven_v3', tag: '[sweetly]', stability: 0.5 },
+  angry:    { model: 'eleven_v3', tag: '[angrily]', stability: 0.0 },
+  whisper:  { model: 'eleven_v3', tag: '[whispers]', stability: 0.5 },
+  ominous:  { model: 'eleven_v3', tag: '[ominously]', stability: 0.5 },
+};
+
 // ElevenLabs text-to-speech -> mp3 bytes.
-async function elevenTts(text, voiceId, apiKey) {
+async function elevenTts(text, voiceId, apiKey, tone = 'normal') {
+  const t = TONES[tone] || TONES.normal;
+  const body = { text: t.tag ? `${t.tag} ${text}` : text, model_id: t.model };
+  if (t.stability !== undefined) body.voice_settings = { stability: t.stability };
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
     method: 'POST',
     signal: AbortSignal.timeout(15000),
     headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-    body: JSON.stringify({ text, model_id: TTS_MODEL }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     let detail = '';
@@ -191,10 +208,11 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     type: 'object',
     properties: {
       line: { type: 'string' },
+      tone: { type: 'string', enum: Object.keys(TONES) },
       lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
       move: { type: 'string', enum: MOVES },
     },
-    required: ['line', 'lantern', 'move'],
+    required: ['line', 'tone', 'lantern', 'move'],
     additionalProperties: false,
   };
   const schema = () => settings.mode === 'voice' ? voiceSchema : ({
@@ -232,13 +250,13 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
 
   // Voice mode: speak `text` in her ElevenLabs voice through her own speaker
   // (or the witch zone when her speaker isn't connected), moving while she talks.
-  async function speakLine(text, { lantern, move } = {}) {
+  async function speakLine(text, { lantern, move, tone } = {}) {
     const key = getElevenKey();
     const voiceId = getVoiceId();
     if (!key) throw new Error('No ElevenLabs key — add it in Setup → API Keys');
     if (!voiceId) throw new Error('No voice ID for "lily" in voices.json');
     const st = lily.status();
-    const audio = await elevenTts(text, voiceId, key);
+    const audio = await elevenTts(text, voiceId, key, tone);
     const file = path.join(os.tmpdir(), `lily-say-${Date.now()}.mp3`);
     fs.writeFileSync(file, audio);
     if (lantern && lantern !== 'keep' && st.connected) await lily.setMood(lantern).catch(e => log(`lantern: ${e.message}`));
@@ -412,14 +430,15 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       return api.status();
     },
     // Voice test with no Claude call: say exactly this text in her voice.
-    async speak(text) {
+    tones: Object.keys(TONES),
+    async speak(text, tone = 'normal') {
       if (busy) throw new Error('Lily is still answering');
       busy = true;
       try {
         const line = String(text || '').trim().slice(0, 400);
         if (!line) throw new Error('text required');
         set({ lastError: null, lastReply: { heard: '(typed)', text: line } });
-        const where = await speakLine(line);
+        const where = await speakLine(line, { tone });
         set({ lastReply: { heard: '(typed)', text: line, where } });
         return api.status();
       } catch (e) { set({ lastError: e.message }); throw e; }
