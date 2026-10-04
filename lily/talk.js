@@ -130,7 +130,7 @@ function voicePrompt(guardrail) {
     '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
     'And a movement while you speak: none, head_only, arms_only, torso_only, head_and_torso, torso_and_arms, all. ' +
     'Prefer small gestures (head_only) for ordinary replies; save "all" for big moments.',
-    'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), angry (scolding ' +
+    'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), excited (delight, good news), angry (scolding ' +
     'Evelina, or someone being rude), whisper (secrets, menace up close), ominous (warnings about the storm). ' +
     'Use the strong tones sparingly so they land.',
     guardrail || '',
@@ -145,6 +145,7 @@ const TONES = {
   sweet:    { model: 'eleven_v3', tag: '[sweetly]', stability: 0.5 },
   angry:    { model: 'eleven_v3', tag: '[angrily]', stability: 0.0 },
   whisper:  { model: 'eleven_v3', tag: '[whispers]', stability: 0.5 },
+  excited:  { model: 'eleven_v3', tag: '[excitedly]', stability: 0.0 },
   ominous:  { model: 'eleven_v3', tag: '[ominously]', stability: 0.5 },
 };
 
