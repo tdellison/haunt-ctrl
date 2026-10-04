@@ -17,23 +17,22 @@ const { MockLily } = require('./mockLily');
 const { createLilyAudioRouter } = require('./audioRouter');
 const { MOVEMENT, probeMovementValues } = require('./protocol');
 
-// Lantern mood states (spec 2.1.5). VERIFIED ON REAL LILY 2026-10-04: her
-// lantern is GREEN ONLY — the RGB command (AAF4) changes nothing on any channel,
-// in or out of live mode. Only the MODE (AAF2) works, and on Lily the modes are
-// effects, not Ultra Skelly's names: 1 = flame, 2 = blinking, 3 = light moving
-// downward (0 and 4 = no change). So the moods are carried by the effect:
-// calm = flame, wary = downward sweep, ward = blinking. The RGB values below are
-// kept in case a colour command turns up, but they do nothing today.
+// Lantern mood states (spec 2.1.5). VERIFIED ON REAL LILY 2026-10-04: colour
+// works on light channel 0xFF only (captured from the official app — channels
+// 0-3 are ignored). Effects (mode): 1 = flame, 2 = blinking, 3 = downward sweep.
+// Colours are the owner's picks from the app, captured byte-for-byte:
+//   calm = candle orange flame, wary = spooky purple sweep, ward = white blinking.
+// All three stay clear of Evelina's spell palette.
 const LANTERN_MOODS = {
-  calm: { r: 255, g: 120, b: 30,  brightness: 110, mode: 'static' }, // soft candle
-  wary: { r: 0,   g: 210, b: 200, brightness: 170, mode: 'pulse'  }, // uneasy cyan
-  ward: { r: 255, g: 235, b: 180, brightness: 255, mode: 'strobe' }, // warm-white flare
-  off:  { r: 0,   g: 0,   b: 0,   brightness: 0,   mode: 'static' },
+  calm: { r: 0xFF, g: 0x82, b: 0x23, brightness: 180, mode: 'static' }, // orange, flame
+  wary: { r: 0xCE, g: 0x1E, b: 0xFF, brightness: 200, mode: 'pulse'  }, // purple, downward sweep
+  ward: { r: 0xE7, g: 0xFF, b: 0xFC, brightness: 255, mode: 'strobe' }, // white, blinking
+  off:  { r: 0,    g: 0,    b: 0,    brightness: 0,   mode: 'static' },
 };
 // Ward = a sharp flare, held a beat, then it settles to a steady glow while
 // she delivers her protective line (it reads as a thrown ward, not a mood).
 const WARD_FLARE_MS = 2500;
-const WARD_SETTLE = { r: 255, g: 235, b: 180, brightness: 200, mode: 'static' };
+const WARD_SETTLE = { r: 0xE7, g: 0xFF, b: 0xFC, brightness: 200, mode: 'static' };   // white, steady flame
 
 const CONFIG_FILE = path.join(__dirname, '..', 'lily-config.json');
 

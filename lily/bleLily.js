@@ -249,7 +249,7 @@ class BleLily {
 
   // Lantern = Lily's ONLY mood channel. Three sequential writes (brightness,
   // mode, RGB), ~50ms apart — the firmware wants them one at a time.
-  async setLantern(r, g, b, brightness, mode = 'static', channel = P.LIGHT_CHANNEL.torso) {
+  async setLantern(r, g, b, brightness, mode = 'static', channel = P.LIGHT_CHANNEL.all) {
     this._requireConnected();
     if (P.LIGHT_MODE[mode] === undefined) throw new Error(`Unknown lantern mode "${mode}"`);
     await this._send(P.cmdSetLightBrightness(channel, brightness));

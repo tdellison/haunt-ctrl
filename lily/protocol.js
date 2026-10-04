@@ -49,7 +49,13 @@ const MOVEMENT = {
   // possible undocumented combo, not required for launch.
 };
 
-const LIGHT_CHANNEL = { torso: 0, head: 1 };
+// LILY (captured from the official app, 2026-10-04): every light command uses
+// channel 0xFF ("all"). Channels 0-3 are silently ignored on her. Frames seen:
+//   AAF4 FF RR GG BB  colour, 10-byte payload (e.g. purple FF CE 1E FF, orange FF FF 82 23)
+//   AAF3 FF LL        brightness 0-255
+//   AAF2 FF MM        effect: 1 flame, 2 blinking, 3 downward sweep
+//   AAF6 FF NN        effect parameter 0-8 (probably speed) — unused for now
+const LIGHT_CHANNEL = { torso: 0, head: 1, all: 0xFF };
 // Ultra Skelly names. On LILY (verified 2026-10-04): 1 = flame, 2 = blinking, 3 = light moving downward.
 const LIGHT_MODE    = { static: 1, strobe: 2, pulse: 3 };
 
@@ -125,13 +131,15 @@ function cmdQueryVersion() { return buildCommand(TAGS.QUERY_VERSION); }
 
 function cmdSetLightBrightness(channel, brightness) {
   return buildCommand(TAGS.LIGHT_BRIGHTNESS,
-    hexByte(channel, 'channel', 0, 1) + hexByte(brightness, 'brightness'));
+    hexByte(channel, 'channel', 0, 255) + hexByte(brightness, 'brightness'));
 }
 
+// The colour frame carries a 10-byte payload (not the usual 8) — captured from
+// Lily's app; an 8-byte one is silently ignored, which is why colour "didn't work".
 function cmdSetLightRGB(channel, r, g, b, cycle = 0) {
   return buildCommand(TAGS.LIGHT_RGB,
-    hexByte(channel, 'channel', 0, 1) + hexByte(r, 'r') + hexByte(g, 'g') +
-    hexByte(b, 'b') + hexByte(cycle, 'cycle', 0, 1));
+    hexByte(channel, 'channel', 0, 255) + hexByte(r, 'r') + hexByte(g, 'g') +
+    hexByte(b, 'b') + hexByte(cycle, 'cycle', 0, 1), 10);
 }
 
 function cmdSetLightMode(channel, mode) {
@@ -139,7 +147,7 @@ function cmdSetLightMode(channel, mode) {
   if (m === undefined || m < 1 || m > 3) {
     throw new Error(`Unknown light mode "${mode}" — use static/strobe/pulse or 1-3`);
   }
-  return buildCommand(TAGS.LIGHT_MODE, hexByte(channel, 'channel', 0, 1) + hexByte(m, 'mode'));
+  return buildCommand(TAGS.LIGHT_MODE, hexByte(channel, 'channel', 0, 255) + hexByte(m, 'mode'));
 }
 
 function cmdPlayMediaFile(serial, enabled = true) {
