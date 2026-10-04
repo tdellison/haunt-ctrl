@@ -50,6 +50,7 @@ function createLily({ log = console.log, onChange = () => {} } = {}) {
   const driverOpts = { log: (m) => log(m), onStatus: () => onChange(), address: cfg.bleAddress };
   const ble = useMock ? new MockLily(driverOpts) : new (require('./bleLily').BleLily)(driverOpts);
   const audio = createLilyAudioRouter({ log: (m) => log(`audio: ${m}`), deviceAddress: cfg.audioAddress });
+  if (cfg.wakeTone) audio.setWakeTone(cfg.wakeTone);
   const audioState = { connected: false, routed: false, lastError: null };
   let wardTimer = null;
   let mood = null;
@@ -138,6 +139,8 @@ function createLily({ log = console.log, onChange = () => {} } = {}) {
       audioState.routed = false;
       return changed(api.status());
     },
+    // Tune the pre-roll hum that gets her moving before the first word.
+    setWakeTone(t) { cfg.wakeTone = audio.setWakeTone(t); save(); return cfg.wakeTone; },
     async playFile(file) {
       if (!audioState.routed) throw new Error('Lily speaker not connected');
       await audio.playFile(file);

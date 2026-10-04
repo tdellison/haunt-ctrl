@@ -3684,6 +3684,7 @@ app.post('/api/lily/volume',     lilyRoute(async ({ volume }) => lily.volume(int
 app.post('/api/lily/media',      lilyRoute(async ({ serial }) => lily.playMedia(intIn(serial, 'serial', 0, 65535))));
 app.post('/api/lily/audio/connect',    lilyRoute(async ({ address, pair }) => lily.audioConnect(address, { pair: !!pair })));
 app.post('/api/lily/audio/disconnect', lilyRoute(async () => lily.audioDisconnect()));
+app.post('/api/lily/audio/wake-tone', lilyRoute(async ({ hz, ms, volume }) => ({ wakeTone: lily.setWakeTone({ hz, ms, volume }) })));
 // Test clip through her speaker — loud on purpose: it doubles as the
 // "is her jaw audio-reactive?" check (spec 2.6).
 app.post('/api/lily/audio/test', lilyRoute(async ({ file }) => {

@@ -72,6 +72,8 @@ class WindowsLilyAudioRouterStub {
     }
   }
 
+  setWakeTone(t = {}) { return t; }
+
   async playFile(file) {
     this.log(`would play ${file} through Lily's onboard speaker`);
   }

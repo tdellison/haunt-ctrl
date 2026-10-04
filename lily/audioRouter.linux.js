@@ -41,9 +41,12 @@ const DEFAULTS = {
   // Wake tone per spec 2.2.7: 92 Hz sine at ~-45 dBFS (~0.55% of full scale)
   // for ~0.65s — inaudible through the prop speaker in practice, but keeps the
   // BT link from clipping the first word of every line.
+  // Tuned on the real prop 2026-10-04: at the original -45 dBFS / 650 ms her
+  // movement started AFTER the voice; at ~-22 dBFS (0.08) / 700 ms, joined to
+  // the line as one file, she moves on the first word.
   wakeToneHz: 92,
-  wakeToneMs: 650,
-  wakeToneVolume: 0.0055,
+  wakeToneMs: 700,
+  wakeToneVolume: 0.08,
   ffplayBin: 'ffplay',       // from PATH on Linux (unlike the Dell's pinned path)
   ffmpegBin: 'ffmpeg',
   bluetoothctlBin: 'bluetoothctl',
@@ -70,7 +73,7 @@ class LinuxLilyAudioRouter {
     this.address = opts.deviceAddress || null;
     this.sinkId = null;
     this.sinkName = null;
-    this.wakeTonePath = path.join(os.tmpdir(), 'lily-wake-tone.wav');
+    this.setWakeTone({});
     this.isReal = true;
   }
 
@@ -207,7 +210,22 @@ class LinuxLilyAudioRouter {
     this.o.log(`Lily playback -> ${this.sinkName} (id ${this.sinkId}), volume 1.0; system default untouched`);
   }
 
+  // Pre-roll ("wake tone"). On the real prop (2026-10-04) her movement is
+  // driven by the sound she plays, and starts a beat AFTER the voice. A low hum
+  // loud enough for her motion to register — but too low for her small speaker
+  // to reproduce well — gets her moving before the first word. setWakeTone()
+  // tunes it live; each setting gets its own cached file.
+  setWakeTone({ hz, ms, volume } = {}) {
+    if (hz !== undefined) this.o.wakeToneHz = Number(hz);
+    if (ms !== undefined) this.o.wakeToneMs = Number(ms);
+    if (volume !== undefined) this.o.wakeToneVolume = Number(volume);
+    const { wakeToneHz: h, wakeToneMs: m, wakeToneVolume: v } = this.o;
+    this.wakeTonePath = path.join(os.tmpdir(), `lily-wake-${h}hz-${m}ms-${v}.wav`);
+    return { hz: h, ms: m, volume: v };
+  }
+
   async _ensureWakeTone() {
+    if (!this.o.wakeToneMs || !this.o.wakeToneVolume) return false;
     if (fs.existsSync(this.wakeTonePath)) return true;
     const { wakeToneHz, wakeToneMs, wakeToneVolume } = this.o;
     // aevalsrc (not the sine source, whose amplitude is fixed) so the tone is
@@ -239,18 +257,29 @@ class LinuxLilyAudioRouter {
     });
   }
 
-  // Play an existing audio file through Lily (wake tone first) — test clips.
+  // Wake tone + line joined into ONE file, so there is no gap (two separate
+  // ffplay starts left a pause in which her motion could stop again).
+  async _withWakeTone(file) {
+    if (!(await this._ensureWakeTone())) return null;
+    const out = path.join(os.tmpdir(), `lily-joined-${Date.now()}.wav`);
+    const res = await run(this.o.ffmpegBin, ['-y', '-loglevel', 'error', '-i', this.wakeTonePath, '-i', file,
+      '-filter_complex', '[0:a]aresample=44100,aformat=channel_layouts=stereo[a];[1:a]aresample=44100,aformat=channel_layouts=stereo[b];[a][b]concat=n=2:v=0:a=1[o]',
+      '-map', '[o]', out], this.o.cmdTimeoutMs);
+    return res.ok ? out : null;
+  }
+
+  // Play an existing audio file through Lily, wake tone joined in front.
   async playFile(file) {
-    if (await this._ensureWakeTone()) await this._playFile(this.wakeTonePath);
-    await this._playFile(file);
+    const joined = await this._withWakeTone(file);
+    try { await this._playFile(joined || file); }
+    finally { if (joined) try { fs.unlinkSync(joined); } catch (_) {} }
   }
 
   async playBuffer(audioBuffer) {
     const tmp = path.join(os.tmpdir(), `lily-line-${Date.now()}.audio`);
     fs.writeFileSync(tmp, audioBuffer);
     try {
-      if (await this._ensureWakeTone()) await this._playFile(this.wakeTonePath);
-      await this._playFile(tmp);
+      await this.playFile(tmp);
     } finally {
       try { fs.unlinkSync(tmp); } catch (_) {}
     }
