@@ -24,7 +24,7 @@ const { MOVEMENT, probeMovementValues } = require('./protocol');
 //   calm = candle orange flame, wary = spooky purple sweep, ward = white blinking.
 // All three stay clear of Evelina's spell palette.
 const LANTERN_MOODS = {
-  calm: { r: 0xFF, g: 0x82, b: 0x23, brightness: 180, mode: 'static' }, // orange, flame
+  calm: { r: 0xFF, g: 0x3C, b: 0x00, brightness: 200, mode: 'static' }, // deep orange, flame (the app's FF8223 looked white on her LEDs)
   wary: { r: 0xCE, g: 0x1E, b: 0xFF, brightness: 200, mode: 'pulse'  }, // purple, downward sweep
   ward: { r: 0xE7, g: 0xFF, b: 0xFC, brightness: 255, mode: 'strobe' }, // white, blinking
   off:  { r: 0,    g: 0,    b: 0,    brightness: 0,   mode: 'static' },
