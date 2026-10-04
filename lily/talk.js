@@ -132,7 +132,7 @@ function voicePrompt(guardrail) {
     'eyes, wrist (your free left hand twists), arm (your free left arm lifts — your lantern arm stays still), ' +
     'arm_and_wrist (a full beckoning gesture), head_and_eyes, head_and_arm, all. Prefer head or head_and_eyes ' +
     'for ordinary replies, wrist or arm_and_wrist to beckon, and save all for big moments.',
-    'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), excited (delight, good news), angry (scolding ' +
+    'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), excited (delight, good news), shout (raising your voice — calling across the yard, or silencing someone), angry (scolding ' +
     'Evelina, or someone being rude), whisper (secrets, menace up close), ominous (warnings about the storm). ' +
     'Use the strong tones sparingly so they land.',
     guardrail || '',
@@ -148,6 +148,7 @@ const TONES = {
   angry:    { model: 'eleven_v3', tag: '[angrily]', stability: 0.0 },
   whisper:  { model: 'eleven_v3', tag: '[whispers]', stability: 0.5 },
   excited:  { model: 'eleven_v3', tag: '[excitedly]', stability: 0.0 },
+  shout:    { model: 'eleven_v3', tag: '[shouting]', stability: 0.0 },
   ominous:  { model: 'eleven_v3', tag: '[ominously]', stability: 0.5 },
 };
 
