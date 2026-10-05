@@ -141,11 +141,39 @@ function createLily({ log = console.log, onChange = () => {} } = {}) {
     },
     // Tune the pre-roll hum that gets her moving before the first word.
     setWakeTone(t) { cfg.wakeTone = audio.setWakeTone(t); save(); return cfg.wakeTone; },
+    // Plays ONLY on her own speaker: if it has dropped, reconnect first; if that
+    // fails, throw — never let the sound fall through to the yard speakers.
     async playFile(file) {
-      if (!audioState.routed) throw new Error('Lily speaker not connected');
+      if (!audioState.connected) throw new Error('Lily speaker not connected');
+      if (!(await audio.sinkPresent())) {
+        log('speaker dropped — reconnecting before she speaks');
+        await reconnectSpeaker();
+      }
       await audio.playFile(file);
     },
   };
+
+  // Speaker watchdog: her Classic BT speaker can drop on its own. While it is
+  // supposed to be connected, check every 15 s and reconnect (re-sending live
+  // mode, which her speaker needs before it will accept a connection).
+  let reconnecting = null;
+  function reconnectSpeaker() {
+    if (!reconnecting) {
+      audioState.routed = false;
+      reconnecting = api.audioConnect()
+        .then(() => { log('speaker reconnected'); })
+        .catch((e) => { log(`speaker reconnect failed: ${e.message}`); throw e; })
+        .finally(() => { reconnecting = null; });
+    }
+    return reconnecting;
+  }
+  if (audio.isReal) {
+    setInterval(async () => {
+      if (!audioState.connected || reconnecting) return;
+      try { if (!(await audio.sinkPresent())) { log('speaker dropped — watchdog reconnecting'); await reconnectSpeaker(); } }
+      catch (_) {}
+    }, 15000);
+  }
   return api;
 }
 

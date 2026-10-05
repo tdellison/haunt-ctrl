@@ -198,6 +198,19 @@ class LinuxLilyAudioRouter {
   // NOT made the system default: the rest of the show plays through the
   // default output (to the Onkyo), and a set-default here would silently
   // reroute every skeleton, storm and ambient sound into Lily's speaker.
+  // Is her Bluetooth sink actually present right now? PipeWire silently
+  // re-routes a stream whose PULSE_SINK is missing to the DEFAULT output (the
+  // Onkyo), so this must be checked before every line (2026-10-05: her speaker
+  // dropped mid-conversation and her voice came out of the yard speakers).
+  async sinkPresent() {
+    if (!this.address) return false;
+    const id = await this._findSinkId();
+    if (id === null) return false;
+    this.sinkId = id;
+    this.sinkName = await this._sinkName(id) || this.sinkName;
+    return !!this.sinkName;
+  }
+
   async routeAudioOutput() {
     if (this.sinkId === null) await this._waitForSink();
     this.sinkName = await this._sinkName(this.sinkId);

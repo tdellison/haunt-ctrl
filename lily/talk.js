@@ -360,8 +360,14 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     set({ phase: 'speaking' });
     busyUntil = Date.now() + 60000;             // deaf until playback ends (+ tail below)
     try {
-      if (where === 'her speaker') await lily.playFile(file);
-      else if (playFallback) await playFallback(file);
+      if (where === 'her speaker') {
+        try { await lily.playFile(file); }
+        catch (e) {
+          log(`her speaker unavailable (${e.message}) — this line goes to the witch zone`);
+          if (!playFallback) throw e;
+          await playFallback(file);
+        }
+      } else if (playFallback) await playFallback(file);
       else throw new Error('Lily speaker not connected and no fallback output');
     } finally {
       busyUntil = Date.now() + 700;
