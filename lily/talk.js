@@ -185,6 +185,9 @@ const TONES = {
   whisper:  { model: TTS_MODEL, stability: 0.6 },
   excited:  { model: TTS_MODEL, stability: 0.3 },
   shout:    { model: 'eleven_v3', tag: '[shouting]', stability: 0.0 },
+  // Filler only (never chosen by Claude): a performed throat clear. Voiced
+  // once and cached, so v3's slowness never reaches a conversation.
+  throat:   { model: 'eleven_v3', tag: '[clears throat]', stability: 0.5 },
   ominous:  { model: TTS_MODEL, stability: 0.35 },
 };
 
@@ -234,7 +237,10 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   // Instant murmurs in her voice, voiced once and cached, played the moment a
   // guest stops talking while Claude writes the real reply — so she responds
   // in ~1 s instead of waiting silently. Only in voice mode, only from the mic.
+  // Murmurs, plus a throat clear about 1 time in 5 (owner's request).
   const FILLERS = ['Hmm.', 'Ahh...', 'Well now...', 'Oh?', 'Mm.'];
+  const THROAT = { text: 'Ahem.', tone: 'throat' };
+  const THROAT_CHANCE = 0.2;
   const fillerFiles = {};
   async function warmFillers() {
     const key = getElevenKey(), voiceId = getVoiceId();
@@ -247,14 +253,22 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
         fillerFiles[f] = file;
       } catch (e) { log(`filler "${f}" not ready: ${e.message}`); }
     }
+    if (!fillerFiles.throat || !fs.existsSync(fillerFiles.throat)) {
+      try {
+        const file = path.join(os.tmpdir(), 'lily-filler-throat.mp3');
+        fs.writeFileSync(file, await elevenTts(THROAT.text, voiceId, key, THROAT.tone));
+        fillerFiles.throat = file;
+      } catch (e) { log(`throat-clear filler not ready: ${e.message}`); }
+    }
   }
   function playFiller() {
     if (settings.mode !== 'voice' || settings.fillers === false) return;
     const st = lily.status();
     if (!st.audio || !st.audio.routed) return;
     const ready = FILLERS.filter(f => fillerFiles[f]);
-    if (!ready.length) return;
-    const f = ready[Math.floor(Math.random() * ready.length)];
+    let f = ready.length ? ready[Math.floor(Math.random() * ready.length)] : null;
+    if (fillerFiles.throat && Math.random() < THROAT_CHANCE) f = 'throat';
+    if (!f) return;
     if (st.connected && st.armed) lily.move('head_and_eyes').catch(() => {});
     if (timing.heardAt) timing.fillerMs = Date.now() - timing.heardAt;
     pendingFiller = lily.playFile(fillerFiles[f]);
@@ -279,7 +293,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     type: 'object',
     properties: {
       line: { type: 'string' },
-      tone: { type: 'string', enum: Object.keys(TONES) },
+      tone: { type: 'string', enum: Object.keys(TONES).filter(t => t !== 'throat') },
       lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
       move: { type: 'string', enum: MOVES },
     },
