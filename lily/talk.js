@@ -463,8 +463,10 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
 
   async function onUtterance(pcm) {
     if (busy) return;
-    set({ phase: 'transcribing' });
     timing.heardAt = Date.now();
+    // Murmur NOW — before transcription — so she reacts the instant you stop.
+    playFiller();
+    set({ phase: 'transcribing' });
     const tStt = Date.now();
     const heard = await transcribe(pcm);
     timing.sttMs = Date.now() - tStt;
@@ -472,7 +474,6 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     if (!heard || heard.length < 2 || /^(you|thank you|thanks for watching)[.!]?$/i.test(heard)) {
       set({ phase: 'listening' }); return;
     }
-    playFiller();
     respond(heard).catch(e => log(`turn failed: ${e.message}`));
   }
 

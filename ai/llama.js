@@ -108,6 +108,11 @@ function createLlama({ log = console.log } = {}) {
         throw e;
       });
     },
+    // Cancel background (bank) work in flight — the CPU is needed elsewhere
+    // (e.g. Lily's speech-to-text while she is listening).
+    abortBackground() {
+      if (running && running.priority === PRIORITY.bank) running.abort.abort();
+    },
     status() {
       return {
         model: MODEL, ready, lastError, queued: queue.length, busy: !!running,

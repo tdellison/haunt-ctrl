@@ -3567,6 +3567,9 @@ const skeletonLines = require('./ai/skeletons').createSkeletonLines({
   getStage: () => (STRIKE_SEQUENCE[strikeIndex] || STRIKE_SEQUENCE[0]).name,
   stageNames: STRIKE_SEQUENCE.map(st => st.name),
   log: (m) => broadcastLog(`Llama: ${m}`, 'SYSTEM'),
+  // While Lily is listening, her speech-to-text needs the CPU: no background
+  // bank writing (measured: it pushed her transcription from 0.6 s to 2-7 s).
+  quiet: () => { try { return !!lilyTalk.status().listening; } catch (_) { return false; } },
 });
 if (!IS_WINDOWS) {
   llama.warm().then(ok => { if (ok) skeletonLines.refill(); });
@@ -3620,7 +3623,11 @@ const lilyTalk = require('./lily/talk').createTalk({
   getApiKey: anthropicKey,
   trackTokens,
   guardrail: GUARDRAIL_UNMARKED_GRAVE,
-  onChange: () => broadcast({ type: 'lilyTalk', data: lilyTalk.status() }),
+  onChange: () => {
+    const st = lilyTalk.status();
+    if (st.listening) llama.abortBackground();
+    broadcast({ type: 'lilyTalk', data: st });
+  },
   getElevenKey: () => process.env.ELEVENLABS_API_KEY || secrets.elevenLabsApiKey || null,
   getVoiceId: () => {
     try { return JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^\uFEFF/, '')).lily || null; } catch (_) { return null; }

@@ -69,7 +69,7 @@ function cleanLine(text, name) {
   return sentences.slice(0, 2).join('').trim();
 }
 
-function createSkeletonLines({ llama, bible, guardrail, getStage, stageNames, log = console.log }) {
+function createSkeletonLines({ llama, bible, guardrail, getStage, stageNames, log = console.log, quiet = () => false }) {
   const chars = {
     jasper: { c: bible.characters.jasper, other: 'Edgar' },
     edgar: { c: bible.characters.edgar, other: 'Jasper' },
@@ -137,7 +137,7 @@ function createSkeletonLines({ llama, bible, guardrail, getStage, stageNames, lo
     // Keep BANK_PER_SLOT lines per character/kind for the current and next
     // stage. One line at a time, and only while nothing more urgent is queued.
     async refill() {
-      if (refilling) return;
+      if (refilling || quiet()) return;   // quiet(): CPU reserved (Lily is listening)
       refilling = true;
       try {
         const cur = getStage();
