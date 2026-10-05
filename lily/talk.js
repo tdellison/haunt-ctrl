@@ -66,7 +66,34 @@ function rms(buf) {
   return Math.sqrt(s / Math.max(1, n));
 }
 
-function transcribe(pcm) {
+// whisper-server keeps the model in memory: ~0.3 s per utterance instead of
+// ~0.7 s for the CLI, which reloads the model every time. Started on demand,
+// CLI fallback if it is not up.
+const WHISPER_SERVER_BIN = path.join(os.homedir(), 'whisper.cpp', 'build', 'bin', 'whisper-server');
+const WHISPER_PORT = 8178;
+let whisperServer = null;
+function ensureWhisperServer() {
+  if (whisperServer || process.platform !== 'linux' || !fs.existsSync(WHISPER_SERVER_BIN)) return;
+  whisperServer = spawn(WHISPER_SERVER_BIN, ['-m', WHISPER_MODEL, '--host', '127.0.0.1', '--port', String(WHISPER_PORT),
+    '-t', String(Math.max(2, os.cpus().length))], { stdio: 'ignore' });
+  whisperServer.on('exit', () => { whisperServer = null; });
+}
+async function transcribeViaServer(pcm) {
+  const form = new FormData();
+  form.append('file', new Blob([wavBuffer(pcm)], { type: 'audio/wav' }), 'heard.wav');
+  form.append('response_format', 'json');
+  const r = await fetch(`http://127.0.0.1:${WHISPER_PORT}/inference`, { method: 'POST', body: form, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error(`whisper-server ${r.status}`);
+  return String((await r.json()).text || '');
+}
+const cleanHeard = (t) => t.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+
+async function transcribe(pcm) {
+  try { if (whisperServer) return cleanHeard(await transcribeViaServer(pcm)); } catch (_) {}
+  return transcribeCli(pcm);
+}
+
+function transcribeCli(pcm) {
   const file = path.join(os.tmpdir(), `lily-heard-${Date.now()}.wav`);
   fs.writeFileSync(file, wavBuffer(pcm));
   return new Promise((resolve) => {
@@ -122,6 +149,9 @@ function voicePrompt(guardrail) {
     'trying to complete a dangerous ritual) and Lenora Thorn (wise, dry). Two skeletons, Jasper and Edgar, ' +
     'watch from behind you.',
     'Character: watchful and protective, eerie and dry, a little amused by mortals, never cruel to children. ' +
+    'You are centuries old and outside ordinary time: never name a calendar year or today\'s date — if asked, ' +
+    'deflect ("Years mean little at Thornfield"). Jasper and Edgar never stop talking — they bicker constantly, ' +
+    'Jasper fretting, Edgar mocking. ' +
     'Your lantern is your mood. You guard Evelina from her own recklessness and are not shy about scolding her — ' +
     'when she pushes too far you push back ("Enough. Do it again, and do it right this time."). You bicker with ' +
     'her, but you are on her side.',
@@ -199,6 +229,36 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   let busyUntil = 0;       // ignore the mic while she is speaking (+ tail)
   let busy = false;
   let timing = {};          // per-turn latency breakdown, logged after each reply
+  let pendingFiller = null; // the "thinking" murmur in flight, if any
+
+  // Instant murmurs in her voice, voiced once and cached, played the moment a
+  // guest stops talking while Claude writes the real reply — so she responds
+  // in ~1 s instead of waiting silently. Only in voice mode, only from the mic.
+  const FILLERS = ['Hmm.', 'Ahh...', 'Well now...', 'Oh?', 'Mm.'];
+  const fillerFiles = {};
+  async function warmFillers() {
+    const key = getElevenKey(), voiceId = getVoiceId();
+    if (!key || !voiceId) return;
+    for (const f of FILLERS) {
+      if (fillerFiles[f] && fs.existsSync(fillerFiles[f])) continue;
+      try {
+        const file = path.join(os.tmpdir(), `lily-filler-${FILLERS.indexOf(f)}.mp3`);
+        fs.writeFileSync(file, await elevenTts(f, voiceId, key, 'normal'));
+        fillerFiles[f] = file;
+      } catch (e) { log(`filler "${f}" not ready: ${e.message}`); }
+    }
+  }
+  function playFiller() {
+    if (settings.mode !== 'voice' || settings.fillers === false) return;
+    const st = lily.status();
+    if (!st.audio || !st.audio.routed) return;
+    const ready = FILLERS.filter(f => fillerFiles[f]);
+    if (!ready.length) return;
+    const f = ready[Math.floor(Math.random() * ready.length)];
+    if (st.connected && st.armed) lily.move('head_and_eyes').catch(() => {});
+    if (timing.heardAt) timing.fillerMs = Date.now() - timing.heardAt;
+    pendingFiller = lily.playFile(fillerFiles[f]);
+  }
 
   const set = (patch) => { Object.assign(status, patch); onChange(); };
 
@@ -268,15 +328,20 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     if (!voiceId) throw new Error('No voice ID for "lily" in voices.json');
     const st = lily.status();
     const tTts = Date.now();
+    // Lantern + movement go out over BLE WHILE the voice is generated, not after.
+    const lanternP = lantern && lantern !== 'keep' && st.connected
+      ? lily.setMood(lantern).catch(e => log(`lantern: ${e.message}`)) : null;
+    const moveP = move && move !== 'none' && st.connected && st.armed
+      ? lily.move(move).then(() => true).catch(e => { log(`move: ${e.message}`); return false; }) : Promise.resolve(false);
     const audio = await elevenTts(text, voiceId, key, tone);
     timing.ttsMs = Date.now() - tTts;
     const file = path.join(os.tmpdir(), `lily-say-${Date.now()}.mp3`);
     fs.writeFileSync(file, audio);
-    if (lantern && lantern !== 'keep' && st.connected) await lily.setMood(lantern).catch(e => log(`lantern: ${e.message}`));
-    let moved = false;
-    if (move && move !== 'none' && st.connected && st.armed) {
-      moved = await lily.move(move).then(() => true).catch(e => { log(`move: ${e.message}`); return false; });
-    }
+    await lanternP;
+    // The "thinking" murmur must finish before the real line starts.
+    if (pendingFiller) { await pendingFiller.catch(() => {}); pendingFiller = null; }
+    const moved = await moveP;
+    if (timing.heardAt) timing.replyAudioMs = Date.now() - timing.heardAt;
     const where = st.audio && st.audio.routed ? 'her speaker' : 'witch zone';
     set({ phase: 'speaking' });
     busyUntil = Date.now() + 60000;             // deaf until playback ends (+ tail below)
@@ -340,7 +405,9 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       await perform(choice, heard);
       timing.untilSpeechMs = (timing.sttMs || 0) + timing.claudeMs + (timing.ttsMs || 0);
       log(`timing: speech-to-text ${timing.sttMs ?? '-'} ms, Claude ${timing.claudeMs} ms, voice ${timing.ttsMs ?? '-'} ms` +
-        ` -> she starts ~${timing.untilSpeechMs} ms after you stop (+ pre-roll/Bluetooth); spoke for ${Date.now() - tVoice - (timing.ttsMs || 0)} ms`);
+        (timing.fillerMs !== undefined ? `; murmur sent ${timing.fillerMs} ms` : '') +
+        (timing.replyAudioMs !== undefined ? `; reply sent ${timing.replyAudioMs} ms` : ` -> ~${timing.untilSpeechMs} ms`) +
+        ` after you stopped (+ ~1 s pre-roll/Bluetooth until heard)`);
       status.lastTiming = { ...timing };
       timing = {};
       return status.lastReply;
@@ -397,6 +464,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   async function onUtterance(pcm) {
     if (busy) return;
     set({ phase: 'transcribing' });
+    timing.heardAt = Date.now();
     const tStt = Date.now();
     const heard = await transcribe(pcm);
     timing.sttMs = Date.now() - tStt;
@@ -404,6 +472,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     if (!heard || heard.length < 2 || /^(you|thank you|thanks for watching)[.!]?$/i.test(heard)) {
       set({ phase: 'listening' }); return;
     }
+    playFiller();
     respond(heard).catch(e => log(`turn failed: ${e.message}`));
   }
 
@@ -473,6 +542,8 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     async start(source) {
       if (status.listening) return api.status();
       if (process.platform !== 'linux') throw new Error('The mic loop runs on the Linux server only');
+      ensureWhisperServer();
+      warmFillers().catch(() => {});
       capture = startCapture(source, onUtterance);
       capture.on('exit', (code) => {
         if (status.listening) { set({ listening: false, phase: 'idle', lastError: `mic stopped (ffmpeg exit ${code})` }); }
