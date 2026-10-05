@@ -28,12 +28,14 @@ const path = require('path');
 const CLIPS_FILE = path.join(__dirname, 'clips.json');
 const WHISPER_BIN = path.join(os.homedir(), 'whisper.cpp', 'build', 'bin', 'whisper-cli');
 const WHISPER_MODEL = path.join(os.homedir(), 'whisper.cpp', 'models', 'ggml-base.en.bin');
-const MODEL = 'claude-opus-5';
+// Haiku 4.5 by owner's choice (2026-10-05): latency beats polish for live
+// guest replies — Opus 5 measured ~3 s per reply here.
+const MODEL = 'claude-haiku-4-5';
 
 const RATE = 16000;
 const FRAME = 320;                 // 20 ms of 16 kHz mono
 const START_FRAMES = 3;            // 60 ms above threshold starts an utterance
-const END_SILENCE_MS = 800;        // this much quiet ends it
+const END_SILENCE_MS = 600;        // this much quiet ends it (was 800; trimmed for latency)
 const MIN_UTTER_MS = 400;
 const MAX_UTTER_MS = 12000;
 const PREROLL_FRAMES = 15;         // keep 300 ms before the trigger
@@ -142,14 +144,18 @@ function voicePrompt(guardrail) {
 // Delivery tones. 'normal' stays on the fast model; the expressive tones use
 // Eleven v3, which reads a leading audio tag ([sweetly], [angrily]) as a
 // performance cue (v3 stability: 0 creative / 0.5 natural / 1 robust).
+// Speed (measured 2026-10-05): the fast model voices a line in ~0.7 s, Eleven
+// v3 takes ~4 s. So only the two big moments (angry, shout) pay for v3; the
+// other tones use the fast model, which ignores audio tags (so none are sent)
+// and colours delivery through stability alone.
 const TONES = {
   normal:   { model: TTS_MODEL },
-  sweet:    { model: 'eleven_v3', tag: '[sweetly]', stability: 0.5 },
+  sweet:    { model: TTS_MODEL, stability: 0.7 },
   angry:    { model: 'eleven_v3', tag: '[angrily]', stability: 0.0 },
-  whisper:  { model: 'eleven_v3', tag: '[whispers]', stability: 0.5 },
-  excited:  { model: 'eleven_v3', tag: '[excitedly]', stability: 0.0 },
+  whisper:  { model: TTS_MODEL, stability: 0.6 },
+  excited:  { model: TTS_MODEL, stability: 0.3 },
   shout:    { model: 'eleven_v3', tag: '[shouting]', stability: 0.0 },
-  ominous:  { model: 'eleven_v3', tag: '[ominously]', stability: 0.5 },
+  ominous:  { model: TTS_MODEL, stability: 0.35 },
 };
 
 // ElevenLabs text-to-speech -> mp3 bytes.
@@ -192,6 +198,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   let capture = null;
   let busyUntil = 0;       // ignore the mic while she is speaking (+ tail)
   let busy = false;
+  let timing = {};          // per-turn latency breakdown, logged after each reply
 
   const set = (patch) => { Object.assign(status, patch); onChange(); };
 
@@ -233,12 +240,12 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   async function decide(heard) {
     const c = anthropic();
     const messages = [...history, { role: 'user', content: `Guest says: "${heard}"` }];
-    const response = await c.beta.messages.create({
+    // Haiku 4.5: no effort setting and no server-side fallbacks (both are for
+    // the larger models); structured output keeps the reply parseable.
+    const response = await c.messages.create({
       model: MODEL,
-      max_tokens: 2000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: schema() } },
+      max_tokens: 512,
+      output_config: { format: { type: 'json_schema', schema: schema() } },
       system: [{ type: 'text', text: settings.mode === 'voice' ? voicePrompt(guardrail) : systemPrompt(clips, guardrail),
         cache_control: { type: 'ephemeral' } }],
       messages,
@@ -260,7 +267,9 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     if (!key) throw new Error('No ElevenLabs key — add it in Setup → API Keys');
     if (!voiceId) throw new Error('No voice ID for "lily" in voices.json');
     const st = lily.status();
+    const tTts = Date.now();
     const audio = await elevenTts(text, voiceId, key, tone);
+    timing.ttsMs = Date.now() - tTts;
     const file = path.join(os.tmpdir(), `lily-say-${Date.now()}.mp3`);
     fs.writeFileSync(file, audio);
     if (lantern && lantern !== 'keep' && st.connected) await lily.setMood(lantern).catch(e => log(`lantern: ${e.message}`));
@@ -323,9 +332,17 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
         if (!clips.length) throw new Error('No clips catalogued yet — run BUILD CATALOG first');
         if (!lily.status().connected) throw new Error('Lily is not connected');
       }
+      const tAi = Date.now();
       const choice = await decide(heard);
+      timing.claudeMs = Date.now() - tAi;
       log(`heard "${heard}" -> ${settings.mode === 'voice' ? `"${choice.line}"` : `clip ${choice.clip}`}, ${choice.lantern}, ${choice.move}`);
+      const tVoice = Date.now();
       await perform(choice, heard);
+      timing.untilSpeechMs = (timing.sttMs || 0) + timing.claudeMs + (timing.ttsMs || 0);
+      log(`timing: speech-to-text ${timing.sttMs ?? '-'} ms, Claude ${timing.claudeMs} ms, voice ${timing.ttsMs ?? '-'} ms` +
+        ` -> she starts ~${timing.untilSpeechMs} ms after you stop (+ pre-roll/Bluetooth); spoke for ${Date.now() - tVoice - (timing.ttsMs || 0)} ms`);
+      status.lastTiming = { ...timing };
+      timing = {};
       return status.lastReply;
     } catch (e) {
       set({ lastError: e.message });
@@ -380,7 +397,9 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   async function onUtterance(pcm) {
     if (busy) return;
     set({ phase: 'transcribing' });
+    const tStt = Date.now();
     const heard = await transcribe(pcm);
+    timing.sttMs = Date.now() - tStt;
     // whisper "hears" these in plain room noise — never answer them.
     if (!heard || heard.length < 2 || /^(you|thank you|thanks for watching)[.!]?$/i.test(heard)) {
       set({ phase: 'listening' }); return;

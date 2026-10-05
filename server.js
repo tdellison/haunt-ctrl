@@ -1117,7 +1117,8 @@ function getModel(requestType) {
 // #19 — Nightly token budget. Rates are per million tokens; update here if
 // pricing changes.
 const TOKEN_RATES = {
-  'claude-opus-5': { in: 5.00, out: 25.00 },  // Lily's talk loop (lily/talk.js)
+  'claude-opus-5': { in: 5.00, out: 25.00 },
+  'claude-haiku-4-5': { in: 1.00, out: 5.00 },  // Lily's talk loop (lily/talk.js)
   [MODEL_HAIKU]:  { in: 1.00,  out: 5.00  },
   [MODEL_SONNET]: { in: 3.00,  out: 15.00 },
 };
