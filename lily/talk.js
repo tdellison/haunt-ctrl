@@ -35,7 +35,7 @@ const MODEL = 'claude-haiku-4-5';
 const RATE = 16000;
 const FRAME = 320;                 // 20 ms of 16 kHz mono
 const START_FRAMES = 3;            // 60 ms above threshold starts an utterance
-const END_SILENCE_MS = 600;        // this much quiet ends it (was 800; trimmed for latency)
+const END_SILENCE_MS = 750;        // this much quiet ends it (600 cut guests off mid-sentence)
 const MIN_UTTER_MS = 400;
 const MAX_UTTER_MS = 12000;
 const PREROLL_FRAMES = 15;         // keep 300 ms before the trigger
@@ -175,13 +175,13 @@ function voicePrompt(guardrail) {
 // Eleven v3, which reads a leading audio tag ([sweetly], [angrily]) as a
 // performance cue (v3 stability: 0 creative / 0.5 natural / 1 robust).
 // Speed (measured 2026-10-05): the fast model voices a line in ~0.7 s, Eleven
-// v3 takes ~4 s. So only the two big moments (angry, shout) pay for v3; the
+// v3 takes ~4 s. So only the rare big moment (shout) pays for v3; the
 // other tones use the fast model, which ignores audio tags (so none are sent)
 // and colours delivery through stability alone.
 const TONES = {
   normal:   { model: TTS_MODEL },
   sweet:    { model: TTS_MODEL, stability: 0.7 },
-  angry:    { model: 'eleven_v3', tag: '[angrily]', stability: 0.0 },
+  angry:    { model: TTS_MODEL, stability: 0.2 },   // fast model by owner's choice (v3 took ~3 s)
   whisper:  { model: TTS_MODEL, stability: 0.6 },
   excited:  { model: TTS_MODEL, stability: 0.3 },
   shout:    { model: 'eleven_v3', tag: '[shouting]', stability: 0.0 },
