@@ -128,6 +128,13 @@ class LinuxLilyAudioRouter {
     const { log } = this.o;
 
     let res = await this._bt(['connect', addr]);
+    // "not available": BlueZ hasn't seen her speaker since it appeared (it only
+    // shows up after live mode). A discovery pass makes it visible; retry once.
+    if (!res.ok && /not available/i.test(res.out)) {
+      log('Speaker not visible yet - scanning, then retrying');
+      await this._scan();
+      res = await this._bt(['connect', addr]);
+    }
     if (!res.ok && STALE_PAIRING_MARKERS.test(res.out)) {
       log(`Connect failed (${res.out.trim().slice(0, 120)}) - stale-pairing recovery`);
       await this._bt(['remove', addr]);

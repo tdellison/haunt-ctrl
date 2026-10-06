@@ -120,7 +120,11 @@ function createLily({ log = console.log, onChange = () => {} } = {}) {
       if (!cfg.audioAddress) throw new Error('No Lily audio address — scan and pick her speaker first');
       audioState.lastError = null;
       try {
-        if (ble.connected) await ble.setClassicAudio(true).catch(e => log(`classic-audio arm failed: ${e.message}`));
+        // Her speaker only appears after live mode, and not instantly.
+        if (ble.connected) {
+          await ble.setClassicAudio(true).catch(e => log(`classic-audio arm failed: ${e.message}`));
+          await new Promise(r => setTimeout(r, 2000));
+        }
         if (pair) await audio.pair(cfg.audioAddress);
         await audio.connect(cfg.audioAddress);
         audioState.connected = true;
