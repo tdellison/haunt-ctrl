@@ -3591,6 +3591,64 @@ app.post('/api/ai/line', aiRoute(async ({ character = 'jasper', kind, stage, eve
 app.post('/api/ai/take', aiRoute(async ({ character = 'jasper', kind = 'banter' }) =>
   ({ result: skeletonLines.take({ character, kind }) })));
 // A skeleton's answer to a witch/Lily line that is about to play.
+// ─── Character voices: ElevenLabs → the character's own zone and side ─────────
+// Jasper/Edgar → skeleton zone (z1) left/right; Evelina/Lenora → witch zone
+// (z3) left/right — per CHARACTERS. Fast model; the line goes into the
+// dialogue transcript with the engine that wrote it.
+async function speakCharacter(id, line, { trigger = 'scripted', engine = null, context = null } = {}) {
+  const c = CHARACTERS.find(x => x.id === id);
+  if (!c) throw new Error(`Unknown character "${id}"`);
+  if (!c.voiceId) throw new Error(`No ElevenLabs voice set for ${id}`);
+  const key = process.env.ELEVENLABS_API_KEY || secrets.elevenLabsApiKey;
+  if (!key) throw new Error('No ElevenLabs key — add it in Setup → API Keys');
+  const text = String(line || '').trim();
+  if (!text) throw new Error('Nothing to say');
+  const t0 = Date.now();
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(c.voiceId)}?output_format=mp3_44100_128`, {
+    method: 'POST', signal: AbortSignal.timeout(15000),
+    headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+    body: JSON.stringify({ text, model_id: 'eleven_flash_v2_5' }),
+  });
+  if (!r.ok) throw new Error(`ElevenLabs ${r.status}`);
+  const tmp = require('os').tmpdir();
+  const mp3 = path.join(tmp, `voice-${id}-${Date.now()}.mp3`);
+  const wav = mp3.replace(/\.mp3$/, '.wav');
+  fs.writeFileSync(mp3, Buffer.from(await r.arrayBuffer()));
+  const pan = c.channel === 'left' ? 'pan=stereo|c0=c0|c1=0*c0'
+    : c.channel === 'right' ? 'pan=stereo|c0=0*c0|c1=c0' : 'pan=stereo|c0=c0|c1=c0';
+  await new Promise((res, rej) => require('child_process').execFile('ffmpeg',
+    ['-loglevel', 'error', '-y', '-i', mp3, '-af', pan, wav], { timeout: 15000 }, (e) => e ? rej(e) : res()));
+  const voiceMs = Date.now() - t0;
+  logDialogue({ character: id, line: text, trigger, engine, context });
+  broadcastLog(`${c.name}: "${text}"`, 'AUDIO');
+  try {
+    await new Promise((res) => { const p = spawnPlayer(wav, { zone: c.zone }, { stdio: 'ignore' }); p.on('exit', res); p.on('error', res); });
+  } finally {
+    for (const f of [mp3, wav]) try { fs.unlinkSync(f); } catch (_) {}
+  }
+  return { character: id, line: text, zone: c.zone, side: c.channel, voiceMs };
+}
+
+// Say something as a character, out loud in their zone. Give `line` to say
+// exact words; otherwise a skeleton line comes from Llama — `reactTo:{to,line}`
+// for a reaction, else an instant bank line of `kind` (written live if empty).
+app.post('/api/ai/speak', aiRoute(async ({ character = 'jasper', line, kind = 'banter', reactTo, stage }) => {
+  let text = line, engine = null, trigger = 'scripted', context = null;
+  if (!text) {
+    engine = 'llama';
+    if (reactTo && reactTo.line) {
+      const r = await skeletonLines.react({ to: reactTo.to || 'evelina', line: reactTo.line, stage, character });
+      text = r.line; trigger = 'cross_character'; context = reactTo.line;
+    } else {
+      const banked = skeletonLines.take({ character, kind });
+      text = banked ? banked.line : (await skeletonLines.line({ character, kind, stage })).line;
+      trigger = kind === 'quiet_mutter' ? 'quiet_mutter' : 'proactive';
+    }
+    if (!text) return { result: { character, line: null, note: 'stayed silent' } };
+  }
+  return { result: await speakCharacter(character, text, { trigger, engine, context }) };
+}));
+
 app.post('/api/ai/react', aiRoute(async ({ to = 'evelina', line, stage, character }) => {
   if (!line) throw new Error('line required');
   return { result: await skeletonLines.react({ to, line, stage, character }) };

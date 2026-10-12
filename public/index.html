@@ -1040,12 +1040,14 @@ body::before { animation:scanlines 10s linear infinite; }
       <select id="llama-char" class="raw-input" style="width:100px"><option>jasper</option><option>edgar</option></select>
       <select id="llama-kind" class="raw-input" style="width:130px"><option>thunder</option><option>lightning</option><option>fog</option><option>banter</option><option>quiet_mutter</option></select>
       <button class="btn btn-green btn-sm" onclick="llamaTake()">⚡ INSTANT LINE</button>
+      <button class="btn btn-orange btn-sm" onclick="llamaSpeak()">🔊 SAY IT OUT LOUD</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <select id="llama-to" class="raw-input" style="width:100px"><option>evelina</option><option>lily</option><option>lenora</option></select>
       <input class="raw-input" id="llama-line" placeholder="what she says…" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')llamaReact()"/>
       <select id="llama-stage" class="raw-input" style="width:140px"><option>Distant</option><option>Building</option><option>Active</option><option>Grand Ritual</option><option>Calm After Storm</option></select>
       <button class="btn btn-purple btn-sm" onclick="llamaReact()">💬 SKELETON REACTS</button>
+      <button class="btn btn-orange btn-sm" onclick="llamaReact(true)">🔊 REACT OUT LOUD</button>
     </div>
   </div>
 
@@ -1783,10 +1785,22 @@ async function llamaTake() {
   document.getElementById('llama-out').textContent = r?.result ? `${r.result.character} (${ms} ms): ${r.result.line}` : `none ready yet (${ms} ms) — the bank is still writing`;
   llamaLoad();
 }
-async function llamaReact() {
+async function llamaSpeak() {
+  document.getElementById('llama-out').textContent = 'speaking…';
+  const r = await api('/api/ai/speak', { character: document.getElementById('llama-char').value, kind: document.getElementById('llama-kind').value });
+  document.getElementById('llama-out').textContent = r?.result ? `${r.result.character} (${r.result.side}): ${r.result.line || '… (silent)'}` : (r?.error || 'failed');
+  llamaLoad();
+}
+async function llamaReact(outLoud) {
   const line = document.getElementById('llama-line').value.trim();
   if (!line) return;
   document.getElementById('llama-out').textContent = 'writing…';
+  if (outLoud) {
+    const r = await api('/api/ai/speak', { character: document.getElementById('llama-char').value,
+      reactTo: { to: document.getElementById('llama-to').value, line }, stage: document.getElementById('llama-stage').value });
+    document.getElementById('llama-out').textContent = r?.result ? `${r.result.character} (${r.result.side}): ${r.result.line || '… (silent)'}` : (r?.error || 'failed');
+    return llamaLoad();
+  }
   const r = await api('/api/ai/react', { to: document.getElementById('llama-to').value, line, stage: document.getElementById('llama-stage').value });
   document.getElementById('llama-out').textContent = r?.result
     ? `${r.result.character} (${(r.result.ms / 1000).toFixed(1)} s): ${r.result.line || '… (stays silent)'}` : (r?.error || 'failed');
