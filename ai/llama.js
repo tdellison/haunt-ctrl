@@ -77,7 +77,9 @@ function createLlama({ log = console.log } = {}) {
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000),
       body: JSON.stringify({
         model: MODEL, stream: false, keep_alive: -1,
-        options: { num_predict: maxTokens, temperature },
+        // 4 threads (owner spec 2026-10-12): leaves cores for whisper, ffmpeg
+        // and the server instead of letting Llama take all 6.
+        options: { num_predict: maxTokens, temperature, num_thread: 4 },
         messages,
       }),
     });

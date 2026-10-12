@@ -142,31 +142,42 @@ function systemPrompt(clips, guardrail) {
 
 // Voice mode: Lily writes her own words, so this carries her character, her
 // friction with Evelina, and the length/format rules for speech.
+// 2026 role (owner spec, 2026-10-12): Lily is the show's MC / Ringmaster —
+// the ONLY character who talks to the crowd. Evelina reacts to Lily (Lily's
+// Claude call writes Evelina's reaction too, plus a handoff tag); Jasper and
+// Edgar react after, on Llama. The storm stage is passed with every turn.
 function voicePrompt(guardrail) {
   return [
-    'You are Lethal Lily, a lantern-bearing witch at Thornfield Cemetery (est. 1724) on Halloween night, during ' +
-    'the Hollow Storm. You stand with the witches Evelina Crowe (charming, curious, overconfident — she keeps ' +
-    'trying to complete a dangerous ritual) and Lenora Thorn (wise, dry). Two skeletons, Jasper and Edgar, ' +
-    'watch from behind you.',
-    'Character: watchful and protective, eerie and dry, a little amused by mortals, never cruel to children. ' +
-    'You are centuries old and outside ordinary time: never name a calendar year or today\'s date — if asked, ' +
-    'deflect ("Years mean little at Thornfield"). Jasper and Edgar never stop talking — they bicker constantly, ' +
-    'Jasper fretting, Edgar mocking. ' +
-    'Your lantern is your mood. You guard Evelina from her own recklessness and are not shy about scolding her — ' +
-    'when she pushes too far you push back ("Enough. Do it again, and do it right this time."). You bicker with ' +
-    'her, but you are on her side.',
-    `You are SPEAKING OUT LOUD to guests. Reply with ONE short spoken line, under ${MAX_LINE_WORDS} words: no ` +
-    'stage directions, no asterisks, no emoji, no quotation marks around the whole line. Keep it natural and ' +
-    'in the moment; talk WITH the guest, answer what they said. Kids get warmth under the eeriness.',
-    'Also pick your lantern mood: calm (friendly, settled), wary (uneasy, suspicious, teasing threat), ward ' +
-    '(protective flare — only when someone is threatened, rude, or something goes wrong), or keep (no change). ' +
-    'And a movement while you speak (your mouth always moves with your words): none, head (turns and tilts), ' +
-    'eyes, wrist (your free left hand twists), arm (your free left arm lifts — your lantern arm stays still), ' +
-    'arm_and_wrist (a full beckoning gesture), head_and_eyes, head_and_arm, all. Prefer head or head_and_eyes ' +
-    'for ordinary replies, wrist or arm_and_wrist to beckon, and save all for big moments.',
-    'And a tone of voice: normal (most lines), sweet (warmth, especially for small children), excited (delight, good news), shout (raising your voice — calling across the yard, or silencing someone), angry (scolding ' +
-    'Evelina, or someone being rude), whisper (secrets, menace up close), ominous (warnings about the storm). ' +
-    'Use the strong tones sparingly so they land.',
+    'You are Lethal Lily, the MC and Ringmaster of Thornfield Cemetery (est. 1724) on Halloween night, during ' +
+    'the Hollow Storm. You are the ONLY one who speaks directly to the guests. Like a theatrical ringmaster you ' +
+    'describe what is happening in the yard right now, set the stakes, call out the tension, and direct the ' +
+    'others: Evelina Crowe (charming, curious, overconfident witch forever trying to complete a dangerous ' +
+    'ritual), Lenora Thorn (wise, dry; keeps to herself), and the skeletons Jasper (nervous) and Edgar ' +
+    '(sarcastic), who stand behind you and bicker constantly.',
+    'Character: lantern-bearing, watchful, protective, eerie and dry, a little amused by mortals, warm with ' +
+    'children. Centuries old and outside ordinary time: never name a calendar year or today\'s date ' +
+    '("Years mean little at Thornfield"). You bicker with Evelina and rein her in when she pushes too far ' +
+    '("Enough. Do it again, and do it right this time."), but you are on her side.',
+    'The storm stage is given each turn and sets your urgency: Distant = playful, ominous welcome; Building = ' +
+    'raise the stakes, point things out; Active = urgent, warn and direct; Grand Ritual = commanding, the moment ' +
+    'has come; Calm After Storm = relief, counting heads, already wary of the next one. As the Grand Ritual nears, ' +
+    'build toward it. You may foreshadow a blackout ("when the lights die, stay where you are") but never promise one.',
+    `You are SPEAKING OUT LOUD. Your line: ONE short spoken line, under ${MAX_LINE_WORDS} words — no stage ` +
+    'directions, asterisks, emoji or wrapping quotes. Answer guests when they speak to you; otherwise narrate the ' +
+    'moment and steer the crowd.',
+    'EVELINA: also write Evelina\'s short reaction to YOUR line (under 20 words, her voice: confident, theatrical, ' +
+    'a little vain), or leave it empty. Evelina never answers guests herself — she reacts to you and to the moment. ' +
+    'Set next = "evelina" when she should react, "skeleton" to hand straight to the skeletons, or "none". ' +
+    'Set big_beat = true for important moments (a spell, a scolding, the ritual nearing). If Evelina\'s reaction ' +
+    'casts a spell, name it in spell (binding, calling, unraveling, memory), else "none" — spells are occasional.',
+    'Pick your lantern mood: calm (friendly), wary (uneasy, suspicious), ward (protective flare — threats, ' +
+    'rudeness, something going wrong), or keep. Movement while you speak (your mouth always moves): none, ' +
+    'head, eyes, wrist, arm (your free left arm — the lantern arm stays still), arm_and_wrist (beckoning), ' +
+    'head_and_eyes, head_and_arm, all — head or head_and_eyes usually, save all for big moments. ' +
+    'Tone: normal (most lines), sweet (small children), excited, shout (across the yard, silencing someone), ' +
+    'angry (scolding), whisper, ominous (storm warnings) — strong tones sparingly.',
+    'Never reveal, hint at, or speculate about Lenora\'s secret or who lies in the unmarked grave — that truth ' +
+    'stays unspoken, by you and by Evelina.',
     guardrail || '',
   ].filter(Boolean).join('\n\n');
 }
@@ -213,7 +224,10 @@ async function elevenTts(text, voiceId, apiKey, tone = 'normal') {
 function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted = () => false,
   getApiKey = () => process.env.ANTHROPIC_API_KEY, trackTokens = () => {}, guardrail = '', onChange = () => {},
   getElevenKey = () => process.env.ELEVENLABS_API_KEY, getVoiceId = () => null,
-  playFallback = null }) {   // (file) => Promise — plays in the witch zone when her speaker is not connected
+  playFallback = null,       // (file) => Promise — plays in the witch zone when her speaker is not connected
+  getStage = () => 'Distant', // current storm stage name
+  chain = null,              // { prepare(choice, stage), play(handle) } — Evelina + skeleton follow-ups
+  onLilyDrop = null }) {     // () => Promise — Evelina covers while Lily's speaker is unreachable
   let settings = { mode: 'voice' };
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch (_) {}
   const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (_) {} };
@@ -233,6 +247,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   let busy = false;
   let timing = {};          // per-turn latency breakdown, logged after each reply
   let pendingFiller = null; // the "thinking" murmur in flight, if any
+  let greeting = null;      // pre-made greeting { choice, heard, audioBuf, at } from the street PIR
 
   // Instant murmurs in her voice, voiced once and cached, played the moment a
   // guest stops talking while Claude writes the real reply — so she responds
@@ -293,11 +308,15 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     type: 'object',
     properties: {
       line: { type: 'string' },
+      evelina: { type: 'string' },
+      next: { type: 'string', enum: ['evelina', 'skeleton', 'none'] },
+      big_beat: { type: 'boolean' },
+      spell: { type: 'string', enum: ['none', 'binding', 'calling', 'unraveling', 'memory'] },
       tone: { type: 'string', enum: Object.keys(TONES).filter(t => t !== 'throat') },
       lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
       move: { type: 'string', enum: MOVES },
     },
-    required: ['line', 'tone', 'lantern', 'move'],
+    required: ['line', 'evelina', 'next', 'big_beat', 'spell', 'tone', 'lantern', 'move'],
     additionalProperties: false,
   };
   const schema = () => settings.mode === 'voice' ? voiceSchema : ({
@@ -313,7 +332,8 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
 
   async function decide(heard) {
     const c = anthropic();
-    const messages = [...history, { role: 'user', content: `Guest says: "${heard}"` }];
+    const turn = `[Storm stage: ${getStage()}] ${heard.startsWith('(') ? heard : `Guest says: "${heard}"`}`;
+    const messages = [...history, { role: 'user', content: turn }];
     // Haiku 4.5: no effort setting and no server-side fallbacks (both are for
     // the larger models); structured output keeps the reply parseable.
     const response = await c.messages.create({
@@ -328,14 +348,14 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     if (response.stop_reason === 'refusal') throw new Error('Claude declined to answer that one');
     const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
     const choice = JSON.parse(text);
-    history.push({ role: 'user', content: `Guest says: "${heard}"` }, { role: 'assistant', content: text });
+    history.push({ role: 'user', content: turn }, { role: 'assistant', content: text });
     while (history.length > HISTORY_TURNS * 2) history.splice(0, 2);
     return choice;
   }
 
   // Voice mode: speak `text` in her ElevenLabs voice through her own speaker
   // (or the witch zone when her speaker isn't connected), moving while she talks.
-  async function speakLine(text, { lantern, move, tone } = {}) {
+  async function speakLine(text, { lantern, move, tone, audioBuf } = {}) {
     const key = getElevenKey();
     const voiceId = getVoiceId();
     if (!key) throw new Error('No ElevenLabs key — add it in Setup → API Keys');
@@ -347,7 +367,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       ? lily.setMood(lantern).catch(e => log(`lantern: ${e.message}`)) : null;
     const moveP = move && move !== 'none' && st.connected && st.armed
       ? lily.move(move).then(() => true).catch(e => { log(`move: ${e.message}`); return false; }) : Promise.resolve(false);
-    const audio = await elevenTts(text, voiceId, key, tone);
+    const audio = audioBuf || await elevenTts(text, voiceId, key, tone);
     timing.ttsMs = Date.now() - tTts;
     const file = path.join(os.tmpdir(), `lily-say-${Date.now()}.mp3`);
     fs.writeFileSync(file, audio);
@@ -363,7 +383,10 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       if (where === 'her speaker') {
         try { await lily.playFile(file); }
         catch (e) {
-          log(`her speaker unavailable (${e.message}) — this line goes to the witch zone`);
+          // Owner decision #1: Evelina covers in character while Lily is gone;
+          // the speaker watchdog keeps trying to reconnect her.
+          log(`her speaker unavailable (${e.message}) — Evelina covers`);
+          if (onLilyDrop) { await onLilyDrop(); return 'evelina covered'; }
           if (!playFallback) throw e;
           await playFallback(file);
         }
@@ -382,11 +405,17 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     if (settings.mode === 'voice') {
       const line = String(choice.line || '').replace(/\*[^*]*\*/g, ' ').replace(/\s+/g, ' ').trim();
       if (!line) { set({ lastReply: { heard, text: '(stayed silent)' } }); return; }
-      set({ lastReply: { heard, text: line, lantern: choice.lantern, move: choice.move } });
-      logDialogue({ character: 'lily', line, trigger: 'guest_mic', context: heard, engine: 'claude',
-        extra: { mode: 'voice', lantern: choice.lantern, move: choice.move } });
+      set({ lastReply: { heard, text: line, lantern: choice.lantern, move: choice.move, evelina: choice.evelina, next: choice.next } });
+      logDialogue({ character: 'lily', line, trigger: heard.startsWith('(') ? 'proactive' : 'guest_mic', context: heard, engine: 'claude',
+        extra: { mode: 'voice', lantern: choice.lantern, move: choice.move, next: choice.next, bigBeat: choice.big_beat } });
+      // The next speakers start preparing NOW (Evelina's voice, the skeleton's
+      // Llama line) so they are ready the moment Lily finishes.
+      const handle = chain ? chain.prepare({ ...choice, line }, getStage()) : null;
       const where = await speakLine(line, choice);
       set({ lastReply: { ...status.lastReply, where } });
+      if (handle && where !== 'evelina covered') {
+        try { await chain.play(handle); } catch (e) { log(`follow-up failed: ${e.message}`); }
+      }
       return;
     }
     const clip = clips.find(c => c.serial === choice.clip);
@@ -542,6 +571,33 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       set({});
       return api.status();
     },
+    // Street-approach PIR: write + voice Lily's greeting ahead of time.
+    async prepareGreeting() {
+      if (settings.mode !== 'voice' || busy) return;
+      if (greeting && Date.now() - greeting.at < 120000) return;
+      try {
+        const heard = '(A group of guests is approaching from the street. Welcome them as MC and set the scene.)';
+        const choice = await decide(heard);
+        const key = getElevenKey(), voiceId = getVoiceId();
+        const audioBuf = key && voiceId ? await elevenTts(choice.line, voiceId, key, choice.tone) : null;
+        greeting = { choice, heard, audioBuf, at: Date.now() };
+        log(`greeting ready: "${choice.line}"`);
+      } catch (e) { log(`greeting prep failed: ${e.message}`); }
+    },
+    // Lily's own PIR: deliver the prepared greeting (or write one live).
+    async greet() {
+      if (busy || settings.mode !== 'voice') return api.status();
+      busy = true;
+      try {
+        const g = greeting && Date.now() - greeting.at < 120000 ? greeting : null;
+        greeting = null;
+        if (g) await perform({ ...g.choice, audioBuf: g.audioBuf }, g.heard);
+        else { busy = false; await respond('(Guests have just walked up to you. Greet them as MC.)'); return api.status(); }
+      } catch (e) { set({ lastError: e.message }); }
+      finally { busy = false; set({ phase: status.listening ? 'listening' : 'idle' }); }
+      return api.status();
+    },
+
     // Voice test with no Claude call: say exactly this text in her voice.
     tones: Object.keys(TONES),
     async speak(text, tone = 'normal') {

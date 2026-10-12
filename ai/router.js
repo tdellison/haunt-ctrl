@@ -15,7 +15,10 @@
 const ROUTES = [
   // Special beats are always Claude, whoever speaks.
   ['*',       'special_beat',    'claude'],   // Blackout Storm, near-success, storm echo
-  ['evelina', 'guest_mic',       'claude'],
+  // 2026 Lily-as-MC: Lily alone talks to guests (Claude); Evelina's reaction
+  // comes from the SAME Claude call as Lily's line; skeletons react on Llama.
+  ['lily',    'guest_mic',       'claude'],
+  ['evelina', 'reaction',        'claude'],   // written inside Lily's call
   ['evelina', 'clue',            'claude'],   // frames the OWNER's clue lines, never invents
   ['evelina', 'quiet_mutter',    'llama'],
   ['evelina', '*',               'claude'],

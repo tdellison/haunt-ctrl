@@ -905,6 +905,15 @@ function enqueueSensor(zone, cooldownOverride) {
   lastSensorAt = now;
   recordSensorTrip(now);
   sensorQueue.push({ zone, priority, cooldownOverride, at: now });
+  // Lily-as-MC (2026): the street/graveyard PIR is the early warning — write and
+  // voice her greeting now; her own (or the witch-zone) PIR delivers it. Only
+  // when she is enabled for the show and listening.
+  try {
+    if (settings.lilyEnabled && lilyTalk.status().listening) {
+      if (zone === 'graveyard' || zone === 'street') lilyTalk.prepareGreeting();
+      else if (zone === 'lily' || zone === 'witch') lilyTalk.greet();
+    }
+  } catch (_) {}
   if (burst || sensorBusy) broadcastLog(`Sensor zone ${zone} queued`, 'SYSTEM');
   drainSensorQueue();
 }
@@ -1329,7 +1338,9 @@ function clampVol(zone, val) {
 }
 function volToHex(v) { return v.toString(16).toUpperCase().padStart(2, '0'); }
 
-const ZONE_CMD = { z1: 'MVL', z2: 'ZVL', z3: 'Z3L' };
+// Zone 3 volume is VL3 in ISCP — 'Z3L' (used until 2026-10-12) is not an Onkyo
+// command, so witch-zone volume and ducking silently never worked.
+const ZONE_CMD = { z1: 'MVL', z2: 'ZVL', z3: 'VL3' };
 const MUTE_CMD = { z1: 'AMT', z2: 'ZMT', z3: 'MT3' };
 
 // Ducking helper — snapshot current zone volume, lower by `amount`,
@@ -1349,7 +1360,14 @@ function duckZone(zone, amount, durationMs) {
 }
 
 // ─── Fog helpers ──────────────────────────────────────────────────────────────
+// FOG IS DISABLED FOR 2026 (owner's call). Every trigger — Grand Ritual stage,
+// Show Start warmup, auto-timer, scene presets, sequencer, routes, buttons —
+// funnels through fogOn/fogBurst/startFogAuto, which return early while this
+// is false. The code stays for next year: flip to true to bring it all back.
+const FOG_ENABLED = false;
+
 async function fogOn() {
+  if (!FOG_ENABLED) return;
   await sendISCP('TGA01');
   state.fogActive = true;
   broadcastState();
@@ -1370,6 +1388,7 @@ const FOG_MIN_GAP_MS   = 45000;
 const FOG_MAX_BURST_MS = 20000;
 
 function fogBurst(ms) {
+  if (!FOG_ENABLED) return { ok: false, reason: 'fog disabled this year' };
   const now = Date.now();
   if (state.fogCooldownUntil && now < state.fogCooldownUntil) {
     const wait = Math.ceil((state.fogCooldownUntil - now) / 1000);
@@ -1416,7 +1435,7 @@ function scheduleFogBurst() {
 }
 
 function startFogAuto() {
-  if (fogAuto.active) return;
+  if (!FOG_ENABLED || fogAuto.active) return;
   fogAuto.active = true;
   fogAuto.warmup = true;
   fogAuto.nextAt = null;
@@ -1614,10 +1633,11 @@ let lastMajorAt = 0; // timestamp of last major spell — majors max once per 30
 // personality lives in CHARACTER_BIBLE.characters). voiceId gets filled in once
 // the ElevenLabs voices are chosen.
 const CHARACTERS = [
-  { id:'evelina', name:'Evelina Crowe', zone:'z3', channel:'left',  hasMic:true,  isStatic:false, voiceId:null },
+  // 2026: the witch mic feeds LILY (the MC) — Evelina is reactive, not guest-facing.
+  { id:'evelina', name:'Evelina Crowe', zone:'z3', channel:'left',  hasMic:false, isStatic:false, voiceId:null },
   { id:'lenora',  name:'Lenora Thorn',  zone:'z3', channel:'right', hasMic:false, isStatic:true,  voiceId:null },
   // Jasper's guest mic was DROPPED (2026 budget decision) — he reacts to
-  // PIR-sensed presence only. Evelina's is the only guest-facing mic this year.
+  // PIR-sensed presence only. (2026: the only guest-facing mic feeds Lily, the MC.)
   { id:'jasper',  name:'Jasper Bones',  zone:'z1', channel:'left',  hasMic:false, isStatic:false, voiceId:null },
   { id:'edgar',   name:'Edgar Rattle',  zone:'z1', channel:'right', hasMic:false, isStatic:false, voiceId:null },
   // future 5th character: add an entry here + a CHARACTER_BIBLE.characters entry + voiceId. No structural changes needed.
@@ -2208,9 +2228,12 @@ const CHARACTER_BIBLE = {
   },
   // #5 — Reactive interruption detection was REMOVED and replaced by this.
   proactiveDialogueWindows: {
+    // 2026 (owner spec, Lily-as-MC): the witch mic feeds LILY only. Lily is the
+    // only character who talks to guests; Evelina reacts to Lily and never
+    // answers guests. The flow below describes Lily's turns now.
     rationale: 'Reactive interruption detection is REMOVED — ElevenLabs audio streams cannot be gracefully ' +
-      'stopped mid-sentence; detecting and reacting mid-stream causes glitches. Evelina deliberately creates ' +
-      'structured dialogue windows instead — she is in control, she chooses when to invite interaction.',
+      'stopped mid-sentence; detecting and reacting mid-stream causes glitches. LILY (the MC) owns guest ' +
+      'interaction: she invites it, the mic feeds her alone, and the others react to her.',
     triggerLines: [
       'Who dares whisper secrets while my cauldron stirs?!',
       'You there — yes you — speak. The storm is listening.',
@@ -2222,15 +2245,15 @@ const CHARACTER_BIBLE = {
       '1. Evelina completes an audio block (never interrupted).',
       '2. A window line plays and the mic opens.',
       '3. Guests respond; Whisper transcribes.',
-      '4. Claude generates Evelina\'s response to what was actually said.',
+      '4. Claude generates LILY\'s reply to what was actually said (plus Evelina\'s reaction to Lily, and a handoff tag).',
       '5. The next audio block plays; the mic closes again.',
     ],
     rules: [
       'The mic is only open during designated windows, never during active output.',
       'This eliminates mid-stream interruption risk entirely.',
-      'Evelina invites interaction rather than reacting to it.',
+      'Lily invites interaction; Evelina reacts to Lily, never to guests directly.',
       'Windows happen between spell attempts and stage transitions.',
-      'Supporting characters may react to what guests say.',
+      'Evelina and the skeletons react to LILY (one voice at a time), never to the guest directly.',
     ],
   },
   // #13 — the breath after the Grand Ritual. Lighting is implemented in code as
@@ -2264,8 +2287,8 @@ const CHARACTER_BIBLE = {
       edgar: '"the Warden. Sitting in a chair. Very helpful." — affectionate sarcasm, not disrespect.',
     },
     voiceMicNote: 'Host context input (typed or spoken via the SHOW tab mic) is treated as the Warden ' +
-      'communicating with the cemetery. Host says "little girl witch costume" → Evelina responds "the Warden ' +
-      'sees something interesting approaching..."',
+      'communicating with the cemetery, and (2026) it feeds LILY only. Host says "little girl witch costume" → ' +
+      'Lily works it in: "the Warden sees something interesting approaching..."',
     rules: [
       'Never name or physically describe the Warden.',
       'Oblique, not direct.',
@@ -3595,7 +3618,7 @@ app.post('/api/ai/take', aiRoute(async ({ character = 'jasper', kind = 'banter' 
 // Jasper/Edgar → skeleton zone (z1) left/right; Evelina/Lenora → witch zone
 // (z3) left/right — per CHARACTERS. Fast model; the line goes into the
 // dialogue transcript with the engine that wrote it.
-async function speakCharacter(id, line, { trigger = 'scripted', engine = null, context = null } = {}) {
+async function prepareCharacterVoice(id, line) {
   const c = CHARACTERS.find(x => x.id === id);
   if (!c) throw new Error(`Unknown character "${id}"`);
   if (!c.voiceId) throw new Error(`No ElevenLabs voice set for ${id}`);
@@ -3618,15 +3641,87 @@ async function speakCharacter(id, line, { trigger = 'scripted', engine = null, c
     : c.channel === 'right' ? 'pan=stereo|c0=0*c0|c1=c0' : 'pan=stereo|c0=c0|c1=c0';
   await new Promise((res, rej) => require('child_process').execFile('ffmpeg',
     ['-loglevel', 'error', '-y', '-i', mp3, '-af', pan, wav], { timeout: 15000 }, (e) => e ? rej(e) : res()));
-  const voiceMs = Date.now() - t0;
-  logDialogue({ character: id, line: text, trigger, engine, context });
-  broadcastLog(`${c.name}: "${text}"`, 'AUDIO');
+  return { c, text, mp3, wav, voiceMs: Date.now() - t0 };
+}
+
+async function playCharacterVoice(v, { trigger = 'scripted', engine = null, context = null } = {}) {
+  logDialogue({ character: v.c.id, line: v.text, trigger, engine, context });
+  broadcastLog(`${v.c.name}: "${v.text}"`, 'AUDIO');
   try {
-    await new Promise((res) => { const p = spawnPlayer(wav, { zone: c.zone }, { stdio: 'ignore' }); p.on('exit', res); p.on('error', res); });
+    await new Promise((res) => { const p = spawnPlayer(v.wav, { zone: v.c.zone }, { stdio: 'ignore' }); p.on('exit', res); p.on('error', res); });
   } finally {
-    for (const f of [mp3, wav]) try { fs.unlinkSync(f); } catch (_) {}
+    for (const f of [v.mp3, v.wav]) try { fs.unlinkSync(f); } catch (_) {}
   }
-  return { character: id, line: text, zone: c.zone, side: c.channel, voiceMs };
+  return { character: v.c.id, line: v.text, zone: v.c.zone, side: v.c.channel, voiceMs: v.voiceMs };
+}
+
+async function speakCharacter(id, line, opts = {}) {
+  return playCharacterVoice(await prepareCharacterVoice(id, line), opts);
+}
+
+// ─── Lily-as-MC chain (2026): Lily → Evelina → a skeleton ──────────────────────
+// Lily's Claude call returns Evelina's reaction + a handoff tag (`next`). The
+// chain is PREPARED the moment Lily's text exists (Evelina voiced, skeleton's
+// Llama line written + voiced) and PLAYED after Lily finishes — one voice at a
+// time, never overlapping (Lily's mic stays deaf until the chain ends).
+const EVELINA_REACT_CHANCE = 0.6;   // ordinary lines; big beats always
+const SKELETON_FOLLOW_CHANCE = 0.5; // after Evelina; on next = "skeleton" always
+
+// Evelina's spell tag → the existing spell lights, with the existing
+// cooldowns (never the same spell twice running, majors once per 30 min).
+function castEvelinaSpell(key) {
+  if (!key || key === 'none' || !SPELLS[key] || SPELLS[key].tier === 'ritual') return false;
+  if (key === lastSpell) return false;
+  if (SPELLS[key].tier === 'major' && (Date.now() - lastMajorAt) < 30 * 60 * 1000) return false;
+  lastSpell = key;
+  if (SPELLS[key].tier === 'major') lastMajorAt = Date.now();
+  castSpellLights(key);
+  broadcastLog(`Evelina casts ${SPELLS[key].name}`, 'WITCH');
+  return true;
+}
+
+const lilyChain = {
+  prepare(choice, stage) {
+    const big = !!choice.big_beat;
+    const evelinaLine = String(choice.evelina || '').trim();
+    const evelinaOn = !!evelinaLine && (choice.next === 'evelina' || big) && (big || Math.random() < EVELINA_REACT_CHANCE);
+    const skeletonOn = choice.next === 'skeleton' || (evelinaOn && (big || Math.random() < SKELETON_FOLLOW_CHANCE));
+    const h = { stage, spell: choice.spell, evelinaLine: evelinaOn ? evelinaLine : null };
+    h.evelina = evelinaOn ? prepareCharacterVoice('evelina', evelinaLine).catch(e => { broadcastLog(`Evelina voice failed: ${e.message}`, 'SYSTEM'); return null; }) : null;
+    h.skeleton = skeletonOn ? skeletonLines.react({
+        to: evelinaOn ? 'evelina' : 'lily', line: evelinaOn ? evelinaLine : choice.line, stage })
+      .then(r => r.line ? prepareCharacterVoice(r.character, r.line).then(v => ({ v, context: evelinaOn ? evelinaLine : choice.line })) : null)
+      .catch(e => { broadcastLog(`Skeleton reaction failed: ${e.message}`, 'SYSTEM'); return null; }) : null;
+    return h;
+  },
+  async play(h) {
+    if (h.evelina) {
+      const v = await h.evelina;
+      if (v) {
+        castEvelinaSpell(h.spell);
+        await playCharacterVoice(v, { trigger: 'cross_character', engine: 'claude', context: 'lily' });
+      }
+    }
+    if (h.skeleton) {
+      const s2 = await h.skeleton;
+      if (s2) await playCharacterVoice(s2.v, { trigger: 'cross_character', engine: 'llama', context: s2.context });
+    }
+  },
+};
+
+// Owner decision #1: if Lily's speaker can't be reached, Evelina covers with a
+// short in-character line (canned — no API call when things are already wrong).
+const EVELINA_COVER_LINES = [
+  "Lily's lantern is flickering... give her a moment, mortals. Even old witches catch their breath.",
+  'Hush now. Lily is listening to something only the dead can hear.',
+  "My sister in shadow has gone quiet. Stay close to me until she returns.",
+  "Lily will be back. In the meantime, you'll have to make do with me — lucky you.",
+];
+let coverIdx = 0;
+async function evelinaCover() {
+  const line = EVELINA_COVER_LINES[coverIdx++ % EVELINA_COVER_LINES.length];
+  try { await speakCharacter('evelina', line, { trigger: 'scripted', context: 'lily speaker dropped' }); }
+  catch (e) { broadcastLog(`Evelina cover failed: ${e.message}`, 'SYSTEM'); }
 }
 
 // Say something as a character, out loud in their zone. Give `line` to say
@@ -3690,6 +3785,9 @@ const lilyTalk = require('./lily/talk').createTalk({
   getVoiceId: () => {
     try { return JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^\uFEFF/, '')).lily || null; } catch (_) { return null; }
   },
+  getStage: () => (STRIKE_SEQUENCE[strikeIndex] || STRIKE_SEQUENCE[0]).name,
+  chain: lilyChain,
+  onLilyDrop: () => evelinaCover(),
   // Her speaker not connected yet: speak through the witch zone instead.
   playFallback: (file) => new Promise((resolve) => {
     const p = spawnPlayer(file, { zone: 'z3' }, { stdio: 'ignore' });
@@ -3716,6 +3814,8 @@ app.post('/api/lily/talk/stop',    lilyRoute(async () => lilyTalk.stop()));
 app.post('/api/lily/talk/say',     lilyRoute(async ({ text }) => lilyTalk.say(text)));
 app.post('/api/lily/talk/reset',   lilyRoute(async () => lilyTalk.resetConversation()));
 app.post('/api/lily/talk/mode',    lilyRoute(async ({ mode }) => lilyTalk.setMode(mode)));
+app.post('/api/lily/talk/greet',   lilyRoute(async () => lilyTalk.greet()));
+app.post('/api/lily/talk/prepare-greeting', lilyRoute(async () => { await lilyTalk.prepareGreeting(); return lilyTalk.status(); }));
 app.post('/api/lily/talk/speak',   lilyRoute(async ({ text, tone }) => lilyTalk.speak(text, tone)));
 app.post('/api/lily/talk/clip',    lilyRoute(async ({ serial, text }) => lilyTalk.setClipText(Number(serial), text)));
 app.post('/api/lily/talk/catalog', async (req, res) => {
@@ -4234,8 +4334,15 @@ app.post('/api/show/start', async (req, res) => {
   broadcastLog('SHOW START sequence initiated', 'SYSTEM');
 
   // 1. Fog machine warmup (4 min) — does NOT auto-burst until warmup completes.
-  if (!fogAuto.active) startFogAuto();
-  broadcastLog('Show Start 1/6: fog warmup started (4 min)', 'FOG');
+  // Llama warm-up at Start Show, so the first skeleton line of the night
+  // never pays the model-load cost (it is also warmed at server boot).
+  if (!IS_WINDOWS) llama.warm().catch(() => {});
+  if (FOG_ENABLED) {
+    if (!fogAuto.active) startFogAuto();
+    broadcastLog('Show Start 1/6: fog warmup started (4 min)', 'FOG');
+  } else {
+    broadcastLog('Show Start 1/6: fog disabled this year — skipped', 'FOG');
+  }
 
   // 2. Govee show scheme + effects engine.
   await applyShowScheme().catch(() => {});

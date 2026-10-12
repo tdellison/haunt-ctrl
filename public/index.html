@@ -1189,7 +1189,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'storm_stage_2'})">STORM 2</button>
       <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'storm_stage_3'})">STORM 3</button>
       <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'spell_any'})">SPELL</button>
-      <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'fog_burst'})">FOG</button>
+      <button class="btn btn-purple btn-sm" style="display:none" onclick="api('/api/phantom/fire',{event:'fog_burst'})">FOG</button><!-- fog disabled 2026 -->
       <button class="btn btn-purple btn-sm" onclick="api('/api/phantom/fire',{event:'sensor_witch'})">SENSOR</button>
     </div>
 
@@ -1238,7 +1238,7 @@ body::before { animation:scanlines 10s linear infinite; }
   </div>
 
   <!-- Fog -->
-  <div class="panel">
+  <div class="panel" style="display:none"><!-- Fog panel hidden: fog disabled 2026 -->
     <div class="panel-title"><span class="pt-icon">🌫</span>Fog</div>
     <div class="fog-timer-card">
       <div class="fog-warmup-badge" id="fog-warmup-badge">⏳ Warming up — 4 min until ready</div>
@@ -1357,8 +1357,9 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-orange btn-sm" onclick="api('/api/onkyo/command',{command:'MVLDOWN'})">🔉 Vol Down</button>
       <button class="btn btn-amber  btn-sm" onclick="api('/api/onkyo/command',{command:'AMT01'})">🔇 Mute On</button>
       <button class="btn btn-amber  btn-sm" onclick="api('/api/onkyo/command',{command:'AMT00'})">🔊 Mute Off</button>
-      <button class="btn btn-blue   btn-sm" onclick="api('/api/fog/fire',{duration:5000})">🌫 Fog On</button>
-      <button class="btn btn-red    btn-sm" onclick="api('/api/fog/stop')">■ Fog Off</button>
+      <!-- fog disabled 2026 (FOG_ENABLED in server.js) -->
+      <button class="btn btn-blue   btn-sm" style="display:none" onclick="api('/api/fog/fire',{duration:5000})">🌫 Fog On</button>
+      <button class="btn btn-red    btn-sm" style="display:none" onclick="api('/api/fog/stop')">■ Fog Off</button>
     </div>
   </div>
 
