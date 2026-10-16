@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lily Greeter</title>
+<style>
+  :root { --bg:#14111a; --card:#1f1a28; --line:#352c45; --fg:#ece6f5; --dim:#9a90ab; --accent:#ff7a2a; --ok:#4fd18b; --bad:#ff5c6c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui, sans-serif; }
+  header { padding:14px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  main { max-width:900px; margin:0 auto; padding:12px 16px 40px; display:grid; gap:12px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  h2 { font-size:15px; margin:0 0 8px; color:var(--accent); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0; }
+  button { background:#2d2440; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font:inherit; cursor:pointer; }
+  button.big { background:var(--accent); color:#1a0f05; font-weight:700; border:0; padding:12px 18px; }
+  button:active { transform:scale(.97); }
+  input, select, textarea { background:#120f18; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px 8px; font:inherit; }
+  textarea { width:100%; min-height:72px; }
+  label { color:var(--dim); font-size:13px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:#2d2440; }
+  .on { background:#1c3d2b; color:var(--ok); } .off { background:#3d1c22; color:var(--bad); }
+  .meter { height:10px; background:#120f18; border-radius:5px; overflow:hidden; flex:1; min-width:120px; position:relative; }
+  .meter > div { height:100%; background:var(--accent); width:0; }
+  .meter > i { position:absolute; top:0; bottom:0; width:2px; background:#fff; }
+  #snap { width:100%; max-width:480px; image-rendering:pixelated; border-radius:6px; background:#000; aspect-ratio:4/3; cursor:crosshair; }
+  pre { background:#0d0b11; padding:8px; border-radius:6px; max-height:260px; overflow:auto; font-size:12px; margin:0; white-space:pre-wrap; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; }
+  .dev { display:flex; gap:6px; align-items:center; font-size:13px; padding:4px 0; border-bottom:1px solid var(--line); }
+  .dev span { flex:1; }
+  .err { color:var(--bad); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏮 Lily · Door Greeter</h1>
+  <span id="today" class="pill">0 today</span>
+</header>
+<main>
+
+<section>
+  <h2>Greeting</h2>
+  <div class="row">
+    <button class="big" onclick="api('/api/greet')">GREET NOW</button>
+    <button onclick="api('/api/pause',{minutes:10})">Team pause 10 min</button>
+    <button onclick="api('/api/pause',{minutes:60})">Pause 1 hr</button>
+    <button onclick="api('/api/pause',{minutes:0})">Resume</button>
+  </div>
+  <div id="gstat" class="row"></div>
+</section>
+
+<section>
+  <h2>Talk to her</h2>
+  <div id="cstat" class="row"></div>
+  <div class="row">
+    <input id="ask" placeholder="Type what a visitor says…" style="flex:1;min-width:200px">
+    <button onclick="ask()">Ask</button>
+    <button onclick="api('/api/listen')">Open mic now</button>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="convOn"> Conversation on</label>
+    <label><input type="checkbox" id="always"> Always listening (testing)</label>
+    <label>Listen window (s) <input id="win" type="number" min="5" max="60" style="width:70px"></label>
+  </div>
+  <label>Office notes she can pass on (who to ask for, sign-in, Wi-Fi, opening hours…)</label>
+  <textarea id="about" placeholder="e.g. We're Acme Plumbing. Visitors should sign in on the tablet. For deliveries, ring the bell on the counter."></textarea>
+  <div class="row"><button onclick="saveConverse()">Save conversation settings</button></div>
+</section>
+
+<section>
+  <h2>Lily (Bluetooth)</h2>
+  <div id="lstat" class="row"></div>
+  <div class="row">
+    <label>Body (BLE) <input id="ble" size="19" value="1A:74:89:6F:37:DB"></label>
+    <button onclick="api('/api/lily/connect',{address:val('ble')})">Connect body</button>
+    <button onclick="api('/api/lily/disconnect')">Disconnect</button>
+  </div>
+  <div class="row">
+    <label>Speaker <input id="spk" size="19" value="1A:74:89:F2:ED:95"></label>
+    <button onclick="api('/api/lily/audio/connect',{address:val('spk'),pair:true})">Pair + connect speaker</button>
+    <button onclick="api('/api/lily/audio/connect',{address:val('spk')})">Reconnect</button>
+    <button onclick="api('/api/lily/audio/disconnect')">Disconnect</button>
+  </div>
+  <div class="row">
+    <button onclick="api('/api/lily/arm',{on:true})">Arm motors</button>
+    <button onclick="api('/api/lily/arm',{on:false})">Disarm</button>
+    <button onclick="api('/api/lily/mood',{mood:'calm'})">Lantern calm</button>
+    <button onclick="api('/api/lily/mood',{mood:'wary'})">wary</button>
+    <button onclick="api('/api/lily/mood',{mood:'ward'})">ward</button>
+    <button onclick="api('/api/lily/mood',{mood:'off'})">off</button>
+  </div>
+  <div class="row"><button onclick="scan()">Scan Bluetooth (8 s)</button></div>
+  <div id="devs"></div>
+</section>
+
+<section>
+  <h2>Camera (main sensor)</h2>
+  <div id="camstat" class="row"></div>
+  <div class="row"><div class="meter"><div id="cammeter"></div><i id="camthr"></i></div></div>
+  <img id="snap" alt="camera" title="Click top-left then bottom-right to set the detection box">
+  <div class="row"><label>Click the picture twice (top-left, then bottom-right) to draw the detection box over the door.</label></div>
+  <div class="grid2">
+    <label>Webcam <select id="camdev"></select></label>
+    <label>Sensitivity: area % <input id="minArea" type="number" step="1" min="1" max="80"></label>
+    <label>Pixel change (0-255) <input id="pixelDelta" type="number" min="5" max="120"></label>
+    <label><input type="checkbox" id="camOn"> Camera on</label>
+  </div>
+  <div class="row"><button onclick="saveCamera()">Save camera</button></div>
+</section>
+
+<section>
+  <h2>Door chime (backup trigger) + mic</h2>
+  <div id="chstat" class="row"></div>
+  <div class="row"><div class="meter"><div id="chmeter"></div><i id="chthr"></i></div></div>
+  <div class="grid2">
+    <label>Microphone <select id="mic"></select></label>
+    <label>Match threshold <input id="thr" type="number" step="0.05" min="0.1" max="0.95"></label>
+    <label><input type="checkbox" id="chOn"> Chime trigger on</label>
+  </div>
+  <div class="row">
+    <button onclick="saveChime()">Save mic</button>
+    <button onclick="learn()">LEARN CHIME (ring it within 5 s)</button>
+  </div>
+</section>
+
+<section>
+  <h2>What she says</h2>
+  <label>Any time (one line per row)</label><textarea id="l_any"></textarea>
+  <div class="grid2">
+    <div><label>Morning</label><textarea id="l_morning"></textarea></div>
+    <div><label>Afternoon</label><textarea id="l_afternoon"></textarea></div>
+    <div><label>Evening</label><textarea id="l_evening"></textarea></div>
+  </div>
+  <div class="grid2">
+    <label>Greet from <input id="hStart" type="time"></label>
+    <label>until <input id="hEnd" type="time"></label>
+    <label><input type="checkbox" id="wkd"> Weekdays only</label>
+    <label>Cooldown (s) <input id="cool" type="number" min="5" max="300"></label>
+  </div>
+  <div class="row"><button onclick="saveLines()">Save lines + hours</button></div>
+</section>
+
+<section>
+  <h2>API keys</h2>
+  <div id="keys" class="row"></div>
+  <div class="row">
+    <input id="elk" placeholder="ElevenLabs key (her voice)" style="flex:1;min-width:200px">
+    <input id="ank" placeholder="Anthropic key (conversation)" style="flex:1;min-width:200px">
+    <button onclick="saveKeys()">Save</button>
+  </div>
+</section>
+
+<section>
+  <h2>Log</h2>
+  <div id="err" class="err"></div>
+  <pre id="log"></pre>
+</section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const val = (id) => $(id).value.trim();
+let cfg = null;
+
+async function api(url, body) {
+  $('err').textContent = '';
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const j = await r.json();
+    if (!j.ok) $('err').textContent = j.error || 'failed';
+    return j;
+  } catch (e) { $('err').textContent = e.message; }
+}
+const pill = (on, yes, no) => `<span class="pill ${on ? 'on' : 'off'}">${on ? yes : no}</span>`;
+const ago = (iso) => iso ? `${Math.round((Date.now() - Date.parse(iso)) / 1000)}s ago` : 'never';
+
+async function loadConfig() {
+  cfg = await (await fetch('/api/config')).json();
+  for (const k of ['any', 'morning', 'afternoon', 'evening']) $('l_' + k).value = (cfg.lines[k] || []).join('\n');
+  $('hStart').value = cfg.hours.start || ''; $('hEnd').value = cfg.hours.end || '';
+  $('wkd').checked = !!cfg.hours.weekdaysOnly; $('cool').value = cfg.cooldownSec;
+  $('minArea').value = Math.round(cfg.camera.minArea * 100); $('pixelDelta').value = cfg.camera.pixelDelta;
+  $('camOn').checked = !!cfg.camera.enabled; $('chOn').checked = !!cfg.chime.enabled; $('thr').value = cfg.chime.threshold;
+  $('convOn').checked = !!cfg.converse.enabled; $('always').checked = !!cfg.converse.alwaysListen;
+  $('win').value = cfg.converse.windowSec; $('about').value = cfg.converse.about || '';
+  const cams = await (await fetch('/api/camera/list')).json();
+  $('camdev').innerHTML = '<option value="">(first webcam)</option>' + cams.map(c => `<option value="${c.device}">${c.name} — ${c.device}</option>`).join('');
+  $('camdev').value = cfg.camera.device || '';
+  const mics = await (await fetch('/api/mic/list')).json();
+  $('mic').innerHTML = '<option value="">(system default)</option>' + mics.map(m => `<option value="${m.name}">${m.description}</option>`).join('');
+  $('mic').value = cfg.chime.source || '';
+}
+
+async function saveConfig(patch) { const j = await api('/api/config', patch); if (j && j.ok) await loadConfig(); }
+const lines = (id) => $(id).value.split('\n').map(s => s.trim()).filter(Boolean);
+function saveLines() {
+  saveConfig({ cooldownSec: Number($('cool').value) || 20,
+    hours: { start: $('hStart').value, end: $('hEnd').value, weekdaysOnly: $('wkd').checked },
+    lines: { any: lines('l_any'), morning: lines('l_morning'), afternoon: lines('l_afternoon'), evening: lines('l_evening') } });
+}
+function saveCamera() {
+  saveConfig({ camera: { device: $('camdev').value, enabled: $('camOn').checked,
+    minArea: (Number($('minArea').value) || 6) / 100, pixelDelta: Number($('pixelDelta').value) || 25 } });
+}
+function saveChime() { saveConfig({ chime: { source: $('mic').value, enabled: $('chOn').checked, threshold: Number($('thr').value) || 0.4 } }); }
+function saveConverse() {
+  saveConfig({ converse: { enabled: $('convOn').checked, alwaysListen: $('always').checked,
+    windowSec: Number($('win').value) || 15, about: $('about').value.trim() } });
+}
+async function saveKeys() {
+  await api('/api/secrets', { elevenLabsApiKey: val('elk'), anthropicApiKey: val('ank') });
+  $('elk').value = ''; $('ank').value = '';
+}
+async function learn() {
+  $('err').textContent = 'Listening for 5 s — ring the chime now…';
+  const j = await api('/api/chime/learn', { seconds: 5 });
+  if (j && j.ok) { $('err').textContent = `Learned ${j.learned.tones.join(' / ')} Hz`; loadConfig(); }
+}
+async function ask() {
+  const text = val('ask'); if (!text) return;
+  $('ask').value = '';
+  const j = await api('/api/ask', { text });
+  if (j && j.ok) $('err').textContent = `Lily: ${j.reply || '(no reply)'}`;
+}
+async function scan() {
+  $('devs').textContent = 'Scanning…';
+  const j = await api('/api/lily/scan', { seconds: 8 });
+  if (!j || !j.ok) { $('devs').textContent = ''; return; }
+  $('devs').innerHTML = j.devices.map(d => `<div class="dev"><span>${d.name || '(no name)'} · ${d.address}${d.rssi != null ? ' · ' + d.rssi + ' dBm' : ''}</span>
+    <button onclick="$('ble').value='${d.address}'">Body</button><button onclick="$('spk').value='${d.address}'">Speaker</button></div>`).join('') || 'Nothing found';
+}
+
+// Detection box: two clicks on the snapshot.
+let firstClick = null;
+$('snap').addEventListener('click', (e) => {
+  const r = e.target.getBoundingClientRect();
+  const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  if (!firstClick) { firstClick = p; $('err').textContent = 'Now click the bottom-right corner'; return; }
+  const box = { x0: Math.min(firstClick.x, p.x), y0: Math.min(firstClick.y, p.y), x1: Math.max(firstClick.x, p.x), y1: Math.max(firstClick.y, p.y) };
+  firstClick = null; $('err').textContent = '';
+  if (box.x1 - box.x0 > 0.05 && box.y1 - box.y0 > 0.05) saveConfig({ camera: { box } });
+});
+
+async function poll() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    const g = s.greeter, l = s.lily, c = s.camera, ch = s.chime, cv = s.converse;
+    $('today').textContent = `${g.today} today`;
+    const paused = g.pausedUntil > Date.now();
+    $('gstat').innerHTML = [pill(!paused && g.inHours, 'active', paused ? 'paused ' + Math.ceil((g.pausedUntil - Date.now()) / 60000) + ' min' : 'outside hours'),
+      g.greeting ? pill(true, 'speaking…') : '', `<label>last: ${ago(g.lastGreet)} (${g.lastReason || '-'}) “${g.lastLine || ''}”</label>`,
+      g.lastError ? `<span class="err">${g.lastError}</span>` : ''].join(' ');
+    $('cstat').innerHTML = [pill(cv.enabled, 'conversation on', 'conversation off'),
+      cv.listening ? pill(true, `listening ${cv.secondsLeft || ''}s`) : '', cv.phase !== 'idle' ? `<span class="pill">${cv.phase}</span>` : '',
+      cv.whisper ? '' : pill(false, '', 'whisper.cpp missing'),
+      cv.lastHeard ? `<label>heard “${cv.lastHeard}”</label>` : '', cv.lastReply ? `<label>→ “${cv.lastReply}”</label>` : '',
+      cv.lastError ? `<span class="err">${cv.lastError}</span>` : ''].join(' ');
+    $('lstat').innerHTML = [pill(l.connected, 'body connected', l.reconnecting ? 'body reconnecting' : 'body not connected'),
+      pill(l.audio.connected, 'speaker connected', 'speaker not connected'), pill(l.armed, 'motors armed', 'motors off'),
+      l.mood ? `<span class="pill">lantern ${l.mood}</span>` : '', l.lastError ? `<span class="err">${l.lastError}</span>` : '',
+      l.audio.lastError ? `<span class="err">${l.audio.lastError}</span>` : ''].join(' ');
+    $('camstat').innerHTML = [pill(c.running, 'watching ' + (c.device || ''), 'camera off'), `<label>motion ${Math.round(c.level * 100)}% · last arrival ${ago(c.lastArrival)}</label>`,
+      c.lastError ? `<span class="err">${c.lastError}</span>` : ''].join(' ');
+    if (cfg) {
+      $('cammeter').style.width = Math.min(100, c.level / Math.max(cfg.camera.minArea * 2, 0.01) * 100) + '%';
+      $('camthr').style.left = '50%';
+      $('chmeter').style.width = Math.min(100, ch.ratio * 100) + '%';
+      $('chthr').style.left = (cfg.chime.threshold * 100) + '%';
+    }
+    $('chstat').innerHTML = [pill(ch.running, 'mic on', 'mic off'), ch.learning ? pill(true, 'LEARNING — ring it!') : '',
+      `<label>tones ${ch.tones.length ? ch.tones.join(' / ') + ' Hz' : 'not learned'} · level ${ch.level} · last chime ${ago(ch.lastChime)}</label>`,
+      ch.lastError ? `<span class="err">${ch.lastError}</span>` : ''].join(' ');
+    $('keys').innerHTML = pill(s.keys.elevenlabs, 'ElevenLabs saved', 'ElevenLabs missing') + ' ' + pill(s.keys.anthropic, 'Anthropic saved', 'Anthropic missing');
+    const lg = $('log'), atBottom = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
+    lg.textContent = s.log.join('\n');
+    if (atBottom) lg.scrollTop = lg.scrollHeight;
+    if (c.running) $('snap').src = '/api/camera/snapshot.bmp?t=' + Date.now();
+  } catch (_) {}
+}
+loadConfig();
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

@@ -678,4 +678,4 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   return api;
 }
 
-module.exports = { createTalk };
+module.exports = { createTalk, elevenTts, transcribe, ensureWhisperServer, rms, TONES };

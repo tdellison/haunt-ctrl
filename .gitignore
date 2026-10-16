@@ -3,3 +3,8 @@ lily-config.json
 audio-zones.json
 secrets.json
 lily-talk.json
+greeter/greeter-config.json
+greeter/lily-config.json
+greeter/secrets.json
+greeter/cache/
+lily-greeter.tar.gz

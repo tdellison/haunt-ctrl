@@ -34,7 +34,8 @@ const LANTERN_MOODS = {
 const WARD_FLARE_MS = 2500;
 const WARD_SETTLE = { r: 0xE7, g: 0xFF, b: 0xFC, brightness: 200, mode: 'static' };   // white, steady flame
 
-const CONFIG_FILE = path.join(__dirname, '..', 'lily-config.json');
+// LILY_CONFIG lets another app (the work door greeter) keep its own copy.
+const CONFIG_FILE = process.env.LILY_CONFIG || path.join(__dirname, '..', 'lily-config.json');
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (_) { return {}; }
