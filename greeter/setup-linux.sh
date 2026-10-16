@@ -11,7 +11,7 @@ echo "== Lily greeter setup in $APP_DIR"
 echo "== System packages (ffmpeg, Bluetooth audio, build tools)"
 sudo apt-get update
 sudo apt-get install -y ffmpeg bluez pipewire pipewire-pulse wireplumber libspa-0.2-bluetooth \
-  curl git build-essential cmake
+  curl git build-essential cmake python3-venv
 
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
   echo "== Node.js 22"
@@ -53,6 +53,22 @@ fi
 if [ ! -f "$HOME/whisper.cpp/models/ggml-base.en.bin" ]; then
   bash "$HOME/whisper.cpp/models/download-ggml-model.sh" base.en
 fi
+
+echo "== Team face recognition (OpenCV, runs locally — off until you switch it on)"
+if [ ! -x "$APP_DIR/greeter/.venv/bin/python" ]; then python3 -m venv "$APP_DIR/greeter/.venv"; fi
+"$APP_DIR/greeter/.venv/bin/pip" install -q --upgrade pip
+"$APP_DIR/greeter/.venv/bin/pip" install -q opencv-python-headless numpy
+mkdir -p "$APP_DIR/greeter/models"
+fetch_model() {  # $1 = zoo folder, $2 = file
+  local out="$APP_DIR/greeter/models/$2"
+  [ -s "$out" ] && [ "$(stat -c%s "$out")" -gt 100000 ] && return 0
+  curl -fsSL -o "$out" "https://github.com/opencv/opencv_zoo/raw/main/models/$1/$2" \
+    || curl -fsSL -o "$out" "https://huggingface.co/opencv/$1/resolve/main/$2"
+  # A tiny file is an error page, not a model.
+  [ "$(stat -c%s "$out")" -gt 100000 ] || { echo "   could not download $2"; rm -f "$out"; return 1; }
+}
+fetch_model face_detection_yunet face_detection_yunet_2023mar.onnx
+fetch_model face_recognition_sface face_recognition_sface_2021dec.onnx
 
 echo "== Start automatically at boot (systemd user service)"
 mkdir -p "$HOME/.config/systemd/user"

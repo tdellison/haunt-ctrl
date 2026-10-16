@@ -20,8 +20,8 @@ cp "$REPO/voices.json" "$REPO/package.json" "$D/"
 # Only what the greeter loads — the haunt's dev/test packages stay behind.
 cp -r "$REPO/node_modules" "$D/"
 rm -rf "$D/node_modules/"{playwright,playwright-core,@abandonware,usb,node-gyp,.bin}
-# Per-machine files never travel, except keys when asked.
-rm -rf "$D/greeter/"{greeter-config.json,lily-config.json,secrets.json,cache}
+# Per-machine files never travel (team photos included), except keys when asked.
+rm -rf "$D/greeter/"{greeter-config.json,lily-config.json,secrets.json,cache,team,.venv,models}
 rm -f "$D/lily/clips.json"
 if [ "${1:-}" = "--with-keys" ]; then
   node -e '

@@ -19,6 +19,7 @@ const { createCamera, listCameras } = require('./camera');
 const { createChime, listMics } = require('./chime');
 const { createGreeter, playLocal } = require('./greeter');
 const { createConverse } = require('./converse');
+const { createFaces } = require('./faces');
 
 const PORT = Number(process.env.GREETER_PORT) || 3100;
 const CONFIG_FILE = path.join(__dirname, 'greeter-config.json');
@@ -60,6 +61,21 @@ const DEFAULTS = {
     adapt: 0.1,                    // background learning rate per frame (a still person fades in ~4 s)
   },
   chime: { enabled: true, source: '', tones: [], threshold: 0.4, minLevel: 0.01 },
+  // Team recognition — OFF until switched on (and photos added) on the setup page.
+  faces: {
+    enabled: false,
+    requireFace: true,             // no face seen = someone walking out: stay quiet
+    threshold: 0.4,                // how alike a face must be to a teammate's photos (0-1)
+    minFacePx: 60,                 // ignore faces smaller than this (far side of the room)
+    lookSec: 2,                    // how long she looks before deciding
+    teamRemarkEveryMin: 60,        // at most one remark per teammate per this many minutes
+  },
+  teamLines: [
+    "Oh, it's just you, {name}. You may go now.",
+    '{name}. Back again, I see.',
+    "Carry on, {name}. I'll mind the door.",
+    'Oh, {name}. For a moment I thought you were someone important.',
+  ],
   converse: {
     enabled: true,
     windowSec: 15,                 // how long she listens after greeting / after each reply
@@ -107,12 +123,16 @@ const converse = createConverse({
   lily, log, getConfig, getApiKey: anthropicKey, getElevenKey: elevenKey, playLocal,
   isGreeting: () => !!(greeterRef && greeterRef.status().greeting),
 });
+const faces = createFaces({ log });
+let cameraRef = null;
 const greeter = greeterRef = createGreeter({
   lily, log, getConfig, getElevenKey: elevenKey,
   onGreeted: (line) => converse.afterGreeting(line),
   inConversation: () => converse.inConversation(),
+  faces,
+  nextFrame: (ms) => (cameraRef ? cameraRef.nextJpeg(ms) : null),
 });
-const camera = createCamera({ log, getConfig, onArrival: () => greeter.onCamera() });
+const camera = cameraRef = createCamera({ log, getConfig, onArrival: () => greeter.onCamera() });
 const chime = createChime({
   log, getConfig,
   saveChime: (c) => { config.chime = { ...config.chime, ...c }; saveConfig(); },
@@ -124,7 +144,7 @@ const micWanted = () => !!(config.chime.enabled || config.converse.enabled);
 
 // ── HTTP ──
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));   // team photos arrive as base64
 app.use(express.static(path.join(__dirname, 'public')));
 
 const route = (fn) => async (req, res) => {
@@ -134,7 +154,7 @@ const route = (fn) => async (req, res) => {
 
 app.get('/api/status', (req, res) => res.json({
   lily: lily.status(), camera: camera.status(), chime: chime.status(), greeter: greeter.status(),
-  converse: converse.status(), keys: { elevenlabs: !!elevenKey(), anthropic: !!anthropicKey() }, log: logLines.slice(-60),
+  converse: converse.status(), faces: { ...faces.status(), enabled: !!config.faces.enabled }, keys: { elevenlabs: !!elevenKey(), anthropic: !!anthropicKey() }, log: logLines.slice(-60),
 }));
 
 app.get('/api/config', (req, res) => res.json(config));
@@ -152,7 +172,9 @@ app.post('/api/config', route(async (body) => {
     micWanted() ? chime.restart() : chime.stop();
   }
   converse.warmup();
-  if (body.lines || body.voiceId) greeter.warm();
+  if (body.teamLines) config.teamLines = body.teamLines;
+  if (config.faces.enabled) faces.start();
+  if (body.lines || body.voiceId || body.teamLines || body.faces) greeter.warm();
   return { config };
 }));
 
@@ -184,12 +206,28 @@ app.get('/api/camera/list', (req, res) => res.json(listCameras()));
 app.get('/api/camera/snapshot.bmp', (req, res) => {
   const img = camera.snapshot();
   if (!img) return res.status(404).end();
-  res.set({ 'Content-Type': 'image/bmp', 'Cache-Control': 'no-store' }).send(img);
+  res.set({ 'Content-Type': img.type, 'Cache-Control': 'no-store' }).send(img.data);
 });
 
 // Mic / chime
 app.get('/api/mic/list', async (req, res) => res.json(await listMics()));
 app.post('/api/chime/learn', route(async ({ seconds }) => ({ learned: await chime.learn(Number(seconds) || 5) })));
+
+// Team faces (photos stay in greeter/team/ on this computer)
+app.post('/api/team/photo', route(async ({ name, jpeg }) => {
+  if (!jpeg) throw new Error('photo required');
+  const team = await faces.addPhoto(name, Buffer.from(String(jpeg).replace(/^data:[^,]*,/, ''), 'base64'));
+  greeter.warm();
+  return { team };
+}));
+app.post('/api/team/capture', route(async ({ name }) => {
+  const jpeg = await camera.nextJpeg(2000);
+  if (!jpeg) throw new Error('No camera picture — is the webcam on?');
+  const team = await faces.addPhoto(name, jpeg);
+  greeter.warm();
+  return { team };
+}));
+app.post('/api/team/remove', route(async ({ name }) => ({ team: await faces.removePerson(name) })));
 
 // Greeting
 app.post('/api/greet', route(async () => { await greeter.greet('test'); return { greeter: greeter.status() }; }));
@@ -210,6 +248,7 @@ app.listen(PORT, () => {
 async function startup() {
   if (config.camera.enabled) camera.start();
   if (micWanted()) chime.start();
+  faces.start();   // cheap when idle; needed for adding photos even before it's switched on
   converse.warmup();
   greeter.warm().catch(() => {});
   let lc = {};
@@ -227,7 +266,7 @@ async function startup() {
 }
 
 function shutdown() {
-  camera.stop(); chime.stop();
+  camera.stop(); chime.stop(); faces.stop();
   Promise.race([lily.arm(false).catch(() => {}), new Promise(r => setTimeout(r, 1500))]).then(() => process.exit(0));
 }
 process.on('SIGINT', shutdown);

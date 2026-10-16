@@ -34,7 +34,7 @@ tar xzf lily-greeter.tar.gz -C ~
 bash ~/lily-greeter/greeter/setup-linux.sh
 ```
 Setup installs ffmpeg, Bluetooth audio (PipeWire + `libspa-0.2-bluetooth`),
-Node 22, builds whisper.cpp, adds the WirePlumber configs her speaker needs,
+Node 22, builds whisper.cpp, OpenCV + the two face models, adds the WirePlumber configs her speaker needs,
 and starts the greeter at every boot (`systemctl --user … lily-greeter`).
 Log out and back in once afterwards.
 
@@ -55,14 +55,29 @@ Log out and back in once afterwards.
 6. **Lines + hours** — edit what she says and when she's active.
    Then **GREET NOW** to hear it.
 
-## Team members walking by
-Today: aim the camera at the door itself (people *coming through* it), not the
-hallway the team uses; use the cooldown and *Team pause*. Motion can't tell
-entering from leaving, so someone leaving through the box can also get a hello.
-Face recognition of the team is possible later (the camera has a
-`shouldIgnore(frame)` hook for it) — it needs a few photos per person and
-runs locally; decide first whether you want staff photos on that machine.
+## Team recognition (optional — off until you switch it on)
+Setup page → **Team**: type a name, then either *📷 Photo from Lily's
+camera* (stand in front of her) or *📁 Upload photos* from a phone. 3–5
+photos each: straight on, a little left/right, with/without glasses. Then tick
+**Recognise team**.
+
+When the camera fires she looks for ~2 s before speaking:
+- a face she doesn't know → visitor greeting (also when a teammate is with them)
+- only teammates → *"Oh, it's just you, Todd. You may go now."* (lines editable,
+  `{name}` = their name), at most once per person per hour, otherwise silent
+- no face (someone walking out, back to her) → silent, and the chime is
+  ignored for that door opening too
+
+Everything runs on that computer (OpenCV YuNet + SFace). Photos live in
+`greeter/team/<Name>/` and never leave it — not uploaded, not sent to Claude
+or ElevenLabs. *Remove* deletes a person's folder. Check with work before
+adding staff photos.
+
+If a teammate gets greeted as a stranger: add more photos of them, or lower
+*Match strictness* a little (0.36–0.4). If a stranger gets called by a
+teammate's name: raise it. *last seen* on the page shows the scores.
 
 ## Files (per machine, gitignored, in `greeter/`)
 `greeter-config.json` (settings) · `lily-config.json` (her addresses) ·
-`secrets.json` (API keys) · `cache/` (voiced lines).
+`secrets.json` (API keys) · `cache/` (voiced lines) · `team/` (team photos) ·
+`.venv/` + `models/` (face recognition, made by setup).

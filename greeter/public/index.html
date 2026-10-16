@@ -25,7 +25,12 @@
   .meter { height:10px; background:#120f18; border-radius:5px; overflow:hidden; flex:1; min-width:120px; position:relative; }
   .meter > div { height:100%; background:var(--accent); width:0; }
   .meter > i { position:absolute; top:0; bottom:0; width:2px; background:#fff; }
-  #snap { width:100%; max-width:480px; image-rendering:pixelated; border-radius:6px; background:#000; aspect-ratio:4/3; cursor:crosshair; }
+  .snapwrap { position:relative; width:100%; max-width:480px; }
+  #snap { display:block; width:100%; border-radius:6px; background:#000; aspect-ratio:4/3; object-fit:fill; cursor:crosshair; }
+  #box { position:absolute; border:2px solid var(--accent); pointer-events:none; border-radius:3px; }
+  .person { display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); }
+  .person span { flex:1; }
+  .note { color:var(--dim); font-size:13px; margin:4px 0; }
   pre { background:#0d0b11; padding:8px; border-radius:6px; max-height:260px; overflow:auto; font-size:12px; margin:0; white-space:pre-wrap; }
   .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; }
   .dev { display:flex; gap:6px; align-items:center; font-size:13px; padding:4px 0; border-bottom:1px solid var(--line); }
@@ -99,7 +104,7 @@
   <h2>Camera (main sensor)</h2>
   <div id="camstat" class="row"></div>
   <div class="row"><div class="meter"><div id="cammeter"></div><i id="camthr"></i></div></div>
-  <img id="snap" alt="camera" title="Click top-left then bottom-right to set the detection box">
+  <div class="snapwrap"><img id="snap" alt="camera" title="Click top-left then bottom-right to set the detection box"><div id="box"></div></div>
   <div class="row"><label>Click the picture twice (top-left, then bottom-right) to draw the detection box over the door.</label></div>
   <div class="grid2">
     <label>Webcam <select id="camdev"></select></label>
@@ -108,6 +113,30 @@
     <label><input type="checkbox" id="camOn"> Camera on</label>
   </div>
   <div class="row"><button onclick="saveCamera()">Save camera</button></div>
+</section>
+
+<section>
+  <h2>Team (so she knows you)</h2>
+  <div class="note">Photos stay on this computer only (greeter/team/) — never uploaded, never sent to Claude or ElevenLabs. Remove deletes them. Add 3–5 photos each: straight on, a little left/right, with and without glasses.</div>
+  <div id="fstat" class="row"></div>
+  <div class="row">
+    <label><input type="checkbox" id="fOn"> Recognise team</label>
+    <label><input type="checkbox" id="fReq"> Only greet when she sees a face (people leaving show their backs)</label>
+  </div>
+  <div class="row">
+    <input id="pname" placeholder="Name (as she should say it)" style="flex:1;min-width:160px">
+    <button onclick="capture()">📷 Photo from Lily's camera</button>
+    <label class="pill" style="cursor:pointer">📁 Upload photos<input type="file" id="pfile" accept="image/*" multiple capture="user" hidden onchange="upload(this.files)"></label>
+  </div>
+  <div id="team"></div>
+  <label>What she says to a teammate ({name} = their name; one per row)</label>
+  <textarea id="teamLines"></textarea>
+  <div class="grid2">
+    <label>At most once per person every (min) <input id="fEvery" type="number" min="0" max="600"></label>
+    <label>Match strictness (0.3 loose – 0.6 strict) <input id="fThr" type="number" step="0.02" min="0.25" max="0.7"></label>
+    <label>Smallest face (px of 640) <input id="fMin" type="number" min="20" max="300"></label>
+  </div>
+  <div class="row"><button onclick="saveFaces()">Save team settings</button></div>
 </section>
 
 <section>
@@ -185,6 +214,10 @@ async function loadConfig() {
   $('camOn').checked = !!cfg.camera.enabled; $('chOn').checked = !!cfg.chime.enabled; $('thr').value = cfg.chime.threshold;
   $('convOn').checked = !!cfg.converse.enabled; $('always').checked = !!cfg.converse.alwaysListen;
   $('win').value = cfg.converse.windowSec; $('about').value = cfg.converse.about || '';
+  $('fOn').checked = !!cfg.faces.enabled; $('fReq').checked = !!cfg.faces.requireFace;
+  $('fEvery').value = cfg.faces.teamRemarkEveryMin; $('fThr').value = cfg.faces.threshold; $('fMin').value = cfg.faces.minFacePx;
+  $('teamLines').value = (cfg.teamLines || []).join('\n');
+  drawBox();
   const cams = await (await fetch('/api/camera/list')).json();
   $('camdev').innerHTML = '<option value="">(first webcam)</option>' + cams.map(c => `<option value="${c.device}">${c.name} — ${c.device}</option>`).join('');
   $('camdev').value = cfg.camera.device || '';
@@ -208,6 +241,50 @@ function saveChime() { saveConfig({ chime: { source: $('mic').value, enabled: $(
 function saveConverse() {
   saveConfig({ converse: { enabled: $('convOn').checked, alwaysListen: $('always').checked,
     windowSec: Number($('win').value) || 15, about: $('about').value.trim() } });
+}
+function saveFaces() {
+  saveConfig({ teamLines: lines('teamLines'), faces: { enabled: $('fOn').checked, requireFace: $('fReq').checked,
+    teamRemarkEveryMin: Number($('fEvery').value) || 0, threshold: Number($('fThr').value) || 0.4, minFacePx: Number($('fMin').value) || 60 } });
+}
+async function capture() {
+  if (!val('pname')) { $('err').textContent = 'Type the name first'; return; }
+  $('err').textContent = 'Taking photo — look at Lily…';
+  const j = await api('/api/team/capture', { name: val('pname') });
+  if (j && j.ok) $('err').textContent = 'Photo added';
+}
+// Phone photos are huge: shrink to 1024 px in the browser before sending.
+function shrink(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1024 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function upload(files) {
+  if (!val('pname')) { $('err').textContent = 'Type the name first, then pick photos'; $('pfile').value = ''; return; }
+  let ok = 0;
+  for (const f of files) {
+    const j = await api('/api/team/photo', { name: val('pname'), jpeg: await shrink(f) });
+    if (j && j.ok) ok++;
+  }
+  $('pfile').value = '';
+  if (ok) $('err').textContent = `${ok} photo(s) added`;
+}
+async function removePerson(name) {
+  if (!confirm(`Remove ${name} and delete their photos?`)) return;
+  await api('/api/team/remove', { name });
+}
+function drawBox() {
+  if (!cfg) return;
+  const b = cfg.camera.box, el = $('box');
+  Object.assign(el.style, { left: b.x0 * 100 + '%', top: b.y0 * 100 + '%', width: (b.x1 - b.x0) * 100 + '%', height: (b.y1 - b.y0) * 100 + '%' });
 }
 async function saveKeys() {
   await api('/api/secrets', { elevenLabsApiKey: val('elk'), anthropicApiKey: val('ank') });
@@ -272,6 +349,13 @@ async function poll() {
     $('chstat').innerHTML = [pill(ch.running, 'mic on', 'mic off'), ch.learning ? pill(true, 'LEARNING — ring it!') : '',
       `<label>tones ${ch.tones.length ? ch.tones.join(' / ') + ' Hz' : 'not learned'} · level ${ch.level} · last chime ${ago(ch.lastChime)}</label>`,
       ch.lastError ? `<span class="err">${ch.lastError}</span>` : ''].join(' ');
+    const f = s.faces;
+    $('fstat').innerHTML = [pill(f.enabled && f.ready, 'recognising team', f.enabled ? 'not ready' : 'off'),
+      f.ready ? '' : `<span class="err">${f.error || 'starting…'}</span>`,
+      s.greeter.lastSeen ? `<label>last seen: ${s.greeter.lastSeen}</label>` : ''].join(' ');
+    const team = Object.entries(f.team || {});
+    $('team').innerHTML = team.map(([n, t]) => `<div class="person"><span>${n} · ${t.usable}/${t.photos} usable photo(s)</span><button data-n="${encodeURIComponent(n)}" onclick="removePerson(decodeURIComponent(this.dataset.n))">Remove</button></div>`).join('')
+      || '<div class="note">No team members yet.</div>';
     $('keys').innerHTML = pill(s.keys.elevenlabs, 'ElevenLabs saved', 'ElevenLabs missing') + ' ' + pill(s.keys.anthropic, 'Anthropic saved', 'Anthropic missing');
     const lg = $('log'), atBottom = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 5;
     lg.textContent = s.log.join('\n');

@@ -8,3 +8,6 @@ greeter/lily-config.json
 greeter/secrets.json
 greeter/cache/
 lily-greeter.tar.gz
+greeter/team/
+greeter/.venv/
+greeter/models/

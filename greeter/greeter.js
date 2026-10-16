@@ -10,6 +10,16 @@
 // Guards: cooldown between greetings (a group walking in = one hello), office
 // hours, and a manual "team pause" for when staff are coming and going.
 //
+// Team recognition (optional, faces.js): after the camera fires she looks at
+// the next couple of seconds of frames before speaking —
+//   a face she doesn't know  -> visitor greeting (even if a teammate is with them)
+//   only teammates           -> a short remark by name ("Oh, it's just you,
+//                               Todd. You may go now."), at most once per person
+//                               per hour; otherwise she stays quiet
+//   no face at all           -> someone walking OUT (backs to her): quiet
+// Any camera event also tells the chime listener the door is already handled,
+// so the chime never greets someone the camera has just seen leaving.
+//
 // Lines are spoken in Lily's ElevenLabs voice and cached on disk, so a greeting
 // starts instantly and each line is only paid for once.
 
@@ -35,10 +45,14 @@ function playLocal(file) {
 
 function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
   onGreeted = () => {},             // (line) — opens the conversation window
-  inConversation = () => false }) {
-  const status = { greeting: false, lastGreet: null, lastLine: null, lastReason: null, pausedUntil: 0, today: 0, todayDate: null, lastError: null };
-  const recent = [];
-  let lastGreetAt = 0, chimeTimer = null;
+  inConversation = () => false,
+  faces = null,                     // faces.js, or null
+  nextFrame = async () => null }) { // the camera's next JPEG
+  const status = { greeting: false, lastGreet: null, lastLine: null, lastReason: null, pausedUntil: 0, today: 0, todayDate: null,
+    lastError: null, lastSeen: null };
+  const recent = [], recentTeam = [];
+  const teamSaidAt = {};            // name -> last remark time
+  let lastGreetAt = 0, lastCameraAt = 0, chimeTimer = null, looking = false;
 
   const cacheFile = (voiceId, text) =>
     path.join(CACHE_DIR, `${crypto.createHash('sha1').update(`${voiceId}|${text}`).digest('hex').slice(0, 16)}.mp3`);
@@ -66,8 +80,10 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
   }
 
   function allLines() {
-    const l = getConfig().lines;
-    return [...new Set(Object.values(l).flat().map(s => String(s).trim()).filter(Boolean))];
+    const cfg = getConfig();
+    const names = faces && cfg.faces.enabled ? faces.teamNames() : [];
+    const team = names.flatMap(n => (cfg.teamLines || []).map(l => l.replace(/\{name\}/g, n)));
+    return [...new Set([...Object.values(cfg.lines).flat(), ...team].map(s => String(s).trim()).filter(Boolean))];
   }
 
   function pickLine() {
@@ -95,20 +111,83 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     return dayOk && (s <= e ? mins >= s && mins < e : mins >= s || mins < e);
   }
 
+  function blockedBy(cfg) {
+    if (Date.now() < status.pausedUntil) return 'team pause';
+    if (!inHours()) return 'outside greeting hours';
+    if (Date.now() - lastGreetAt < cfg.cooldownSec * 1000) return 'cooldown';
+    if (inConversation()) return 'she is mid-conversation';
+    return null;
+  }
+
+  // Look at the next few frames: who is at the door?
+  // -> { kind: 'visitor' | 'team' | 'nobody', names }
+  async function look() {
+    const f = getConfig().faces;
+    const until = Date.now() + f.lookSec * 1000;
+    const names = new Set();
+    let strangers = 0, teamFrames = 0;
+    while (Date.now() < until) {
+      const jpeg = await nextFrame(1000);
+      if (!jpeg) continue;
+      let seen;
+      try { seen = await faces.identify(jpeg, { minFace: f.minFacePx, threshold: f.threshold }); }
+      catch (e) { log(`faces: ${e.message} — greeting as a visitor`); return { kind: 'visitor', names: [] }; }
+      if (!seen.length) continue;
+      status.lastSeen = seen.map(x => x.name ? `${x.name} (${x.score})` : `unknown (closest ${x.closest || '-'} ${x.score})`).join(', ');
+      if (seen.some(x => !x.name)) { if (++strangers >= 2) break; }
+      else { seen.forEach(x => names.add(x.name)); if (++teamFrames >= 2) break; }
+    }
+    if (strangers) return { kind: 'visitor', names: [...names] };
+    if (names.size) return { kind: 'team', names: [...names] };
+    return { kind: 'nobody', names: [] };
+  }
+
+  async function onCamera() {
+    const cfg = getConfig();
+    lastCameraAt = Date.now();
+    const why = blockedBy(cfg);
+    if (why) return skip(why);
+    const useFaces = faces && cfg.faces.enabled && faces.status().ready;
+    if (!useFaces) return greet('camera');
+    if (looking || status.greeting) return;
+    looking = true;
+    let who;
+    try { who = await look(); } finally { looking = false; }
+    lastCameraAt = Date.now();
+    if (who.kind === 'visitor') return greet('camera');
+    if (who.kind === 'team') return teamRemark(who.names);
+    if (cfg.faces.requireFace) return log('camera: no face seen (someone leaving?) — staying quiet');
+    return greet('camera');
+  }
+
+  // A teammate: a short remark by name, at most once per person per interval.
+  async function teamRemark(names) {
+    const cfg = getConfig();
+    const due = names.filter(n => Date.now() - (teamSaidAt[n] || 0) >= cfg.faces.teamRemarkEveryMin * 60000);
+    if (!due.length || !(cfg.teamLines || []).length) return log(`camera: ${names.join(' & ')} — team, staying quiet`);
+    const name = due.length > 1 ? `${due.slice(0, -1).join(', ')} and ${due[due.length - 1]}` : due[0];
+    const pool = cfg.teamLines.filter(l => !recentTeam.includes(l));
+    const tpl = (pool.length ? pool : cfg.teamLines)[Math.floor(Math.random() * (pool.length || cfg.teamLines.length))];
+    recentTeam.push(tpl); while (recentTeam.length > 2) recentTeam.shift();
+    due.forEach(n => { teamSaidAt[n] = Date.now(); });
+    await speak(tpl.replace(/\{name\}/g, name), 'team', { openMic: false, countIt: false });
+  }
+
   async function greet(reason) {
     const cfg = getConfig();
-    const forced = reason === 'test';
-    if (!forced) {
-      if (Date.now() < status.pausedUntil) return skip('team pause');
-      if (!inHours()) return skip('outside greeting hours');
-      if (Date.now() - lastGreetAt < cfg.cooldownSec * 1000) return skip('cooldown');
-      if (inConversation()) return skip('she is mid-conversation');
+    if (reason !== 'test') {
+      const why = blockedBy(cfg);
+      if (why) return skip(why);
     }
+    return speak(pickLine(), reason, { openMic: true, countIt: true });
+  }
+
+  async function speak(line, reason, { openMic, countIt }) {
+    const cfg = getConfig();
     if (status.greeting) return skip('already greeting');
     clearTimeout(chimeTimer);
     status.greeting = true;
-    lastGreetAt = Date.now();
-    const line = pickLine();
+    if (countIt) lastGreetAt = Date.now();
     try {
       const st = lily.status();
       if (st.connected) {
@@ -124,24 +203,26 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
       } else if (file) {
         log('her speaker is not connected — greeting through the computer speaker');
         await playLocal(file);
-      } else if (st.connected && cfg.builtinClip) {
+      } else if (st.connected && cfg.builtinClip && reason !== 'team') {
         // No voice available: one of her own stored phrases instead.
         await lily.playMedia(cfg.builtinClip);
       } else {
         throw new Error('nothing to say with — add the ElevenLabs key, or connect Lily for her built-in phrases');
       }
-      const today = new Date().toDateString();
-      if (status.todayDate !== today) { status.todayDate = today; status.today = 0; }
-      status.today++;
+      if (countIt) {
+        const today = new Date().toDateString();
+        if (status.todayDate !== today) { status.todayDate = today; status.today = 0; }
+        status.today++;
+      }
       Object.assign(status, { lastGreet: new Date().toISOString(), lastLine: file ? line : `built-in clip ${cfg.builtinClip}`, lastReason: reason, lastError: null });
-      log(`greeted (${reason}): "${status.lastLine}"`);
-      onGreeted(file ? line : null);
+      log(`${reason === 'team' ? 'said' : 'greeted'} (${reason}): "${status.lastLine}"`);
+      if (openMic) onGreeted(file ? line : null);
     } catch (e) {
       status.lastError = e.message;
       log(`greeting failed: ${e.message}`);
     } finally {
       status.greeting = false;
-      lastGreetAt = Date.now();     // cooldown runs from the END of the line
+      if (countIt) lastGreetAt = Date.now();     // cooldown runs from the END of the line
     }
   }
 
@@ -150,15 +231,17 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
   return {
     greet,
     warm,
-    onCamera: () => greet('camera'),
+    onCamera: () => onCamera().catch(e => log(`camera trigger failed: ${e.message}`)),
+    // Backup only: the camera saw nothing at the door around this chime.
     onChime() {
       const cfg = getConfig();
+      const cameraHandled = () => looking || Date.now() - Math.max(lastCameraAt, lastGreetAt) < cfg.chimeWindowSec * 1000;
       if (status.greeting || inConversation()) return;
-      if (Date.now() - lastGreetAt < cfg.chimeWindowSec * 1000) return log('chime: camera already greeted them');
+      if (cameraHandled()) return log('chime: the camera already saw them');
       log(`chime heard — waiting ${cfg.chimeDelaySec}s for the camera`);
       clearTimeout(chimeTimer);
       chimeTimer = setTimeout(() => {
-        if (Date.now() - lastGreetAt < cfg.chimeWindowSec * 1000) return;
+        if (cameraHandled()) return;
         greet('chime');
       }, cfg.chimeDelaySec * 1000);
     },
