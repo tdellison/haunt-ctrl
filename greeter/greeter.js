@@ -47,6 +47,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
   onGreeted = () => {},             // (line) — opens the conversation window
   inConversation = () => false,
   faces = null,                     // faces.js, or null
+  outfit = null,                    // outfit.js, or null
   nextFrame = async () => null }) { // the camera's next JPEG
   const status = { greeting: false, lastGreet: null, lastLine: null, lastReason: null, pausedUntil: 0, today: 0, todayDate: null,
     lastError: null, lastSeen: null };
@@ -125,7 +126,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     const f = getConfig().faces;
     const until = Date.now() + f.lookSec * 1000;
     const names = new Set();
-    let strangers = 0, teamFrames = 0;
+    let strangers = 0, teamFrames = 0, frame = null;
     while (Date.now() < until) {
       const jpeg = await nextFrame(1000);
       if (!jpeg) continue;
@@ -134,10 +135,10 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
       catch (e) { log(`faces: ${e.message} — greeting as a visitor`); return { kind: 'visitor', names: [] }; }
       if (!seen.length) continue;
       status.lastSeen = seen.map(x => x.name ? `${x.name} (${x.score})` : `unknown (closest ${x.closest || '-'} ${x.score})`).join(', ');
-      if (seen.some(x => !x.name)) { if (++strangers >= 2) break; }
+      if (seen.some(x => !x.name)) { frame = jpeg; if (++strangers >= 2) break; }
       else { seen.forEach(x => names.add(x.name)); if (++teamFrames >= 2) break; }
     }
-    if (strangers) return { kind: 'visitor', names: [...names] };
+    if (strangers) return { kind: 'visitor', names: [...names], frame };
     if (names.size) return { kind: 'team', names: [...names] };
     return { kind: 'nobody', names: [] };
   }
@@ -154,7 +155,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     let who;
     try { who = await look(); } finally { looking = false; }
     lastCameraAt = Date.now();
-    if (who.kind === 'visitor') return greet('camera');
+    if (who.kind === 'visitor') return greet('camera', who.frame);
     if (who.kind === 'team') return teamRemark(who.names);
     if (cfg.faces.requireFace) return log('camera: no face seen (someone leaving?) — staying quiet');
     return greet('camera');
@@ -173,13 +174,27 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     await speak(tpl.replace(/\{name\}/g, name), 'team', { openMic: false, countIt: false });
   }
 
-  async function greet(reason) {
+  async function greet(reason, frame = null) {
     const cfg = getConfig();
     if (reason !== 'test') {
       const why = blockedBy(cfg);
       if (why) return skip(why);
     }
-    return speak(pickLine(), reason, { openMic: true, countIt: true });
+    // Outfit remark: written by Claude from a camera picture WHILE the
+    // greeting plays; said after it, or dropped if it isn't ready in time.
+    let remark = null;
+    if (outfit && cfg.outfit.enabled && reason !== 'chime' && (reason === 'test' || Math.random() < cfg.outfit.chance)) {
+      remark = (async () => {
+        const jpeg = frame || await nextFrame(1000);
+        return jpeg ? outfit.remark(jpeg) : null;
+      })().catch((e) => { log(`outfit remark failed: ${e.message}`); return null; });
+    }
+    const line = pickLine();
+    const ok = await speak(line, reason, { openMic: !remark, countIt: true });
+    if (!remark) return;
+    const extra = await Promise.race([remark, new Promise(r => setTimeout(() => r(null), 4000))]);
+    if (ok && extra) await speak(extra, 'outfit', { openMic: true, countIt: false });
+    else if (ok) onGreeted(line);
   }
 
   async function speak(line, reason, { openMic, countIt }) {
@@ -217,6 +232,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
       Object.assign(status, { lastGreet: new Date().toISOString(), lastLine: file ? line : `built-in clip ${cfg.builtinClip}`, lastReason: reason, lastError: null });
       log(`${reason === 'team' ? 'said' : 'greeted'} (${reason}): "${status.lastLine}"`);
       if (openMic) onGreeted(file ? line : null);
+      return true;
     } catch (e) {
       status.lastError = e.message;
       log(`greeting failed: ${e.message}`);

@@ -54,6 +54,12 @@
     <button onclick="api('/api/pause',{minutes:0})">Resume</button>
   </div>
   <div id="gstat" class="row"></div>
+  <div class="row">
+    <label><input type="checkbox" id="oOn"> Compliment visitors' outfits (shirt, slogan, design)</label>
+    <label>how often % <input id="oChance" type="number" min="0" max="100" style="width:70px"></label>
+    <button onclick="saveOutfit()">Save</button>
+  </div>
+  <div class="note">Outfit remarks send one camera picture per remark to Claude (Anthropic) — the only thing that leaves this computer. Strangers only; GREET NOW always tries one.</div>
 </section>
 
 <section>
@@ -214,6 +220,7 @@ async function loadConfig() {
   $('camOn').checked = !!cfg.camera.enabled; $('chOn').checked = !!cfg.chime.enabled; $('thr').value = cfg.chime.threshold;
   $('convOn').checked = !!cfg.converse.enabled; $('always').checked = !!cfg.converse.alwaysListen;
   $('win').value = cfg.converse.windowSec; $('about').value = cfg.converse.about || '';
+  $('oOn').checked = !!cfg.outfit.enabled; $('oChance').value = Math.round(cfg.outfit.chance * 100);
   $('fOn').checked = !!cfg.faces.enabled; $('fReq').checked = !!cfg.faces.requireFace;
   $('fEvery').value = cfg.faces.teamRemarkEveryMin; $('fThr').value = cfg.faces.threshold; $('fMin').value = cfg.faces.minFacePx;
   $('teamLines').value = (cfg.teamLines || []).join('\n');
@@ -241,6 +248,9 @@ function saveChime() { saveConfig({ chime: { source: $('mic').value, enabled: $(
 function saveConverse() {
   saveConfig({ converse: { enabled: $('convOn').checked, alwaysListen: $('always').checked,
     windowSec: Number($('win').value) || 15, about: $('about').value.trim() } });
+}
+function saveOutfit() {
+  saveConfig({ outfit: { enabled: $('oOn').checked, chance: Math.max(0, Math.min(100, Number($('oChance').value) || 0)) / 100 } });
 }
 function saveFaces() {
   saveConfig({ teamLines: lines('teamLines'), faces: { enabled: $('fOn').checked, requireFace: $('fReq').checked,

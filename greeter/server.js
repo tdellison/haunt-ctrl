@@ -20,6 +20,7 @@ const { createChime, listMics } = require('./chime');
 const { createGreeter, playLocal } = require('./greeter');
 const { createConverse } = require('./converse');
 const { createFaces } = require('./faces');
+const { createOutfit } = require('./outfit');
 
 const PORT = Number(process.env.GREETER_PORT) || 3100;
 const CONFIG_FILE = path.join(__dirname, 'greeter-config.json');
@@ -61,15 +62,17 @@ const DEFAULTS = {
     adapt: 0.1,                    // background learning rate per frame (a still person fades in ~4 s)
   },
   chime: { enabled: true, source: '', tones: [], threshold: 0.4, minLevel: 0.01 },
-  // Team recognition — OFF until switched on (and photos added) on the setup page.
+  // Team recognition — on; does nothing until team photos are added.
   faces: {
-    enabled: false,
+    enabled: true,
     requireFace: true,             // no face seen = someone walking out: stay quiet
     threshold: 0.4,                // how alike a face must be to a teammate's photos (0-1)
     minFacePx: 60,                 // ignore faces smaller than this (far side of the room)
     lookSec: 2,                    // how long she looks before deciding
     teamRemarkEveryMin: 60,        // at most one remark per teammate per this many minutes
   },
+  // Outfit remarks — OFF by default: sends one camera picture to Claude.
+  outfit: { enabled: false, chance: 0.35 },
   teamLines: [
     "Oh, it's just you, {name}. You may go now.",
     '{name}. Back again, I see.',
@@ -130,6 +133,7 @@ const greeter = greeterRef = createGreeter({
   onGreeted: (line) => converse.afterGreeting(line),
   inConversation: () => converse.inConversation(),
   faces,
+  outfit: createOutfit({ log, getApiKey: anthropicKey }),
   nextFrame: (ms) => (cameraRef ? cameraRef.nextJpeg(ms) : null),
 });
 const camera = cameraRef = createCamera({ log, getConfig, onArrival: () => greeter.onCamera() });

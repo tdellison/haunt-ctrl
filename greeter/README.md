@@ -55,11 +55,10 @@ Log out and back in once afterwards.
 6. **Lines + hours** — edit what she says and when she's active.
    Then **GREET NOW** to hear it.
 
-## Team recognition (optional — off until you switch it on)
+## Team recognition (on — does nothing until you add photos)
 Setup page → **Team**: type a name, then either *📷 Photo from Lily's
 camera* (stand in front of her) or *📁 Upload photos* from a phone. 3–5
-photos each: straight on, a little left/right, with/without glasses. Then tick
-**Recognise team**.
+photos each: straight on, a little left/right, with/without glasses.
 
 When the camera fires she looks for ~2 s before speaking:
 - a face she doesn't know → visitor greeting (also when a teammate is with them)
@@ -76,6 +75,15 @@ adding staff photos.
 If a teammate gets greeted as a stranger: add more photos of them, or lower
 *Match strictness* a little (0.36–0.4). If a stranger gets called by a
 teammate's name: raise it. *last seen* on the page shows the scores.
+
+## Outfit remarks (off until you tick it)
+*Compliment visitors' outfits* under Greeting: while her greeting plays,
+Claude looks at one camera picture and writes a short follow-up about a
+shirt colour, slogan, logo or design ("And may I say, that dinosaur sweater
+is a bold choice."). Strangers only, *how often %* of the time (35%
+default), clothing only — never faces, bodies or age. Dropped if not ready
+within 4 s. This is the one feature that sends a picture off the computer
+(to Anthropic). GREET NOW always tries one, for testing.
 
 ## Files (per machine, gitignored, in `greeter/`)
 `greeter-config.json` (settings) · `lily-config.json` (her addresses) ·
