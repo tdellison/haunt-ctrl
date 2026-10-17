@@ -70,6 +70,13 @@ fetch_model() {  # $1 = zoo folder, $2 = file
 fetch_model face_detection_yunet face_detection_yunet_2023mar.onnx
 fetch_model face_recognition_sface face_recognition_sface_2021dec.onnx
 
+echo "== Local version history (so changes made later can be undone)"
+if [ ! -d "$APP_DIR/.git" ]; then
+  git -C "$APP_DIR" init -q
+  git -C "$APP_DIR" add -A
+  git -C "$APP_DIR" -c user.name=Claude -c user.email=noreply@anthropic.com commit -qm "Lily greeter as delivered"
+fi
+
 echo "== Start automatically at boot (systemd user service)"
 mkdir -p "$HOME/.config/systemd/user"
 cat > "$HOME/.config/systemd/user/lily-greeter.service" <<UNIT
@@ -97,3 +104,4 @@ echo "== Done. Open http://$IP:3100 from a phone or browser on the work network.
 echo "   Log:     journalctl --user -u lily-greeter -f"
 echo "   Restart: systemctl --user restart lily-greeter"
 echo "   (Log out and back in once so the webcam/bluetooth group change applies.)"
+echo "   Claude Code: cd $APP_DIR && claude   (CLAUDE.md there has the full project notes)"
