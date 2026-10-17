@@ -28,7 +28,7 @@ workplace (tdellison13@gmail.com). Runs on a Linux PC next to her, wired network
 - `greeter/outfit.js` — optional: one camera frame → Claude Haiku → a kind remark about clothes. OFF by default; the only feature that sends a picture off the machine.
 - `greeter/public/index.html` — the setup page (polls `/api/status` every 1 s).
 - `lily/` — her drivers (shared with haunt-ctrl): `index.js` createLily (BLE + audio + config), `bleLily.js` (BlueZ D-Bus via node-ble), `audioRouter.linux.js` (bluetoothctl/wpctl, the ONLY file allowed to call them), `protocol.js` (+ `node lily/protocol.test.js`), `mockLily.js`, `talk.js` (the haunt's conversation code — the greeter imports only `elevenTts`, `transcribe`, `rms`, `TONES` from it).
-- `voices.json` — ElevenLabs voice ids; `lily` = hOhoyLFaNbOOWbbcSfDn (her designed voice). The greeter's voice is `voiceId` in greeter-config.json (setup page → Her voice), defaulting to that; Todd has a separate greeter-only voice for her — set it there, never edit voices.json for it.
+- `voices.json` — ElevenLabs voice ids; `lily` = hOhoyLFaNbOOWbbcSfDn (her designed voice). The greeter's voice is `voiceId` in greeter-config.json (setup page → Her voice), defaulting to `GREETER_VOICE` = 6xNonY5CNANKZ87uLcCK (Todd's greeter-only voice) — never edit voices.json for the greeter.
 - `greeter/setup-linux.sh` (one-time machine setup + systemd user service `lily-greeter`), `greeter/make-usb-bundle.sh` (packs this folder).
 
 ## Behaviour (as Todd asked for it)

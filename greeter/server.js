@@ -25,7 +25,6 @@ const { createOutfit } = require('./outfit');
 const PORT = Number(process.env.GREETER_PORT) || 3100;
 const CONFIG_FILE = path.join(__dirname, 'greeter-config.json');
 const SECRETS_FILE = path.join(__dirname, 'secrets.json');
-const VOICES_FILE = path.join(__dirname, '..', 'voices.json');
 
 // ── Log (ring buffer the page shows) ──
 const logLines = [];
@@ -37,11 +36,12 @@ function log(msg) {
 }
 
 // ── Config ──
-let lilyVoice = null;
-try { lilyVoice = JSON.parse(fs.readFileSync(VOICES_FILE, 'utf8').replace(/^﻿/, '')).lily || null; } catch (_) {}
+
+// Her door-greeter voice (Todd's pick, 2026-10-17) — the haunt keeps voices.json's.
+const GREETER_VOICE = '6xNonY5CNANKZ87uLcCK';
 
 const DEFAULTS = {
-  voiceId: lilyVoice,              // Lily's designed ElevenLabs voice
+  voiceId: GREETER_VOICE,          // Lily's greeter-only ElevenLabs voice
   lanternMood: 'calm',
   movement: 'all',
   builtinClip: 1,                  // used only when there is no ElevenLabs voice
@@ -176,7 +176,7 @@ app.post('/api/config', route(async (body) => {
     micWanted() ? chime.restart() : chime.stop();
   }
   converse.warmup();
-  if ('voiceId' in body && !body.voiceId) config.voiceId = lilyVoice;   // blank = back to her haunt voice
+  if ('voiceId' in body && !body.voiceId) config.voiceId = GREETER_VOICE;   // blank = back to the greeter default
   if (body.teamLines) config.teamLines = body.teamLines;
   if (config.faces.enabled) faces.start();
   if (body.lines || body.voiceId || body.teamLines || body.faces) greeter.warm();
