@@ -176,6 +176,7 @@ app.post('/api/config', route(async (body) => {
     micWanted() ? chime.restart() : chime.stop();
   }
   converse.warmup();
+  if ('voiceId' in body && !body.voiceId) config.voiceId = lilyVoice;   // blank = back to her haunt voice
   if (body.teamLines) config.teamLines = body.teamLines;
   if (config.faces.enabled) faces.start();
   if (body.lines || body.voiceId || body.teamLines || body.faces) greeter.warm();
