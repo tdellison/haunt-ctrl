@@ -235,6 +235,13 @@ app.post('/api/team/capture', route(async ({ name }) => {
 app.post('/api/team/remove', route(async ({ name }) => ({ team: await faces.removePerson(name) })));
 
 // Greeting
+app.post('/api/say', route(async ({ text }) => {
+  const t = String(text || '').trim().slice(0, 200);
+  if (!t) throw new Error('Nothing to say');
+  await greeter.say(t);
+  return {};
+}));
+app.get('/phone', (req, res) => res.sendFile(path.join(__dirname, 'public', 'phone.html')));
 app.post('/api/greet', route(async () => { await greeter.greet('test'); return { greeter: greeter.status() }; }));
 app.post('/api/pause', route(async ({ minutes }) => { greeter.pause(Number(minutes) || 0); return { greeter: greeter.status() }; }));
 app.post('/api/ask', route(async ({ text }) => {

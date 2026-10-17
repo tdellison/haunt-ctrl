@@ -218,7 +218,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
       } else if (file) {
         log('her speaker is not connected — greeting through the computer speaker');
         await playLocal(file);
-      } else if (st.connected && cfg.builtinClip && reason !== 'team') {
+      } else if (st.connected && cfg.builtinClip && reason !== 'team' && reason !== 'phone') {
         // No voice available: one of her own stored phrases instead.
         await lily.playMedia(cfg.builtinClip);
       } else {
@@ -230,7 +230,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
         status.today++;
       }
       Object.assign(status, { lastGreet: new Date().toISOString(), lastLine: file ? line : `built-in clip ${cfg.builtinClip}`, lastReason: reason, lastError: null });
-      log(`${reason === 'team' ? 'said' : 'greeted'} (${reason}): "${status.lastLine}"`);
+      log(`${reason === 'team' || reason === 'phone' ? 'said' : 'greeted'} (${reason}): "${status.lastLine}"`);
       if (openMic) onGreeted(file ? line : null);
       return true;
     } catch (e) {
@@ -260,6 +260,12 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
         if (cameraHandled()) return;
         greet('chime');
       }, cfg.chimeDelaySec * 1000);
+    },
+    // Phone page "say it now": exact words, ignores hours/cooldown/pause.
+    async say(text) {
+      if (status.greeting) throw new Error('She is speaking — try again in a moment');
+      const ok = await speak(text, 'phone', { openMic: false, countIt: false });
+      if (!ok) throw new Error(status.lastError || 'She could not say it');
     },
     pause(minutes) {
       status.pausedUntil = minutes > 0 ? Date.now() + minutes * 60000 : 0;

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lily</title>
+<style>
+  :root { --bg:#14111a; --card:#1f1a28; --line:#352c45; --fg:#ece6f5; --dim:#9a90ab; --accent:#ff7a2a; --ok:#4fd18b; --bad:#ff5c6c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.4 system-ui, sans-serif; padding:16px; max-width:520px; margin:0 auto; }
+  h1 { font-size:22px; margin:4px 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; }
+  .status { display:flex; align-items:center; gap:10px; font-size:19px; font-weight:600; }
+  .dot { width:16px; height:16px; border-radius:50%; background:var(--bad); flex:none; }
+  .dot.on { background:var(--ok); box-shadow:0 0 10px var(--ok); }
+  .dot.part { background:#ffc23d; }
+  .sub { color:var(--dim); font-size:14px; margin-top:6px; }
+  input { width:100%; font:inherit; font-size:20px; padding:12px; border-radius:10px; border:1px solid var(--line); background:#120f18; color:var(--fg); }
+  .btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:14px 10px; border-radius:10px; border:1px solid var(--line); background:#2d2440; color:var(--fg); }
+  button.main { background:var(--accent); color:#1a0f05; border:0; font-weight:700; grid-column:1 / -1; font-size:19px; }
+  button:active { transform:scale(.97); }
+  button:disabled { opacity:.5; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .chip { padding:6px 12px; border-radius:99px; background:#2d2440; border:1px solid var(--line); font-size:15px; }
+  #msg { min-height:22px; text-align:center; color:var(--dim); font-size:15px; }
+  a { color:var(--dim); font-size:14px; }
+</style>
+</head>
+<body>
+<h1>🏮 Lily</h1>
+
+<div class="card">
+  <div class="status"><span id="dot" class="dot"></span><span id="state">Checking…</span></div>
+  <div class="sub" id="detail"></div>
+</div>
+
+<div class="card">
+  <input id="name" placeholder="Name" autocomplete="off" autocapitalize="words">
+  <div class="btns">
+    <button class="main" onclick="sayT('Welcome, {name}!')">Welcome, …!</button>
+    <button onclick="sayT('Hello, {name}. Someone will be right with you.')">Be right with you</button>
+    <button onclick="sayT('Good to see you again, {name}!')">Good to see you</button>
+    <button onclick="sayT('Goodbye, {name}. Come back soon!')">Goodbye</button>
+    <button onclick="sayT('Happy birthday, {name}!')">Happy birthday</button>
+  </div>
+  <div class="chips" id="recent"></div>
+</div>
+
+<div class="card">
+  <input id="line" placeholder="Or type exactly what she says">
+  <div class="btns"><button class="main" onclick="sayLine()">Say it</button></div>
+</div>
+
+<div id="msg"></div>
+<p style="text-align:center"><a href="/">Full setup page</a></p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let recent = [];
+try { recent = JSON.parse(localStorage.getItem('lilyNames') || '[]'); } catch (_) {}
+
+function drawRecent() {
+  $('recent').innerHTML = '';
+  recent.forEach((n) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = n;
+    b.onclick = () => { $('name').value = n; };
+    $('recent').appendChild(b);
+  });
+}
+function remember(n) {
+  recent = [n, ...recent.filter(x => x.toLowerCase() !== n.toLowerCase())].slice(0, 12);
+  try { localStorage.setItem('lilyNames', JSON.stringify(recent)); } catch (_) {}
+  drawRecent();
+}
+
+async function say(text) {
+  $('msg').textContent = 'Saying…';
+  document.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const r = await fetch('/api/say', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    const j = await r.json();
+    $('msg').textContent = j.ok ? `✓ “${text}”` : `✗ ${j.error}`;
+  } catch (e) { $('msg').textContent = `✗ ${e.message}`; }
+  document.querySelectorAll('button').forEach(b => b.disabled = false);
+}
+function sayT(tpl) {
+  const n = $('name').value.trim();
+  if (!n) { $('msg').textContent = 'Type a name first'; $('name').focus(); return; }
+  remember(n);
+  say(tpl.replace('{name}', n));
+}
+function sayLine() {
+  const t = $('line').value.trim();
+  if (!t) return;
+  say(t); $('line').value = '';
+}
+
+async function poll() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    const l = s.lily, body = l.connected, spk = l.audio && l.audio.connected;
+    const dot = $('dot');
+    dot.className = 'dot' + (body && spk ? ' on' : body || spk ? ' part' : '');
+    $('state').textContent = body && spk ? 'Lily is online' : body || spk ? 'Lily is partly online' : 'Lily is offline';
+    const g = s.greeter;
+    const paused = g.pausedUntil > Date.now();
+    $('detail').textContent = [
+      `Body ${body ? '✓' : '✗'} · Speaker ${spk ? '✓' : '✗'} · Camera ${s.camera.running ? '✓' : '✗'}`,
+      paused ? 'Greetings paused' : g.inHours ? `${g.today} greeted today` : 'Outside greeting hours',
+    ].join(' — ');
+  } catch (_) {
+    $('dot').className = 'dot'; $('state').textContent = 'Greeter not reachable'; $('detail').textContent = '';
+  }
+}
+drawRecent();
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>
