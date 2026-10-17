@@ -18,7 +18,7 @@ mkdir -p "$D"
 cp -r "$REPO/greeter" "$REPO/lily" "$D/"
 cp "$REPO/voices.json" "$REPO/package.json" "$D/"
 # Project memory for Claude Code on the work machine (run `claude` in ~/lily-greeter).
-cp "$REPO/greeter/CLAUDE.md" "$D/CLAUDE.md"
+if [ -f "$REPO/greeter/CLAUDE.md" ]; then cp "$REPO/greeter/CLAUDE.md" "$D/CLAUDE.md"; else cp "$REPO/CLAUDE.md" "$D/CLAUDE.md"; fi
 printf 'node_modules/\ngreeter/greeter-config.json\ngreeter/lily-config.json\ngreeter/secrets.json\ngreeter/cache/\ngreeter/team/\ngreeter/.venv/\ngreeter/models/\n' > "$D/.gitignore"
 # Only what the greeter loads — the haunt's dev/test packages stay behind.
 cp -r "$REPO/node_modules" "$D/"
