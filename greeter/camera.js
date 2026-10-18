@@ -64,6 +64,9 @@ function createCamera({ log = console.log, getConfig, onArrival = () => {} }) {
   let bg = null, latest = null, pending = Buffer.alloc(0);
   let hotFrames = 0, quietFrames = 999, armedForNext = true;
   let jpegBuf = Buffer.alloc(0), latestJpeg = null;
+  // Ask the webcam for 720p MJPEG: a 4K camera's full frames are wasted work
+  // (everything here is scaled down). If it refuses, fall back to its default.
+  let askedMode = true;
   const jpegWaiters = [];
 
   function processFrame(frame) {
@@ -108,7 +111,9 @@ function createCamera({ log = console.log, getConfig, onArrival = () => {} }) {
       scheduleRestart(); return;
     }
     // "lavfi:<graph>" feeds a synthetic source — used for testing without a webcam.
-    const input = dev.startsWith('lavfi:') ? ['-re', '-f', 'lavfi', '-i', dev.slice(6)] : ['-f', 'v4l2', '-i', dev];
+    const input = dev.startsWith('lavfi:') ? ['-re', '-f', 'lavfi', '-i', dev.slice(6)]
+      : askedMode ? ['-f', 'v4l2', '-input_format', 'mjpeg', '-video_size', '1280x720', '-framerate', '15', '-i', dev]
+      : ['-f', 'v4l2', '-i', dev];
     const args = ['-loglevel', 'error', ...input,
       '-filter_complex', `[0:v]split=2[a][b];[a]fps=${c.fps},scale=${W}:${H},format=gray[m];[b]fps=4,scale=640:-2,format=yuvj420p[j]`,
       '-map', '[m]', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:1',
@@ -136,7 +141,8 @@ function createCamera({ log = console.log, getConfig, onArrival = () => {} }) {
       status.running = false;
       if (wanted) {
         const err = errText.trim() || `ffmpeg exited (${code})`;
-        if (err !== status.lastError) log(`camera stopped: ${err} — retrying every 5 s`);
+        if (askedMode && !dev.startsWith('lavfi:') && !/No such file|busy|Permission denied/i.test(err)) { askedMode = false; log('camera: 720p MJPEG refused — using the camera\'s default mode'); }
+        else if (err !== status.lastError) log(`camera stopped: ${err} — retrying every 5 s`);
         status.lastError = err;
         scheduleRestart();
       }

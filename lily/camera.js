@@ -67,6 +67,9 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
   let proc = null, wanted = false, restartTimer = null;
   let jpegBuf = Buffer.alloc(0), latest = null, latestAt = 0, thumbBuf = Buffer.alloc(0);
   let client = null;
+  // Ask for 720p MJPEG (Linux): a 4K camera's full frames are wasted work —
+  // everything is scaled to 640 wide. If it refuses, fall back to its default.
+  let askedMode = true;
 
   function onJpeg(d) {
     jpegBuf = jpegBuf.length ? Buffer.concat([jpegBuf, d]) : d;
@@ -100,7 +103,9 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
       return scheduleRestart();
     }
     const input = dev.startsWith('lavfi:') ? ['-re', '-f', 'lavfi', '-i', dev.slice(6)]
-      : IS_WINDOWS ? ['-f', 'dshow', '-i', `video=${dev}`] : ['-f', 'v4l2', '-i', dev];
+      : IS_WINDOWS ? ['-f', 'dshow', '-i', `video=${dev}`]
+      : askedMode ? ['-f', 'v4l2', '-input_format', 'mjpeg', '-video_size', '1280x720', '-framerate', '15', '-i', dev]
+      : ['-f', 'v4l2', '-i', dev];
     const args = ['-hide_banner', '-loglevel', 'error', ...input,
       '-filter_complex', '[0:v]fps=2,split=2[a][b];[a]scale=640:-2,format=yuvj420p[j];[b]scale=16:12,format=gray[t]',
       '-map', '[j]', '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '5', 'pipe:1',
@@ -119,7 +124,8 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
       proc = null; status.running = false;
       if (wanted) {
         const err = errText.trim() || `ffmpeg exited (${code})`;
-        if (err !== status.lastError) log(`Lily camera stopped: ${err} — retrying every 10 s`);
+        if (askedMode && !IS_WINDOWS && !dev.startsWith('lavfi:') && !/No such file|busy|Permission denied/i.test(err)) { askedMode = false; log('Lily camera: 720p MJPEG refused — using the camera\'s default mode'); }
+        else if (err !== status.lastError) log(`Lily camera stopped: ${err} — retrying every 10 s`);
         status.lastError = err;
         scheduleRestart();
       }
