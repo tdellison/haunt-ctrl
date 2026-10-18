@@ -3767,6 +3767,16 @@ app.post('/api/secrets', (req, res) => {
   res.json({ ok: true, anthropic: !!anthropicKey(), elevenlabs: !!secrets.elevenLabsApiKey });
 });
 
+// Lily's own camera: what are the guests wearing? (costume remarks, daylight)
+const lilyCamera = require('./lily/camera').createLilyCamera({
+  log: (m) => broadcastLog(m, 'SYSTEM'),
+  getApiKey: anthropicKey,
+  trackTokens,
+  ffmpegBin: IS_WINDOWS ? FFPLAY_PATH.replace(/ffplay\.exe$/i, 'ffmpeg.exe') : 'ffmpeg',
+});
+if (lilyCamera.settings().enabled) lilyCamera.start();
+process.on('exit', () => lilyCamera.stop());   // never leave its ffmpeg holding the webcam
+
 // Lily conversation: hear a guest, answer with one of her own stored clips.
 const lilyTalk = require('./lily/talk').createTalk({
   lily,
@@ -3788,6 +3798,7 @@ const lilyTalk = require('./lily/talk').createTalk({
   getStage: () => (STRIKE_SEQUENCE[strikeIndex] || STRIKE_SEQUENCE[0]).name,
   chain: lilyChain,
   onLilyDrop: () => evelinaCover(),
+  seeGuests: () => lilyCamera.look(),
   // Her speaker not connected yet: speak through the witch zone instead.
   playFallback: (file) => new Promise((resolve) => {
     const p = spawnPlayer(file, { zone: 'z3' }, { stdio: 'ignore' });
@@ -3811,6 +3822,22 @@ app.get('/api/lily/talk', async (req, res) => res.json({
 }));
 app.post('/api/lily/talk/start',   lilyRoute(async ({ source }) => lilyTalk.start(source)));
 app.post('/api/lily/talk/stop',    lilyRoute(async () => lilyTalk.stop()));
+app.get('/api/lily/camera', (req, res) => res.json({ ok: true, camera: lilyCamera.status() }));
+app.get('/api/lily/camera/list', async (req, res) => res.json({ ok: true, cameras: await lilyCamera.list() }));
+app.get('/api/lily/camera/snapshot.jpg', (req, res) => {
+  const img = lilyCamera.snapshot();
+  if (!img) return res.status(404).end();
+  res.set({ 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }).send(img);
+});
+app.post('/api/lily/camera/config', lilyRoute(async (b) => { lilyCamera.configure(b); return lilyCamera.status(); }));
+// LOOK NOW: describe what's in front of her; out loud = she reacts to it.
+app.post('/api/lily/camera/look', lilyRoute(async ({ outLoud }) => {
+  const wearing = await lilyCamera.look({ force: true });
+  if (outLoud && wearing) {
+    await lilyTalk.say(`(Looking at the guests in front of you, you notice: ${wearing}. React to what they are wearing in ONE short line — playful and in character, never mocking; extra warmth for small children.)`);
+  }
+  return { ...lilyCamera.status(), wearing };
+}));
 app.post('/api/lily/talk/say',     lilyRoute(async ({ text }) => lilyTalk.say(text)));
 app.post('/api/lily/talk/reset',   lilyRoute(async () => lilyTalk.resetConversation()));
 app.post('/api/lily/talk/mode',    lilyRoute(async ({ mode }) => lilyTalk.setMode(mode)));

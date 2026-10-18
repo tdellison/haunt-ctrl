@@ -227,7 +227,8 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   playFallback = null,       // (file) => Promise — plays in the witch zone when her speaker is not connected
   getStage = () => 'Distant', // current storm stage name
   chain = null,              // { prepare(choice, stage), play(handle) } — Evelina + skeleton follow-ups
-  onLilyDrop = null }) {     // () => Promise — Evelina covers while Lily's speaker is unreachable
+  onLilyDrop = null,         // () => Promise — Evelina covers while Lily's speaker is unreachable
+  seeGuests = null }) {      // () => Promise<string|null> — her camera: what the guests are wearing
   let settings = { mode: 'voice' };
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch (_) {}
   const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (_) {} };
@@ -587,14 +588,28 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     // Lily's own PIR: deliver the prepared greeting (or write one live).
     async greet() {
       if (busy || settings.mode !== 'voice') return api.status();
-      busy = true;
-      try {
-        const g = greeting && Date.now() - greeting.at < 120000 ? greeting : null;
-        greeting = null;
-        if (g) await perform({ ...g.choice, audioBuf: g.audioBuf }, g.heard);
-        else { busy = false; await respond('(Guests have just walked up to you. Greet them as MC.)'); return api.status(); }
-      } catch (e) { set({ lastError: e.message }); }
-      finally { busy = false; set({ phase: status.listening ? 'listening' : 'idle' }); }
+      // Her camera looks at what they're wearing WHILE she greets, so the
+      // greeting itself is never delayed; she remarks on it right after.
+      const seen = seeGuests ? seeGuests().catch((e) => { log(`camera: ${e.message}`); return null; }) : null;
+      const g = greeting && Date.now() - greeting.at < 120000 ? greeting : null;
+      greeting = null;
+      if (g) {
+        busy = true;
+        try { await perform({ ...g.choice, audioBuf: g.audioBuf }, g.heard); }
+        catch (e) { set({ lastError: e.message }); }
+        finally { busy = false; set({ phase: status.listening ? 'listening' : 'idle' }); }
+      } else {
+        try { await respond('(Guests have just walked up to you. Greet them as MC.)'); } catch (_) {}
+      }
+      if (seen) {
+        const wearing = await Promise.race([seen, new Promise(r => setTimeout(() => r(null), 5000))]);
+        if (wearing && !busy) {
+          try {
+            await respond(`(Looking at the guests in front of you, you notice: ${wearing}. React to what they are wearing in ONE short line — ` +
+              'playful and in character, never mocking; extra warmth for small children.)');
+          } catch (_) {}
+        }
+      }
       return api.status();
     },
 

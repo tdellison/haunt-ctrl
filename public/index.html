@@ -1329,6 +1329,31 @@ body::before { animation:scanlines 10s linear infinite; }
 
   </div>
 
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">📷</span>Camera — costume spotting</div>
+    <div style="font-size:.72em;color:var(--dim2);margin-bottom:8px">When her PIR fires she greets as usual; meanwhile one picture goes to Claude, and she follows up about their costumes. Skipped when it's too dark to see (daylight hours are where this shines). The picture is never saved.</div>
+    <div style="position:relative;max-width:480px;margin-bottom:8px">
+      <img id="lcam-img" alt="" style="width:100%;border-radius:6px;background:#000;aspect-ratio:4/3;object-fit:cover;display:block"/>
+    </div>
+    <div class="info-row"><span class="info-key">Camera</span><span class="info-val" id="lcam-status">—</span></div>
+    <div class="info-row"><span class="info-key">Light</span><span class="info-val" id="lcam-light">—</span></div>
+    <div class="info-row"><span class="info-key">Last saw</span><span class="info-val" id="lcam-seen">—</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <button class="btn btn-green btn-sm" id="lcam-on" onclick="lcamToggle()">CAMERA: OFF</button>
+      <select id="lcam-dev" class="raw-input" style="flex:1;min-width:160px" onchange="api('/api/lily/camera/config',{device:this.value}).then(lcamRefresh)"></select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <label style="font-size:.72em;color:var(--dim2)">Too dark below</label>
+      <input class="raw-input" id="lcam-min" type="number" min="0" max="255" style="width:70px" onchange="api('/api/lily/camera/config',{minBrightness:+this.value})"/>
+      <label style="font-size:.72em;color:var(--dim2)">Remark on % of groups</label>
+      <input class="raw-input" id="lcam-chance" type="number" min="0" max="100" style="width:70px" onchange="api('/api/lily/camera/config',{chance:(+this.value)/100})"/>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-blue btn-sm" onclick="lcamLook(false)">👁 LOOK NOW</button>
+      <button class="btn btn-purple btn-sm" onclick="lcamLook(true)">🗣 LOOK + SAY IT</button>
+    </div>
+  </div>
+
 </div><!-- /pane-lily -->
 
 <!-- ─── SETUP ─── -->
@@ -1664,6 +1689,40 @@ function lilyConnect() {
   const address = document.getElementById('lily-ble-addr').value.trim();
   api('/api/lily/connect', address ? { address } : {});
 }
+// ── Lily camera (LILY tab) ──
+let lcamState = null, lcamDevsLoaded = false;
+async function lcamRefresh() {
+  try {
+    const r = await (await fetch('/api/lily/camera')).json();
+    const c = lcamState = r.camera;
+    document.getElementById('lcam-status').textContent = c.running ? `watching ${c.device}` : c.enabled ? (c.lastError || 'starting…') : 'off';
+    document.getElementById('lcam-light').textContent = c.brightness == null ? '—'
+      : `${c.brightness} / 255 — ${c.brightness < c.minBrightness ? 'too dark, she won\'t look' : 'bright enough'}`;
+    document.getElementById('lcam-seen').textContent = c.lastSeen ? `${c.lastSeen} (${new Date(c.lastSeenAt).toLocaleTimeString()})` : '—';
+    const b = document.getElementById('lcam-on');
+    b.textContent = `CAMERA: ${c.enabled ? 'ON' : 'OFF'}`; b.classList.toggle('active', !!c.enabled);
+    const mi = document.getElementById('lcam-min'), ch = document.getElementById('lcam-chance');
+    if (document.activeElement !== mi) mi.value = c.minBrightness;
+    if (document.activeElement !== ch) ch.value = Math.round(c.chance * 100);
+    if (!lcamDevsLoaded) {
+      lcamDevsLoaded = true;
+      const l = await (await fetch('/api/lily/camera/list')).json();
+      const sel = document.getElementById('lcam-dev');
+      sel.innerHTML = '<option value="">(first camera found)</option>' + (l.cameras || []).map(x => `<option value="${x.device}">${x.name}</option>`).join('');
+      sel.value = c.device && (l.cameras || []).some(x => x.device === c.device) ? c.device : '';
+    }
+    if (c.hasPicture) document.getElementById('lcam-img').src = '/api/lily/camera/snapshot.jpg?t=' + Date.now();
+  } catch (_) {}
+}
+function lcamToggle() { api('/api/lily/camera/config', { enabled: !(lcamState && lcamState.enabled) }).then(lcamRefresh); }
+async function lcamLook(outLoud) {
+  document.getElementById('lcam-seen').textContent = 'looking…';
+  const r = await api('/api/lily/camera/look', { outLoud });
+  if (r && r.lily) document.getElementById('lcam-seen').textContent = r.lily.wearing || 'nothing she could make out (or too dark)';
+  lcamRefresh();
+}
+setInterval(() => { if (document.getElementById('pane-lily').classList.contains('active')) lcamRefresh(); }, 2000);
+
 function lilyToggleEnabled() { api('/api/lily/enabled', { enabled: !(lilyState && lilyState.enabled) }); }
 function lilyToggleArm() { api('/api/lily/arm', { enabled: !(lilyState && lilyState.armed) }); }
 function lilyProbe() { api('/api/lily/probe', { value: +document.getElementById('lily-probe').value }); }
