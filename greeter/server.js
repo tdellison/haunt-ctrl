@@ -76,9 +76,9 @@ const DEFAULTS = {
   outfit: { enabled: false, chance: 0.35 },
   teamLines: [
     "Oh, it's just you, {name}. You may go now.",
-    '{name}. Back again, I see.',
-    "Carry on, {name}. I'll mind the door.",
-    'Oh, {name}. For a moment I thought you were someone important.',
+    "{name}! Explain the cloud to me again. I keep looking up and seeing nothing.",
+    "Back again, {name}? Did you fix the thing? I certainly didn't.",
+    "{name}. I tried rebooting myself while you were gone. It didn't take.",
   ],
   converse: {
     enabled: true,
@@ -86,16 +86,20 @@ const DEFAULTS = {
     alwaysListen: false,           // testing only: answer anything she hears
     about: '',                     // office notes she may pass on (who to ask for, sign-in, wifi...)
   },
+  // Lily as a 300-year-old witch the help desk talked into greeting (2026-10-18).
   lines: {
     any: [
-      'Hello there! Welcome in.',
-      'Oh, a visitor! Come in, come in.',
-      'Welcome! Someone will be right with you.',
-      "Well, hello. Don't mind me, I just work here.",
+      "Welcome to the help desk! I've been here three hundred years and I still don't know what a router is.",
+      "Ah, a visitor! State your problem. I'll nod wisely while the real wizards fix it.",
+      "Hello, hello! The tech people are just behind me. I mostly guard the door.",
+      "Welcome! Have you tried turning it off and on again? It's the only spell they taught me.",
+      "Oh good, a mortal. Someone will be right with you. I'm more of a potions witch.",
+      "Welcome! Before you ask: have you cleared your cache and cookies? I'm told the cookies aren't even edible.",
+      "Greetings! Did you restart it? Restart it. Three hundred years of wisdom, right there.",
     ],
-    morning: ['Good morning! Welcome in.'],
-    afternoon: ['Good afternoon! Welcome.'],
-    evening: ['Good evening! Come on in.'],
+    morning: ["Good morning! The coffee machine and I have come to an understanding. Welcome in."],
+    afternoon: ["Good afternoon! I still haven't broken the printer's curse. Welcome anyway."],
+    evening: ["Good evening! Nearly closing time, even for the undead. Come on in."],
   },
 };
 
@@ -110,6 +114,12 @@ function merge(base, over) {
 
 let config = DEFAULTS;
 try { config = merge(DEFAULTS, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))); } catch (_) {}
+// A saved config holds a full copy of the lines. If they are still the
+// original plain greeter lines (never edited), move them to the witch set.
+const ORIGINAL_ANY = ['Hello there! Welcome in.', 'Oh, a visitor! Come in, come in.', 'Welcome! Someone will be right with you.', "Well, hello. Don't mind me, I just work here."];
+const ORIGINAL_TEAM2 = '{name}. Back again, I see.';
+if (JSON.stringify(config.lines.any) === JSON.stringify(ORIGINAL_ANY)) config.lines = DEFAULTS.lines;
+if ((config.teamLines || [])[1] === ORIGINAL_TEAM2 && config.teamLines.length === 4) config.teamLines = DEFAULTS.teamLines;
 const saveConfig = () => {
   try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch (e) { log(`config save failed: ${e.message}`); }
 };
