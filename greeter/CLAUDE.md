@@ -54,6 +54,9 @@ workplace (tdellison13@gmail.com). Runs on a Linux PC next to her, wired network
 - Use Ethernet: on the haunt machine a USB Wi-Fi+BT dongle dropped Wi-Fi while streaming to her.
 - Measured on the haunt machine (Ethernet): Claude reply ~1–1.7 s, ElevenLabs flash ~0.45 s.
 
+## Daily power routine (Todd, 2026-10-18)
+Lily and the PC are both switched off after hours and back on in the morning, in either order. `keepLilyConnected()` in server.js retries every 20 s: body → re-arm motors + lantern (her BLE driver's own auto-reconnect never re-arms) → speaker. Tapping Disconnect/Disarm on the setup page sets `manualHold` so the loop leaves her alone until Connect/Arm is tapped again. Shutdown = short press of the PC's power button (graceful poweroff), never pulling the plug while it's running.
+
 ## Status (2026-10-17)
 - Tested in a cloud container with simulated parts: setup page, camera motion (synthetic video), JPEG pipe, chime learn/detect (synthetic tones), every greeting/team/outfit decision (fake faces + fake Claude), USB bundle unpack.
 - NOT yet run for real: Lily over Bluetooth on this machine, the webcam, the mic/chime, whisper, the Claude and ElevenLabs calls, and actual face matching (the models couldn't be downloaded in the cloud — setup-linux.sh fetches them). Expect first-run fixes here.

@@ -195,16 +195,17 @@ app.post('/api/secrets', route(async ({ elevenLabsApiKey, anthropicApiKey }) => 
 // Lily
 app.post('/api/lily/scan', route(async ({ seconds }) => ({ devices: await lily.scan(seconds || 8) })));
 app.post('/api/lily/connect', route(async ({ address }) => {
+  manualHold = false;
   await lily.connect(address);
   if (config.autoArm) await lily.arm(true);
   return { lily: lily.status() };
 }));
-app.post('/api/lily/disconnect', route(async () => ({ lily: await lily.disconnect() })));
-app.post('/api/lily/arm', route(async ({ on }) => ({ lily: await lily.arm(on) })));
+app.post('/api/lily/disconnect', route(async () => { manualHold = true; return { lily: await lily.disconnect() }; }));
+app.post('/api/lily/arm', route(async ({ on }) => { manualHold = !on; return { lily: await lily.arm(on) }; }));
 app.post('/api/lily/mood', route(async ({ mood }) => ({ lily: await lily.setMood(mood) })));
 app.post('/api/lily/volume', route(async ({ volume }) => ({ lily: await lily.volume(volume) })));
-app.post('/api/lily/audio/connect', route(async ({ address, pair }) => ({ lily: await lily.audioConnect(address, { pair }) })));
-app.post('/api/lily/audio/disconnect', route(async () => ({ lily: await lily.audioDisconnect() })));
+app.post('/api/lily/audio/connect', route(async ({ address, pair }) => { manualHold = false; return { lily: await lily.audioConnect(address, { pair }) }; }));
+app.post('/api/lily/audio/disconnect', route(async () => { manualHold = true; return { lily: await lily.audioDisconnect() }; }));
 
 // Camera
 app.get('/api/camera/list', (req, res) => res.json(listCameras()));
@@ -263,18 +264,40 @@ async function startup() {
   faces.start();   // cheap when idle; needed for adding photos even before it's switched on
   converse.warmup();
   greeter.warm().catch(() => {});
-  let lc = {};
-  try { lc = JSON.parse(fs.readFileSync(process.env.LILY_CONFIG, 'utf8')); } catch (_) {}
-  if (lc.bleAddress) {
-    try {
-      await lily.connect();
-      if (config.autoArm) await lily.arm(true);
-      await lily.setMood(config.lanternMood || 'calm');
-    } catch (e) { log(`Lily BLE not connected at startup: ${e.message}`); }
-  }
-  if (lc.audioAddress) {
-    try { await lily.audioConnect(); } catch (e) { log(`Lily speaker not connected at startup: ${e.message}`); }
-  }
+  keepLilyConnected();
+  setInterval(keepLilyConnected, 20000);
+}
+
+// Lily is unplugged every night and may come back before or after this
+// computer, so keep trying: body first, then motors + lantern, then speaker.
+// Her BLE driver reconnects on its own but never re-arms the motors (safety),
+// so re-arm here when that happens.
+let keeping = false;
+let manualHold = false;   // someone tapped Disconnect/Disarm — leave her alone until they reconnect
+async function keepLilyConnected() {
+  if (keeping || manualHold) return;
+  keeping = true;
+  try {
+    let lc = {};
+    try { lc = JSON.parse(fs.readFileSync(process.env.LILY_CONFIG, 'utf8')); } catch (_) {}
+    let st = lily.status();
+    if (lc.bleAddress && !st.connected && !st.connecting && !st.reconnecting) {
+      try { await lily.connect(); log('Lily: body connected'); }
+      catch (e) { if (!keepLilyConnected.quiet) log(`Lily not reachable yet (${e.message}) — retrying every 20 s`); keepLilyConnected.quiet = true; }
+    }
+    st = lily.status();
+    if (st.connected) {
+      keepLilyConnected.quiet = false;
+      if (config.autoArm && !st.armed) {
+        await lily.arm(true).catch(e => log(`arm: ${e.message}`));
+        await lily.setMood(config.lanternMood || 'calm').catch(() => {});
+      }
+      if (lc.audioAddress && !(st.audio && st.audio.connected)) {
+        try { await lily.audioConnect(); log('Lily: speaker connected'); keepLilyConnected.quietSpk = false; }
+        catch (e) { if (!keepLilyConnected.quietSpk) log(`Lily speaker not connected yet (${e.message}) — retrying`); keepLilyConnected.quietSpk = true; }
+      }
+    }
+  } finally { keeping = false; }
 }
 
 function shutdown() {
