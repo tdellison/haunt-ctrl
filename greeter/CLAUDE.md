@@ -58,6 +58,7 @@ workplace (tdellison13@gmail.com). Runs on a Linux PC next to her, wired network
 Lily and the PC are both switched off after hours and back on in the morning, in either order. `keepLilyConnected()` in server.js retries every 20 s: body → re-arm motors + lantern (her BLE driver's own auto-reconnect never re-arms) → speaker. Tapping Disconnect/Disarm on the setup page sets `manualHold` so the loop leaves her alone until Connect/Arm is tapped again. Shutdown = short press of the PC's power button (graceful poweroff), never pulling the plug while it's running.
 
 ## Sleep / shut down (2026-10-18)
+- **No greeting hours by default** (Todd: the PC is on only while he's at work). The old 08:00-18:00 weekday default is migrated to none on load; the hour boxes remain optional.
 - **😴 Sleep / ☀️ Wake** (phone page + setup page, `POST /api/sleep {asleep}`): no camera/chime greetings and no listening, lantern off, motors disarmed (`manualHold` so the reconnect loop leaves her alone). Wake re-arms and relights. Not persisted — every boot starts awake. Say-it-now and GREET NOW still work while asleep.
 - **⏻ Shut down for the night** (`POST /api/shutdown {confirm:true}`): sleep + `sudo -n /usr/bin/systemctl poweroff`. setup-linux.sh installs `/etc/sudoers.d/lily-greeter-poweroff` allowing exactly that command without a password.
 

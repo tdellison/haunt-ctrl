@@ -50,7 +50,9 @@ const DEFAULTS = {
   cooldownSec: 20,                 // one greeting per group walking in
   chimeWindowSec: 15,              // chime within this long of a camera greeting = same visitor
   chimeDelaySec: 3,                // after a chime, give the camera this long first
-  hours: { start: '08:00', end: '18:00', weekdaysOnly: true },
+  // No greeting hours: the PC is switched on at work and off when Todd leaves,
+  // so she greets whenever she's running. (Hours can still be set on the page.)
+  hours: { start: '', end: '', weekdaysOnly: false },
   camera: {
     enabled: true,
     device: '',                    // blank = first webcam found
@@ -119,6 +121,8 @@ try { config = merge(DEFAULTS, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')))
 const ORIGINAL_ANY = ['Hello there! Welcome in.', 'Oh, a visitor! Come in, come in.', 'Welcome! Someone will be right with you.', "Well, hello. Don't mind me, I just work here."];
 const ORIGINAL_TEAM2 = '{name}. Back again, I see.';
 if (JSON.stringify(config.lines.any) === JSON.stringify(ORIGINAL_ANY)) config.lines = DEFAULTS.lines;
+// Likewise the original 8-6 weekday hours, never changed by hand -> no hours.
+if (config.hours && config.hours.start === '08:00' && config.hours.end === '18:00' && config.hours.weekdaysOnly) config.hours = DEFAULTS.hours;
 if ((config.teamLines || [])[1] === ORIGINAL_TEAM2 && config.teamLines.length === 4) config.teamLines = DEFAULTS.teamLines;
 const saveConfig = () => {
   try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2)); } catch (e) { log(`config save failed: ${e.message}`); }
