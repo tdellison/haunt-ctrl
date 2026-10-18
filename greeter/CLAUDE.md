@@ -59,6 +59,7 @@ Lily and the PC are both switched off after hours and back on in the morning, in
 
 ## Sleep / shut down (2026-10-18)
 - **No greeting hours by default** (Todd: the PC is on only while he's at work). The old 08:00-18:00 weekday default is migrated to none on load; the hour boxes remain optional.
+- **⏸ Pause 15 min / 1 hr / ▶ Resume** on the phone page too (`POST /api/pause {minutes}`; the setup page has 10 min / 1 hr).
 - **😴 Sleep / ☀️ Wake** (phone page + setup page, `POST /api/sleep {asleep}`): no camera/chime greetings and no listening, lantern off, motors disarmed (`manualHold` so the reconnect loop leaves her alone). Wake re-arms and relights. Not persisted — every boot starts awake. Say-it-now and GREET NOW still work while asleep.
 - **⏻ Shut down for the night** (`POST /api/shutdown {confirm:true}`): sleep + `sudo -n /usr/bin/systemctl poweroff`. setup-linux.sh installs `/etc/sudoers.d/lily-greeter-poweroff` allowing exactly that command without a password.
 

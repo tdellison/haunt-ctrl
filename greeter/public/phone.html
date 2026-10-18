@@ -37,6 +37,9 @@
   <div class="btns">
     <button id="sleepbtn" onclick="toggleSleep()">😴 Sleep</button>
     <button onclick="shutdown()" style="background:#3d1c22;border-color:#6b2a34">⏻ Shut down</button>
+    <button onclick="pause(15)">⏸ Pause 15 min</button>
+    <button onclick="pause(60)">⏸ Pause 1 hr</button>
+    <button id="resumebtn" onclick="pause(0)" style="grid-column:1 / -1;display:none">▶ Resume greeting</button>
   </div>
 </div>
 
@@ -150,6 +153,12 @@ async function toggleSleep() {
   $('msg').textContent = j.ok ? (asleep ? '☀️ She\'s awake' : '😴 She\'s asleep — lantern off, no greetings') : `✗ ${j.error}`;
   poll();
 }
+async function pause(minutes) {
+  const r = await fetch('/api/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ minutes }) });
+  const j = await r.json();
+  $('msg').textContent = !j.ok ? `✗ ${j.error}` : minutes ? `⏸ Paused for ${minutes} min — she won't greet anyone` : '▶ Greeting again';
+  poll();
+}
 async function shutdown() {
   if (!confirm('Shut down for the night? Lily goes dark and the computer powers off.')) return;
   try {
@@ -171,9 +180,10 @@ async function poll() {
     $('sleepbtn').textContent = asleep ? '☀️ Wake' : '😴 Sleep';
     if (asleep) $('state').textContent += ' (asleep)';
     const paused = g.pausedUntil > Date.now();
+    $('resumebtn').style.display = paused ? '' : 'none';
     $('detail').textContent = [
       `Body ${body ? '✓' : '✗'} · Speaker ${spk ? '✓' : '✗'} · Camera ${s.camera.running ? '✓' : '✗'}`,
-      paused ? 'Greetings paused' : g.inHours ? `${g.today} greeted today` : 'Outside greeting hours',
+      paused ? `Paused — ${Math.ceil((g.pausedUntil - Date.now()) / 60000)} min left` : g.inHours ? `${g.today} greeted today` : 'Outside greeting hours',
     ].join(' — ');
     const team = Object.entries((s.faces && s.faces.team) || {});
     $('team').textContent = s.faces && !s.faces.ready ? `Face recognition not ready: ${s.faces.error || 'starting…'}`
