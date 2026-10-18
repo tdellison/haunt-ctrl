@@ -14,6 +14,7 @@ const path = require('path');
 process.env.LILY_CONFIG = process.env.LILY_CONFIG || path.join(__dirname, 'lily-config.json');
 
 const express = require('express');
+const { execFile } = require('child_process');
 const { createLily } = require('../lily');
 const { createCamera, listCameras } = require('./camera');
 const { createChime, listMics } = require('./chime');
@@ -125,6 +126,7 @@ let greeterRef = null;
 const converse = createConverse({
   lily, log, getConfig, getApiKey: anthropicKey, getElevenKey: elevenKey, playLocal,
   isGreeting: () => !!(greeterRef && greeterRef.status().greeting),
+  isAsleep: () => !!(greeterRef && greeterRef.status().asleep),
 });
 const faces = createFaces({ log });
 let cameraRef = null;
@@ -243,6 +245,40 @@ app.post('/api/say', route(async ({ text }) => {
   return {};
 }));
 app.get('/phone', (req, res) => res.sendFile(path.join(__dirname, 'public', 'phone.html')));
+// Sleep / wake: she goes dark and quiet (lantern off, motors disarmed) but the
+// computer stays on. Wake = straight back to greeting.
+app.post('/api/sleep', route(async ({ asleep }) => {
+  const on = !!asleep;
+  greeter.setAsleep(on);
+  if (on) {
+    manualHold = true;
+    await lily.setMood('off').catch(() => {});
+    await lily.arm(false).catch(() => {});
+  } else {
+    manualHold = false;
+    keepLilyConnected();
+  }
+  return { greeter: greeter.status() };
+}));
+
+// Shut down for the night: Lily dark + disarmed, then a clean poweroff
+// (setup-linux.sh allows exactly `sudo systemctl poweroff` without a password).
+app.post('/api/shutdown', route(async ({ confirm }) => {
+  if (confirm !== true) throw new Error('confirm required');
+  log('shutting down for the night');
+  greeter.setAsleep(true);
+  manualHold = true;
+  await lily.setMood('off').catch(() => {});
+  await lily.arm(false).catch(() => {});
+  await new Promise((resolve, reject) => {
+    execFile('sudo', ['-n', '/usr/bin/systemctl', 'poweroff'], { timeout: 10000 }, (err, out, errOut) => {
+      if (err) reject(new Error(`could not power off (${String(errOut || err.message).trim().slice(0, 120)}) — run greeter/setup-linux.sh once more to allow it`));
+      else resolve();
+    });
+  });
+  return { shuttingDown: true };
+}));
+
 app.post('/api/greet', route(async () => { await greeter.greet('test'); return { greeter: greeter.status() }; }));
 app.post('/api/pause', route(async ({ minutes }) => { greeter.pause(Number(minutes) || 0); return { greeter: greeter.status() }; }));
 app.post('/api/ask', route(async ({ text }) => {

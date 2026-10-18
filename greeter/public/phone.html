@@ -34,6 +34,10 @@
 <div class="card">
   <div class="status"><span id="dot" class="dot"></span><span id="state">Checking…</span></div>
   <div class="sub" id="detail"></div>
+  <div class="btns">
+    <button id="sleepbtn" onclick="toggleSleep()">😴 Sleep</button>
+    <button onclick="shutdown()" style="background:#3d1c22;border-color:#6b2a34">⏻ Shut down</button>
+  </div>
 </div>
 
 <div class="card">
@@ -139,6 +143,22 @@ async function saveFace() {
   } catch (e) { $('msg').textContent = `✗ ${e.message}`; }
 }
 
+let asleep = false;
+async function toggleSleep() {
+  const r = await fetch('/api/sleep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asleep: !asleep }) });
+  const j = await r.json();
+  $('msg').textContent = j.ok ? (asleep ? '☀️ She\'s awake' : '😴 She\'s asleep — lantern off, no greetings') : `✗ ${j.error}`;
+  poll();
+}
+async function shutdown() {
+  if (!confirm('Shut down for the night? Lily goes dark and the computer powers off.')) return;
+  try {
+    const r = await fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true }) });
+    const j = await r.json();
+    $('msg').textContent = j.ok ? '⏻ Shutting down — wait for the computer\'s light to go off, then unplug.' : `✗ ${j.error}`;
+  } catch (_) { $('msg').textContent = '⏻ Shutting down…'; }
+}
+
 async function poll() {
   try {
     const s = await (await fetch('/api/status')).json();
@@ -147,6 +167,9 @@ async function poll() {
     dot.className = 'dot' + (body && spk ? ' on' : body || spk ? ' part' : '');
     $('state').textContent = body && spk ? 'Lily is online' : body || spk ? 'Lily is partly online' : 'Lily is offline';
     const g = s.greeter;
+    asleep = !!g.asleep;
+    $('sleepbtn').textContent = asleep ? '☀️ Wake' : '😴 Sleep';
+    if (asleep) $('state').textContent += ' (asleep)';
     const paused = g.pausedUntil > Date.now();
     $('detail').textContent = [
       `Body ${body ? '✓' : '✗'} · Speaker ${spk ? '✓' : '✗'} · Camera ${s.camera.running ? '✓' : '✗'}`,

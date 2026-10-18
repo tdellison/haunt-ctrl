@@ -53,6 +53,10 @@
     <button onclick="api('/api/pause',{minutes:60})">Pause 1 hr</button>
     <button onclick="api('/api/pause',{minutes:0})">Resume</button>
   </div>
+  <div class="row">
+    <button id="sleepbtn" onclick="api('/api/sleep',{asleep:!asleepNow})">😴 Sleep</button>
+    <button onclick="if(confirm('Shut down for the night? Lily goes dark and the computer powers off.'))api('/api/shutdown',{confirm:true}).then(j=>{if(j&&j.ok)$('err').textContent='Shutting down — wait for the light to go off, then unplug.'})" style="background:#3d1c22">⏻ Shut down for the night</button>
+  </div>
   <div id="gstat" class="row"></div>
   <div class="row">
     <label><input type="checkbox" id="oOn"> Compliment visitors' outfits (shirt, slogan, design)</label>
@@ -204,7 +208,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const val = (id) => $(id).value.trim();
-let cfg = null;
+let cfg = null, asleepNow = false;
 
 async function api(url, body) {
   $('err').textContent = '';
@@ -345,7 +349,9 @@ async function poll() {
     const g = s.greeter, l = s.lily, c = s.camera, ch = s.chime, cv = s.converse;
     $('today').textContent = `${g.today} today`;
     const paused = g.pausedUntil > Date.now();
-    $('gstat').innerHTML = [pill(!paused && g.inHours, 'active', paused ? 'paused ' + Math.ceil((g.pausedUntil - Date.now()) / 60000) + ' min' : 'outside hours'),
+    asleepNow = !!g.asleep;
+    $('sleepbtn').textContent = asleepNow ? '☀️ Wake' : '😴 Sleep';
+    $('gstat').innerHTML = [g.asleep ? pill(false, '', 'asleep') : pill(!paused && g.inHours, 'active', paused ? 'paused ' + Math.ceil((g.pausedUntil - Date.now()) / 60000) + ' min' : 'outside hours'),
       g.greeting ? pill(true, 'speaking…') : '', `<label>last: ${ago(g.lastGreet)} (${g.lastReason || '-'}) “${g.lastLine || ''}”</label>`,
       g.lastError ? `<span class="err">${g.lastError}</span>` : ''].join(' ');
     $('cstat').innerHTML = [pill(cv.enabled, 'conversation on', 'conversation off'),

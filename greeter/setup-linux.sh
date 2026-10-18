@@ -23,6 +23,11 @@ echo "   node $(node -v)"
 echo "== Permissions: webcam (video), audio, bluetooth"
 sudo usermod -aG video,audio,bluetooth "$USER"
 
+echo "== Allow the setup page's 'Shut down for the night' button to power off (that one command only)"
+echo "$USER ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff" | sudo tee /etc/sudoers.d/lily-greeter-poweroff >/dev/null
+sudo chmod 440 /etc/sudoers.d/lily-greeter-poweroff
+sudo visudo -cf /etc/sudoers.d/lily-greeter-poweroff >/dev/null || { echo "   sudoers rule invalid - removed"; sudo rm -f /etc/sudoers.d/lily-greeter-poweroff; }
+
 echo "== WirePlumber: Bluetooth audio without a desktop login, and never let her speaker nap"
 WP="$HOME/.config/wireplumber/wireplumber.conf.d"
 mkdir -p "$WP"

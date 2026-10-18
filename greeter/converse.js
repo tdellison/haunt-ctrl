@@ -60,7 +60,7 @@ function persona(about) {
   ].join('\n\n');
 }
 
-function createConverse({ lily, log = console.log, getConfig, getApiKey, getElevenKey, playLocal, isGreeting = () => false }) {
+function createConverse({ lily, log = console.log, getConfig, getApiKey, getElevenKey, playLocal, isGreeting = () => false, isAsleep = () => false }) {
   const status = { enabled: false, listeningUntil: 0, phase: 'idle', lastHeard: null, lastReply: null, lastReplyAt: 0, lastError: null };
   const history = [];
   let busy = false, deafUntil = 0;
@@ -95,7 +95,7 @@ function createConverse({ lily, log = console.log, getConfig, getApiKey, getElev
 
   // Called with every raw mic block (16 kHz mono s16le).
   function onAudio(chunk) {
-    if (!getConfig().converse.enabled) return;
+    if (!getConfig().converse.enabled || isAsleep()) return;
     buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
     while (buf.length >= FRAME * 2) {
       const frame = buf.subarray(0, FRAME * 2); buf = buf.subarray(FRAME * 2);

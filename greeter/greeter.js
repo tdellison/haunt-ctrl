@@ -50,7 +50,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
   outfit = null,                    // outfit.js, or null
   nextFrame = async () => null }) { // the camera's next JPEG
   const status = { greeting: false, lastGreet: null, lastLine: null, lastReason: null, pausedUntil: 0, today: 0, todayDate: null,
-    lastError: null, lastSeen: null };
+    lastError: null, lastSeen: null, asleep: false };
   const recent = [], recentTeam = [];
   const teamSaidAt = {};            // name -> last remark time
   let lastGreetAt = 0, lastCameraAt = 0, chimeTimer = null, looking = false;
@@ -113,6 +113,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
   }
 
   function blockedBy(cfg) {
+    if (status.asleep) return 'asleep';
     if (Date.now() < status.pausedUntil) return 'team pause';
     if (!inHours()) return 'outside greeting hours';
     if (Date.now() - lastGreetAt < cfg.cooldownSec * 1000) return 'cooldown';
@@ -252,7 +253,7 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     onChime() {
       const cfg = getConfig();
       const cameraHandled = () => looking || Date.now() - Math.max(lastCameraAt, lastGreetAt) < cfg.chimeWindowSec * 1000;
-      if (status.greeting || inConversation()) return;
+      if (status.asleep || status.greeting || inConversation()) return;
       if (cameraHandled()) return log('chime: the camera already saw them');
       log(`chime heard — waiting ${cfg.chimeDelaySec}s for the camera`);
       clearTimeout(chimeTimer);
@@ -270,6 +271,13 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     pause(minutes) {
       status.pausedUntil = minutes > 0 ? Date.now() + minutes * 60000 : 0;
       log(minutes > 0 ? `paused for ${minutes} min` : 'resumed');
+    },
+    // Sleep: no greetings, chime or listening until woken (the phone page's
+    // say-it-now and GREET NOW still work — someone asked for those on purpose).
+    setAsleep(on) {
+      status.asleep = !!on;
+      clearTimeout(chimeTimer);
+      log(on ? 'asleep — not greeting until woken' : 'awake');
     },
     status: () => ({ ...status, inHours: inHours() }),
   };
