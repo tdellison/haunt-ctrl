@@ -733,6 +733,11 @@ html, body { touch-action: manipulation; }
 #screen-flash.flashing { animation:sflash .6s ease-out forwards; }
 
 /* ── Tab theme colors ── */
+.tab[data-pane="lily"].active  { color:var(--orange); border-bottom-color:var(--orange); background:rgba(255,130,0,.06); }
+.lily-hero { display:flex; align-items:center; gap:10px; font-size:1.05em; font-weight:700; margin-bottom:10px; letter-spacing:1px; }
+.lily-dot { width:16px; height:16px; border-radius:50%; background:var(--red); flex:none; }
+.lily-dot.on { background:var(--green); box-shadow:0 0 10px var(--green); }
+.lily-dot.part { background:var(--amber); }
 .tab[data-pane="test"].active  { color:var(--blue);  border-bottom-color:var(--blue);  background:rgba(79,195,247,.06);  text-shadow:0 0 10px var(--gb); }
 
 /* ── Storm panel blue theme ── */
@@ -863,6 +868,7 @@ body::before { animation:scanlines 10s linear infinite; }
 <div class="tabs">
   <div class="tab active" data-pane="show">🎃 SHOW</div>
   <div class="tab" data-pane="test">🧪 TEST</div>
+  <div class="tab" data-pane="lily">🏮 LILY</div>
   <div class="tab" data-pane="setup">⚙ SETUP</div>
 </div>
 
@@ -1051,74 +1057,12 @@ body::before { animation:scanlines 10s linear infinite; }
     </div>
   </div>
 
-  <!-- Lily -->
-  <div class="panel" id="lily-panel">
-    <div class="panel-title"><span class="pt-icon">🏮</span>Lily</div>
-    <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="lily-status">—</span></div>
-    <div class="info-row"><span class="info-key">Lantern</span><span class="info-val" id="lily-lantern">—</span></div>
-    <div class="info-row"><span class="info-key">Speaker</span><span class="info-val" id="lily-audio">—</span></div>
-    <div class="info-row"><span class="info-key">Last reply</span><span class="info-val" id="lily-notify">—</span></div>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
-      <button class="btn btn-green btn-sm" id="lily-enabled-btn" onclick="lilyToggleEnabled()">SHOW USE: OFF</button>
-      <button class="btn btn-blue btn-sm" onclick="lilyScan()">🔍 SCAN (10s)</button>
-      <button class="btn btn-green btn-sm" onclick="lilyConnect()">🔗 CONNECT</button>
-      <button class="btn btn-red btn-sm" onclick="api('/api/lily/disconnect')">✕ DISCONNECT</button>
-    </div>
-    <div id="lily-scan-results" style="font-size:.76em;font-family:'Courier New',monospace;margin-bottom:8px"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <label style="font-size:.72em;color:var(--dim2)">Motion (BLE)</label>
-      <input class="raw-input" id="lily-ble-addr" placeholder="AA:BB:CC:DD:EE:FF" style="flex:1;min-width:150px"/>
-    </div>
-
-    <div class="panel-title" style="font-size:.8em;margin-top:6px">Movement</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <button class="btn btn-amber btn-sm" id="lily-arm-btn" onclick="lilyToggleArm()">ARM MOTORS</button>
-      <button class="btn btn-red btn-sm" onclick="api('/api/lily/move',{action:'none'})">■ STOP</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="lily-moves"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <label style="font-size:.72em;color:var(--dim2)">Probe byte</label>
-      <select id="lily-probe" class="raw-input" style="width:110px"></select>
-      <button class="btn btn-purple btn-sm" onclick="lilyProbe()">▶ PROBE</button>
-      <button class="btn btn-purple btn-sm" onclick="lilyProbeNext()">NEXT ▶</button>
-    </div>
-
-    <div class="panel-title" style="font-size:.8em">Lantern</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <button class="btn btn-orange btn-sm" onclick="api('/api/lily/mood',{mood:'calm'})">CALM</button>
-      <button class="btn btn-blue btn-sm" onclick="api('/api/lily/mood',{mood:'wary'})">WARY</button>
-      <button class="btn btn-amber btn-sm" onclick="api('/api/lily/mood',{mood:'ward'})">WARD</button>
-      <button class="btn btn-red btn-sm" onclick="api('/api/lily/mood',{mood:'off'})">OFF</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <input type="color" id="lily-color" value="#ff7820" style="width:44px;height:34px;background:none;border:none"/>
-      <input type="range" id="lily-bri" min="0" max="255" value="160" style="flex:1;min-width:100px"/>
-      <select id="lily-mode" class="raw-input" style="width:90px"><option>static</option><option>pulse</option><option>strobe</option></select>
-      <button class="btn btn-green btn-sm" onclick="lilyLantern()">SET</button>
-    </div>
-
-    <div class="panel-title" style="font-size:.8em">Voice / speaker</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <input class="raw-input" id="lily-audio-addr" placeholder="speaker address" style="flex:1;min-width:150px"/>
-      <button class="btn btn-green btn-sm" onclick="lilyAudio(true)">PAIR + CONNECT</button>
-      <button class="btn btn-green btn-sm" onclick="lilyAudio(false)">CONNECT</button>
-      <button class="btn btn-red btn-sm" onclick="api('/api/lily/audio/disconnect')">✕</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-purple btn-sm" onclick="api('/api/lily/audio/test',{})">🔊 TEST CLIP (jaw check)</button>
-      <label style="font-size:.72em;color:var(--dim2)">Prop vol</label>
-      <input type="range" id="lily-vol" min="0" max="100" value="100" style="width:110px" onchange="api('/api/lily/volume',{volume:+this.value})"/>
-    </div>
-
-    <div class="panel-title" style="font-size:.8em;margin-top:10px">Talk to Lily</div>
+  <!-- Lily conversation (her controls live on the LILY tab) -->
+  <div class="panel" id="lily-talk-panel">
+    <div class="panel-title"><span class="pt-icon">🏮</span>Talk to Lily</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn btn-purple btn-sm" id="talk-mode-voice" onclick="api('/api/lily/talk/mode',{mode:'voice'})">🗣 ELEVENLABS VOICE</button>
       <button class="btn btn-amber btn-sm" id="talk-mode-clips" onclick="api('/api/lily/talk/mode',{mode:'clips'})">📼 BUILT-IN CLIPS</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <input class="raw-input" id="talk-speak" placeholder="voice test: exact words for Lily to say (no Claude)" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')talkSpeak()"/>
-      <button class="btn btn-purple btn-sm" onclick="talkSpeak()">🔊 SPEAK</button>
     </div>
     <div class="info-row"><span class="info-key">Talk</span><span class="info-val" id="talk-status">—</span></div>
     <div class="info-row"><span class="info-key">Heard</span><span class="info-val" id="talk-heard">—</span></div>
@@ -1301,6 +1245,91 @@ body::before { animation:scanlines 10s linear infinite; }
   </div>
 
 </div><!-- /pane-test -->
+
+<!-- ─── LILY ─── -->
+<div class="pane" id="pane-lily">
+
+  <div class="panel" id="lily-panel">
+    <div class="panel-title"><span class="pt-icon">🏮</span>Lily</div>
+    <div class="lily-hero"><span class="lily-dot" id="lily-dot"></span><span id="lily-headline">Checking…</span></div>
+    <div class="info-row"><span class="info-key">Status</span><span class="info-val" id="lily-status">—</span></div>
+    <div class="info-row"><span class="info-key">Lantern</span><span class="info-val" id="lily-lantern">—</span></div>
+    <div class="info-row"><span class="info-key">Speaker</span><span class="info-val" id="lily-audio">—</span></div>
+    <div class="info-row"><span class="info-key">Last reply</span><span class="info-val" id="lily-notify">—</span></div>
+
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🔗</span>Connection</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+      <button class="btn btn-green btn-sm" id="lily-enabled-btn" onclick="lilyToggleEnabled()">SHOW USE: OFF</button>
+      <button class="btn btn-blue btn-sm" onclick="lilyScan()">🔍 SCAN (10s)</button>
+      <button class="btn btn-green btn-sm" onclick="lilyConnect()">🔗 CONNECT</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/disconnect')">✕ DISCONNECT</button>
+    </div>
+    <div id="lily-scan-results" style="font-size:.76em;font-family:'Courier New',monospace;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:.72em;color:var(--dim2)">Motion (BLE)</label>
+      <input class="raw-input" id="lily-ble-addr" placeholder="AA:BB:CC:DD:EE:FF" style="flex:1;min-width:150px"/>
+    </div>
+
+    <label style="font-size:.72em;color:var(--dim2)">Speaker (Classic BT)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input class="raw-input" id="lily-audio-addr" placeholder="speaker address" style="flex:1;min-width:150px"/>
+      <button class="btn btn-green btn-sm" onclick="lilyAudio(true)">PAIR + CONNECT</button>
+      <button class="btn btn-green btn-sm" onclick="lilyAudio(false)">CONNECT</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/audio/disconnect')">✕</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🦴</span>Movement</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-amber btn-sm" id="lily-arm-btn" onclick="lilyToggleArm()">ARM MOTORS</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/move',{action:'none'})">■ STOP</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="lily-moves"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <label style="font-size:.72em;color:var(--dim2)">Probe byte</label>
+      <select id="lily-probe" class="raw-input" style="width:110px"></select>
+      <button class="btn btn-purple btn-sm" onclick="lilyProbe()">▶ PROBE</button>
+      <button class="btn btn-purple btn-sm" onclick="lilyProbeNext()">NEXT ▶</button>
+    </div>
+
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🏮</span>Lantern</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-orange btn-sm" onclick="api('/api/lily/mood',{mood:'calm'})">CALM</button>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/lily/mood',{mood:'wary'})">WARY</button>
+      <button class="btn btn-amber btn-sm" onclick="api('/api/lily/mood',{mood:'ward'})">WARD</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/lily/mood',{mood:'off'})">OFF</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input type="color" id="lily-color" value="#ff7820" style="width:44px;height:34px;background:none;border:none"/>
+      <input type="range" id="lily-bri" min="0" max="255" value="160" style="flex:1;min-width:100px"/>
+      <select id="lily-mode" class="raw-input" style="width:90px"><option>static</option><option>pulse</option><option>strobe</option></select>
+      <button class="btn btn-green btn-sm" onclick="lilyLantern()">SET</button>
+    </div>
+
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🗣</span>Voice</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <input class="raw-input" id="talk-speak" placeholder="type exactly what Lily says" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')talkSpeak()"/>
+      <button class="btn btn-purple btn-sm" onclick="talkSpeak()">🔊 SPEAK</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-purple btn-sm" onclick="api('/api/lily/audio/test',{})">🔊 TEST CLIP (jaw check)</button>
+      <label style="font-size:.72em;color:var(--dim2)">Prop vol</label>
+      <input type="range" id="lily-vol" min="0" max="100" value="100" style="width:110px" onchange="api('/api/lily/volume',{volume:+this.value})"/>
+    </div>
+
+  </div>
+
+</div><!-- /pane-lily -->
 
 <!-- ─── SETUP ─── -->
 <div class="pane" id="pane-setup">
@@ -1578,6 +1607,9 @@ function renderLily(l) {
   document.getElementById('lily-audio').textContent = (a.routed ? 'ready' : a.connected ? 'connected, not routed' : 'not connected')
     + (a.address ? ` · ${a.address}` : '') + (a.lastError ? ` — ${a.lastError}` : '');
   document.getElementById('lily-notify').textContent = l.lastNotify ? l.lastNotify.hex : '—';
+  const spkOk = !!(l.audio && l.audio.connected);
+  document.getElementById('lily-dot').className = 'lily-dot' + (l.connected && spkOk ? ' on' : l.connected || spkOk ? ' part' : '');
+  document.getElementById('lily-headline').textContent = l.connected && spkOk ? 'LILY IS ONLINE' : l.connected || spkOk ? 'LILY IS PARTLY ONLINE' : 'LILY IS OFFLINE';
   const eb = document.getElementById('lily-enabled-btn');
   eb.textContent = `SHOW USE: ${l.enabled ? 'ON' : 'OFF'}`;
   eb.classList.toggle('active', !!l.enabled);

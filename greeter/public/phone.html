@@ -53,6 +53,17 @@
   <div class="btns"><button class="main" onclick="sayLine()">Say it</button></div>
 </div>
 
+<div class="card">
+  <div style="font-weight:600;margin-bottom:8px">📷 Teach her a teammate</div>
+  <img id="snap" alt="" style="width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover;display:none">
+  <div class="btns">
+    <button class="main" onclick="snap()">📷 Snap picture</button>
+  </div>
+  <input id="tname" placeholder="Their name" autocomplete="off" autocapitalize="words" style="margin-top:10px">
+  <div class="btns"><button class="main" id="savebtn" onclick="saveFace()" disabled>Save to team</button></div>
+  <div class="sub" id="team"></div>
+</div>
+
 <div id="msg"></div>
 <p style="text-align:center"><a href="/">Full setup page</a></p>
 
@@ -98,6 +109,36 @@ function sayLine() {
   say(t); $('line').value = '';
 }
 
+// Snap: the person stands in front of Lily; the picture comes from HER camera.
+let snapData = null;
+async function snap() {
+  $('msg').textContent = 'Snapping…';
+  try {
+    const r = await fetch('/api/camera/snapshot.bmp?t=' + Date.now());
+    if (!r.ok) throw new Error('No camera picture — is the webcam on?');
+    const blob = await r.blob();
+    snapData = await new Promise((res) => { const f = new FileReader(); f.onload = () => res(f.result); f.readAsDataURL(blob); });
+    $('snap').src = snapData; $('snap').style.display = 'block';
+    $('savebtn').disabled = false;
+    $('msg').textContent = 'Got it — type their name and save (or snap again)';
+    $('tname').focus();
+  } catch (e) { $('msg').textContent = `✗ ${e.message}`; }
+}
+async function saveFace() {
+  const name = $('tname').value.trim();
+  if (!snapData) { $('msg').textContent = 'Snap a picture first'; return; }
+  if (!name) { $('msg').textContent = 'Type their name'; $('tname').focus(); return; }
+  $('msg').textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/team/photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, jpeg: snapData }) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error);
+    const t = j.team[name] || {};
+    $('msg').textContent = `✓ Saved — ${name} has ${t.usable || 1} photo(s). 3–5 from slightly different angles works best.`;
+    snapData = null; $('savebtn').disabled = true;
+  } catch (e) { $('msg').textContent = `✗ ${e.message}`; }
+}
+
 async function poll() {
   try {
     const s = await (await fetch('/api/status')).json();
@@ -111,6 +152,9 @@ async function poll() {
       `Body ${body ? '✓' : '✗'} · Speaker ${spk ? '✓' : '✗'} · Camera ${s.camera.running ? '✓' : '✗'}`,
       paused ? 'Greetings paused' : g.inHours ? `${g.today} greeted today` : 'Outside greeting hours',
     ].join(' — ');
+    const team = Object.entries((s.faces && s.faces.team) || {});
+    $('team').textContent = s.faces && !s.faces.ready ? `Face recognition not ready: ${s.faces.error || 'starting…'}`
+      : team.length ? 'Team: ' + team.map(([n, t]) => `${n} (${t.usable})`).join(', ') : 'No teammates yet.';
   } catch (_) {
     $('dot').className = 'dot'; $('state').textContent = 'Greeter not reachable'; $('detail').textContent = '';
   }
