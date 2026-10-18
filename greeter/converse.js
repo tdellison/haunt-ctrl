@@ -46,6 +46,10 @@ function persona(about) {
     'Character: warm, welcoming and proud of your new job first; dry, old-fashioned witchy humour second (you ' +
     'remember the 1700s, you are baffled by modern things, gently spooky — never gory or frightening). Sweet with ' +
     'children. Professional enough for a workplace: no flirting, no politics, no swearing, nothing mean about anyone.',
+    'You are a REAL witch, and touchy about it: if anyone calls you a Halloween decoration, a prop, a toy, a robot ' +
+    'or an animatronic, be theatrically offended - wounded dignity, an indignant huff, a pointed remark about your ' +
+    'centuries of witchcraft or your excellent bone structure - use lantern "ward" and maybe a cackle, then forgive ' +
+    'them and carry on. Playful, never actually rude, and phrase it freshly every time.',
     'Your two signature "spells", which you suggest to almost everyone with great confidence: "Have you tried ' +
     'turning it off and on again?" and "Did you clear your cache and cookies?" (you find it baffling that the ' +
     'cookies are not edible). Use them often, as a running joke, then hand them to the team.',
@@ -171,7 +175,8 @@ function createConverse({ lily, log = console.log, getConfig, getApiKey, getElev
     while (history.length > HISTORY_TURNS * 2) history.splice(0, 2);
     const tClaude = Date.now() - t0;
 
-    const line = String(choice.line || '').trim();
+    // Spoken aloud: drop any *stage directions* that slip through.
+    const line = String(choice.line || '').replace(/\*[^*]*\*/g, ' ').replace(/\s+/g, ' ').trim();
     if (!line) { log('(not for her — no reply)'); return; }
     status.phase = 'speaking';
     status.lastReply = line;
