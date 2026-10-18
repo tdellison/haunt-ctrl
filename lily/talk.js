@@ -200,6 +200,10 @@ const TONES = {
   // once and cached, so v3's slowness never reaches a conversation.
   throat:   { model: 'eleven_v3', tag: '[clears throat]', stability: 0.5 },
   ominous:  { model: TTS_MODEL, stability: 0.35 },
+  // Door greeter only (left out of the haunt's choices below): a witch's cackle,
+  // and plain v3 for written lines that carry their own audio tags.
+  cackle:   { model: 'eleven_v3', tag: '[cackles]', stability: 0.3 },
+  v3:       { model: 'eleven_v3', stability: 0.5 },
 };
 
 // ElevenLabs text-to-speech -> mp3 bytes.
@@ -313,7 +317,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       next: { type: 'string', enum: ['evelina', 'skeleton', 'none'] },
       big_beat: { type: 'boolean' },
       spell: { type: 'string', enum: ['none', 'binding', 'calling', 'unraveling', 'memory'] },
-      tone: { type: 'string', enum: Object.keys(TONES).filter(t => t !== 'throat') },
+      tone: { type: 'string', enum: Object.keys(TONES).filter(t => !['throat', 'cackle', 'v3'].includes(t)) },
       lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
       move: { type: 'string', enum: MOVES },
     },

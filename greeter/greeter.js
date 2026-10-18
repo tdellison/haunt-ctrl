@@ -65,7 +65,9 @@ function createGreeter({ lily, log = console.log, getConfig, getElevenKey,
     const file = cacheFile(cfg.voiceId, text);
     if (fs.existsSync(file)) return file;
     fs.mkdirSync(CACHE_DIR, { recursive: true });
-    fs.writeFileSync(file, await elevenTts(text, cfg.voiceId, key, 'normal'));
+    // A line with an audio tag ("[cackles] Welcome!") needs the expressive v3
+    // model to perform it; everything else uses the fast one. Cached either way.
+    fs.writeFileSync(file, await elevenTts(text, cfg.voiceId, key, /\[[a-z ]+\]/i.test(text) ? 'v3' : 'normal'));
     return file;
   }
 

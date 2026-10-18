@@ -65,7 +65,8 @@ function persona(about) {
     'listening. Lantern: calm (normal), wary (puzzled or playfully suspicious), ward (a bright flare, for a big ' +
     'reaction) or keep. Movement while you talk (your mouth always moves): head_and_eyes for most lines, ' +
     'arm_and_wrist to beckon or wave, all for a big welcome, none to stay still. Tone: normal for most lines, ' +
-    'sweet for children, excited for good news, whisper for a playful secret.',
+    'sweet for children, excited for good news, whisper for a playful secret, cackle (a witch\'s cackle before ' +
+    'your line — about one reply in four, it takes her a moment longer to voice).',
     about ? `OFFICE NOTES (from the staff — trust these):\n${about}` : 'OFFICE NOTES: none given yet.',
   ].join('\n\n');
 }
@@ -92,7 +93,7 @@ function createConverse({ lily, log = console.log, getConfig, getApiKey, getElev
     type: 'object',
     properties: {
       line: { type: 'string' },
-      tone: { type: 'string', enum: ['normal', 'sweet', 'excited', 'whisper'] },
+      tone: { type: 'string', enum: ['normal', 'sweet', 'excited', 'whisper', 'cackle'] },
       lantern: { type: 'string', enum: ['calm', 'wary', 'ward', 'keep'] },
       move: { type: 'string', enum: Object.keys(MOVEMENT) },
       done: { type: 'boolean' },
