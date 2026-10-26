@@ -49,7 +49,20 @@ const DEFAULTS = {
   stormFlash: false,
   bulbs: false,           // A19 bulbs: off unless switched on
   ambient: false,         // quiet ambient loop
+  // Daily auto on/off (owner, 2026-10-26: 4:30 pm - midnight, Utah time, the
+  // nights before Halloween; Halloween itself is started by hand).
+  schedule: { enabled: false, on: '16:30', off: '00:00', tz: 'America/Denver' },
 };
+
+// "HH:MM" -> minutes after midnight in the schedule's time zone, right now.
+function localMinutes(tz, d = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d);
+  const get = (t) => Number(parts.find(p => p.type === t).value);
+  return get('hour') * 60 + get('minute');
+}
+const toMin = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return (h % 24) * 60 + (m || 0); };
+// Inside [on, off), allowing the window to cross midnight.
+function inWindow(now, on, off) { return on <= off ? now >= on && now < off : now >= on || now < off; }
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -65,6 +78,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     cfg = { ...cfg, ...saved, pairs: { ...cfg.pairs } };
     for (const p of PAIRS) cfg.pairs[p] = { ...DEFAULTS.pairs[p], ...(saved.pairs || {})[p] };
+    cfg.schedule = { ...DEFAULTS.schedule, ...(saved.schedule || {}) };
   } catch (_) {}
   const save = () => { try { fs.writeFileSync(file, JSON.stringify(cfg, null, 2)); } catch (e) { log(`light mode save failed: ${e.message}`); } };
 
@@ -209,6 +223,27 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     stormTimer = setTimeout(async () => { await flash(); scheduleStorm(); onChange(); }, STORM_FLASH_EVERY_MS);
   }
 
+  // ── Daily schedule ────────────────────────────────────────────────────────
+  // Acts only when the clock CROSSES the on/off time, so tapping OFF mid-evening
+  // sticks until tomorrow's on time. At boot (or when switched on) inside the
+  // window, the lights come on — a restart never leaves the yard dark.
+  let lastInside = null;
+  function scheduleCheck() {
+    const sc = cfg.schedule;
+    if (!sc.enabled) { lastInside = null; return; }
+    let inside;
+    try { inside = inWindow(localMinutes(sc.tz), toMin(sc.on), toMin(sc.off)); } catch (e) { log(`schedule: ${e.message}`); return; }
+    if (inside && lastInside !== true && !running) {
+      try { api.start(); log(`Lights-only: scheduled ON (${sc.on}-${sc.off})`); }
+      catch (e) { log(`Lights-only: scheduled start skipped — ${e.message}`); }
+    } else if (!inside && lastInside === true && running) {
+      api.stop(); log('Lights-only: scheduled OFF');
+    }
+    lastInside = inside;
+  }
+  setInterval(scheduleCheck, 30000);
+  setTimeout(scheduleCheck, 5000);
+
   const api = {
     PAIRS, SINGLE_EFFECTS, TWO_PAIR_EFFECTS,
     get running() { return running; },
@@ -282,6 +317,15 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       cfg.ambient = !!on; save();
       if (running) (cfg.ambient ? ambient.start : ambient.stop)();
       onChange();
+      return api.status();
+    },
+
+    setSchedule({ enabled, on, off } = {}) {
+      const ok = (t) => /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(t));
+      if (on !== undefined) { if (!ok(on)) throw new Error('on time must be HH:MM'); cfg.schedule.on = on; }
+      if (off !== undefined) { if (!ok(off)) throw new Error('off time must be HH:MM'); cfg.schedule.off = off; }
+      if (enabled !== undefined) cfg.schedule.enabled = !!enabled;
+      save(); lastInside = null; scheduleCheck(); onChange();
       return api.status();
     },
 

@@ -4106,6 +4106,7 @@ app.post('/api/lights/mode/storm', lightRoute(({ enabled }) => lightMode.setStor
 app.post('/api/lights/mode/flash', lightRoute(() => lightMode.flashNow()));
 app.post('/api/lights/mode/bulbs', lightRoute(({ enabled }) => lightMode.setBulbs(enabled)));
 app.post('/api/lights/mode/ambient', lightRoute(({ enabled }) => lightMode.setAmbient(enabled)));
+app.post('/api/lights/mode/schedule', lightRoute((b) => lightMode.setSchedule(b)));
 // Single light test: Govee's LAN API (turn / brightness / colorwc / devStatus)
 // addresses a whole controller, and a tethered pair is ONE controller on one
 // IP — there is no per-light (or per-segment) command. Not supported, so

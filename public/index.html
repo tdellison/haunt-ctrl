@@ -957,6 +957,12 @@ body::before { animation:scanlines 10s linear infinite; }
       <button id="lm-ambient" onclick="api('/api/lights/mode/ambient',{enabled:!lmCur.ambient})"><span>🔈</span>Spooky sound<small id="lm-ambient-s"></small></button>
       <button id="lm-bulbs" onclick="api('/api/lights/mode/bulbs',{enabled:!lmCur.bulbs})"><span>💡</span>A19 bulbs<small id="lm-bulbs-s"></small></button>
     </div>
+    <button class="btn btn-full btn-lg" id="lm-sched" style="margin-top:10px" onclick="api('/api/lights/mode/schedule',{enabled:!lmCur.schedule.enabled})"></button>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.75em;color:var(--dim2)">
+      ON <input type="time" id="lm-son" onchange="api('/api/lights/mode/schedule',{on:this.value})" style="flex:1;min-height:40px">
+      OFF <input type="time" id="lm-soff" onchange="api('/api/lights/mode/schedule',{off:this.value})" style="flex:1;min-height:40px">
+    </div>
+    <div style="font-size:.65em;color:var(--dim2);margin-top:6px">Utah time. Turns the lights on and off by itself every day; tapping OFF early holds until tomorrow.</div>
   </div>
 </div>
 
@@ -2459,6 +2465,12 @@ function renderLightMode(st) {
   if (document.activeElement !== bri) bri.value = bv;
   document.getElementById('lm-briv').textContent = bv + '%';
   const flag = (id, on) => { document.getElementById(id).classList.toggle('sel', !!on); document.getElementById(id + '-s').textContent = on ? 'ON' : 'off'; };
+  const sc = st.schedule || {};
+  const fmt = t => { const [h, m] = String(t).split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`; };
+  const sb = document.getElementById('lm-sched');
+  sb.textContent = sc.enabled ? `🕓 DAILY SCHEDULE: ON (${fmt(sc.on)} – ${fmt(sc.off)})` : '🕓 DAILY SCHEDULE: OFF';
+  sb.className = 'btn btn-full btn-lg ' + (sc.enabled ? 'btn-green' : '');
+  for (const [id, v] of [['lm-son', sc.on], ['lm-soff', sc.off]]) { const el = document.getElementById(id); if (document.activeElement !== el) el.value = String(v).padStart(5, '0'); }
   flag('lm-storm', st.stormFlash); flag('lm-ambient', st.ambient); flag('lm-bulbs', st.bulbs);
 }
 async function singleLightTest() {
