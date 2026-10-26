@@ -831,6 +831,26 @@ body::before { animation:scanlines 10s linear infinite; }
 .fog-puff:nth-child(2) { width:420px; height:55px; animation-duration:26s; animation-delay:-11s; bottom:5px; }
 .fog-puff:nth-child(3) { width:600px; height:80px; animation-duration:40s; animation-delay:-22s; bottom:-5px; }
 .fog-puff:nth-child(4) { width:350px; height:50px; animation-duration:22s; animation-delay:-6s;  bottom:10px; }
+
+/* Lights tab */
+.lm-status { margin-top:10px; font-size:.78em; line-height:1.6; color:var(--dim2); }
+.lm-status b { color:#fff; }
+.lm-step { font-size:.72em; letter-spacing:3px; color:var(--orange); font-weight:700; margin-bottom:10px; }
+.lm-seg { display:flex; gap:6px; }
+.lm-seg button { flex:1; min-height:52px; border-radius:10px; border:1px solid #3a2a50; background:#0c0818; color:#ccc; font-weight:700; letter-spacing:2px; font-family:inherit; }
+.lm-seg button.sel { background:#3a1a00; border-color:var(--orange); color:var(--orange); box-shadow:0 0 12px rgba(255,130,0,.35); }
+.lm-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.lm-grid2 { grid-template-columns:repeat(2,1fr); }
+@media (max-width:480px) { .lm-grid { grid-template-columns:repeat(2,1fr); } }
+.lm-grid button { min-height:74px; border-radius:12px; border:1px solid #3a2a50; background:#0c0818; color:#ddd; font-family:inherit; font-weight:700; font-size:.8em; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:8px; }
+.lm-grid button span { font-size:1.6em; line-height:1; }
+.lm-grid button small { font-weight:400; font-size:.78em; color:var(--dim2); }
+.lm-grid button.sel { border-color:var(--orange); background:#2a1200; box-shadow:0 0 14px rgba(255,130,0,.4); color:#fff; }
+.lm-swatches { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.lm-swatches button { min-height:64px; border-radius:12px; border:2px solid transparent; color:#fff; font-family:inherit; font-size:.68em; font-weight:700; text-shadow:0 1px 3px #000,0 0 6px #000; display:flex; align-items:flex-end; justify-content:center; padding:6px 2px; }
+.lm-swatches button.sel { border-color:#fff; box-shadow:0 0 14px rgba(255,255,255,.5); }
+.lm-custom { display:flex; align-items:center; justify-content:space-between; margin-top:10px; font-size:.75em; color:var(--dim2); }
+.lm-custom input { width:64px; height:44px; border:none; background:none; }
 </style>
 </head>
 <body>
@@ -880,68 +900,64 @@ body::before { animation:scanlines 10s linear infinite; }
 <div class="content">
 
 <!-- ─── LIGHTS ─── -->
+<!-- Lights-only mode: pick lights → pick an effect → pick a colour. No AI. -->
 <div class="pane" id="pane-lights">
-  <!-- Lights-only mode (owner spec 2026-10-26): no AI, manual start -->
-  <div class="panel" id="lm-panel">
-    <div class="panel-title"><span class="pt-icon">💡</span>Lights Only</div>
+  <div class="panel">
     <div style="display:flex;gap:8px">
-      <button class="btn btn-green btn-sm" id="lm-start" style="flex:1" onclick="api('/api/lights/mode/start')">▶ LIGHTS ONLY</button>
-      <button class="btn btn-red btn-sm" style="flex:1" onclick="api('/api/lights/mode/stop')">■ OFF</button>
+      <button class="btn btn-green btn-lg" id="lm-start" style="flex:2" onclick="api('/api/lights/mode/start')">▶ LIGHTS ON</button>
+      <button class="btn btn-red btn-lg" style="flex:1" onclick="api('/api/lights/mode/stop')">■ OFF</button>
     </div>
-    <div id="lm-status" style="font-size:.68em;color:var(--dim2);margin-top:8px">No AI, no mic — just the spotlights.</div>
+    <div id="lm-status" class="lm-status"></div>
+  </div>
 
-    <div class="lm-pair" id="lm-skeleton">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <b style="font-size:.8em;letter-spacing:2px">SKELETON PAIR</b>
-        <button class="btn btn-sm" id="lm-skeleton-on" onclick="lmPair('skeleton',{on:!lmCur.pairs['skeleton'].on})">ON</button>
-        <span id="lm-skeleton-ip" style="font-size:.65em;color:var(--dim2)"></span>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-orange btn-sm lm-fx" data-pair="skeleton" data-fx="fire" onclick="lmPair('skeleton',{effect:'fire'})">🔥 FIRE</button>
-        <button class="btn btn-purple btn-sm lm-fx" data-pair="skeleton" data-fx="witch" onclick="lmPair('skeleton',{effect:'witch'})">🧙 WITCH</button>
-        <button class="btn btn-blue btn-sm lm-fx" data-pair="skeleton" data-fx="color" onclick="lmPair('skeleton',{effect:'color'})">● STEADY</button>
-        <button class="btn btn-blue btn-sm lm-fx" data-pair="skeleton" data-fx="breathe" onclick="lmPair('skeleton',{effect:'breathe'})">◐ BREATHING</button>
-        <input type="color" id="lm-skeleton-color" onchange="lmPair('skeleton',{color:this.value})" style="width:44px;height:40px;border:none;background:none">
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <span style="font-size:.65em;color:var(--dim2)">BRIGHTNESS</span>
-        <input type="range" min="1" max="100" id="lm-skeleton-bri" style="flex:1" onchange="lmPair('skeleton',{bri:+this.value})" oninput="document.getElementById('lm-skeleton-briv').textContent=this.value+'%'">
-        <span id="lm-skeleton-briv" style="font-size:.7em;width:38px"></span>
-      </div>
-    </div>
-    <div class="lm-pair" id="lm-witch">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <b style="font-size:.8em;letter-spacing:2px">WITCH PAIR</b>
-        <button class="btn btn-sm" id="lm-witch-on" onclick="lmPair('witch',{on:!lmCur.pairs['witch'].on})">ON</button>
-        <span id="lm-witch-ip" style="font-size:.65em;color:var(--dim2)"></span>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-orange btn-sm lm-fx" data-pair="witch" data-fx="fire" onclick="lmPair('witch',{effect:'fire'})">🔥 FIRE</button>
-        <button class="btn btn-purple btn-sm lm-fx" data-pair="witch" data-fx="witch" onclick="lmPair('witch',{effect:'witch'})">🧙 WITCH</button>
-        <button class="btn btn-blue btn-sm lm-fx" data-pair="witch" data-fx="color" onclick="lmPair('witch',{effect:'color'})">● STEADY</button>
-        <button class="btn btn-blue btn-sm lm-fx" data-pair="witch" data-fx="breathe" onclick="lmPair('witch',{effect:'breathe'})">◐ BREATHING</button>
-        <input type="color" id="lm-witch-color" onchange="lmPair('witch',{color:this.value})" style="width:44px;height:40px;border:none;background:none">
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <span style="font-size:.65em;color:var(--dim2)">BRIGHTNESS</span>
-        <input type="range" min="1" max="100" id="lm-witch-bri" style="flex:1" onchange="lmPair('witch',{bri:+this.value})" oninput="document.getElementById('lm-witch-briv').textContent=this.value+'%'">
-        <span id="lm-witch-briv" style="font-size:.7em;width:38px"></span>
-      </div>
-    </div>
-    <div style="margin-top:12px;font-size:.65em;letter-spacing:2px;color:var(--dim2)">BOTH PAIRS</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-      <button class="btn btn-blue btn-sm" id="lm-drift" onclick="api('/api/lights/mode/two-pair',{effect:lmCur.twoPair==='drift'?null:'drift'})">👻 SPIRIT DRIFT</button>
-      <button class="btn btn-purple btn-sm" id="lm-coven" onclick="api('/api/lights/mode/two-pair',{effect:lmCur.twoPair==='coven'?null:'coven'})">🔮 COVEN PULSE</button>
-      <button class="btn btn-red btn-sm" onclick="api('/api/lights/mode/all-off')">⬛ ALL OFF</button>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">
-      <button class="btn btn-sm" id="lm-storm" onclick="api('/api/lights/mode/storm',{enabled:!lmCur.stormFlash})">⚡ STORM FLASH: OFF</button>
-      <button class="btn btn-blue btn-sm" onclick="api('/api/lights/mode/flash')">⚡ FLASH NOW</button>
-      <button class="btn btn-sm" id="lm-ambient" onclick="api('/api/lights/mode/ambient',{enabled:!lmCur.ambient})">🔈 AMBIENT: OFF</button>
-      <button class="btn btn-sm" id="lm-bulbs" onclick="api('/api/lights/mode/bulbs',{enabled:!lmCur.bulbs})">💡 A19 BULBS: OFF</button>
+  <div class="panel">
+    <div class="lm-step">1 · WHICH LIGHTS?</div>
+    <div class="lm-seg" id="lm-target">
+      <button data-t="both" onclick="lmTarget('both')">BOTH</button>
+      <button data-t="skeleton" onclick="lmTarget('skeleton')">PAIR 1</button>
+      <button data-t="witch" onclick="lmTarget('witch')">PAIR 2</button>
     </div>
   </div>
 
+  <div class="panel">
+    <div class="lm-step">2 · EFFECT</div>
+    <div class="lm-grid" id="lm-effects">
+      <button data-fx="color" onclick="lmEffect('color')"><span>●</span>Steady</button>
+      <button data-fx="breathe" onclick="lmEffect('breathe')"><span>◐</span>Breathing</button>
+      <button data-fx="fire" onclick="lmEffect('fire')"><span>🔥</span>Fire</button>
+      <button data-fx="witch" onclick="lmEffect('witch')"><span>🟣</span>Purple Pulse</button>
+      <button data-fx="drift" onclick="lmEffect('drift')"><span>👻</span>Spectral Drift<small>uses both pairs</small></button>
+      <button data-fx="coven" onclick="lmEffect('coven')"><span>🔮</span>Coven Pulse<small>uses both pairs</small></button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">3 · COLOR <small style="letter-spacing:0">(for Steady / Breathing)</small></div>
+    <div class="lm-swatches" id="lm-swatches"></div>
+    <label class="lm-custom">Custom color <input type="color" id="lm-custom" onchange="lmColor(this.value)"></label>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">BRIGHTNESS</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <input type="range" min="1" max="100" id="lm-bri" style="flex:1;height:36px" onchange="lmBri(+this.value)" oninput="document.getElementById('lm-briv').textContent=this.value+'%'">
+      <b id="lm-briv" style="width:48px;text-align:right"></b>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="lmPower(true)">ON</button>
+      <button class="btn btn-red btn-sm" style="flex:1" onclick="lmPower(false)">OFF</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">EXTRAS</div>
+    <div class="lm-grid lm-grid2">
+      <button id="lm-storm" onclick="api('/api/lights/mode/storm',{enabled:!lmCur.stormFlash})"><span>⚡</span>Lightning every 12 min<small id="lm-storm-s"></small></button>
+      <button onclick="api('/api/lights/mode/flash')"><span>⚡</span>Flash now</button>
+      <button id="lm-ambient" onclick="api('/api/lights/mode/ambient',{enabled:!lmCur.ambient})"><span>🔈</span>Spooky sound<small id="lm-ambient-s"></small></button>
+      <button id="lm-bulbs" onclick="api('/api/lights/mode/bulbs',{enabled:!lmCur.bulbs})"><span>💡</span>A19 bulbs<small id="lm-bulbs-s"></small></button>
+    </div>
+  </div>
 </div>
 
 <!-- ─── RAIN ─── -->
@@ -2381,7 +2397,35 @@ async function saveWeatherConfig() {
 // ── One-tap Show Start ────────────────────────────────────────────────────────
 // ── Show mode + Lights-only mode ──────────────────────────────────────────────
 let lmCur = null;
+let lmTgt = 'both';
+const LM_PAIRS = ['skeleton', 'witch'];
+const LM_NAMES = { skeleton: 'Pair 1', witch: 'Pair 2' };
+const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse' };
+const LM_COLORS = [
+  ['Pumpkin', '#ff5a00'], ['Candy Corn', '#ffb000'], ['Blood Red', '#b00000'], ['Witch Purple', '#6400b4'],
+  ['Slime Green', '#39ff14'], ['Poison', '#00b450'], ['Ghost Teal', '#00f2fe'], ['Midnight', '#0a1aa0'],
+  ['Magenta', '#ff00c8'], ['Ember', '#c81e00'], ['Bone White', '#fff2d8'], ['Moon Blue', '#3c78ff'],
+];
 const hex2 = n => n.toString(16).padStart(2, '0');
+const toHex = c => '#' + hex2(c.r) + hex2(c.g) + hex2(c.b);
+const lmTargets = () => lmTgt === 'both' ? LM_PAIRS : [lmTgt];
+(() => {
+  const box = document.getElementById('lm-swatches');
+  box.innerHTML = LM_COLORS.map(([n, h]) => `<button data-hex="${h}" style="background:${h}" onclick="lmColor('${h}')">${n}</button>`).join('');
+})();
+function lmTarget(t) { lmTgt = t; if (lmCur) renderLightMode(lmCur); }
+async function lmSet(patch) { for (const p of lmTargets()) await api('/api/lights/mode/pair', { pair: p, ...patch }); }
+async function lmEffect(fx) {
+  if (fx === 'drift' || fx === 'coven') return api('/api/lights/mode/two-pair', { effect: fx });
+  await lmSet({ effect: fx, on: true });
+}
+async function lmColor(hex) {
+  // A colour means Steady, unless the chosen lights are already Breathing.
+  const breathing = lmCur && !lmCur.twoPair && lmTargets().every(p => lmCur.pairs[p].effect === 'breathe');
+  await lmSet({ color: hex, effect: breathing ? 'breathe' : 'color', on: true });
+}
+const lmBri = v => lmSet({ bri: v });
+const lmPower = on => lmSet({ on });
 function renderShowMode(mode) {
   const rain = mode === 'rain';
   document.getElementById('mode-normal').style.opacity = rain ? .45 : 1;
@@ -2392,37 +2436,31 @@ function renderShowMode(mode) {
 }
 function renderLightMode(st) {
   lmCur = st;
-  document.getElementById('lm-start').style.opacity = st.running ? 1 : .6;
-  document.getElementById('lm-status').textContent = st.running
-    ? `RUNNING${st.twoPair ? ' — ' + (st.twoPair === 'drift' ? 'Spirit Drift' : 'Coven Pulse') + ' on both pairs' : ''}${st.nextFlashAt ? ' · next storm flash ' + new Date(st.nextFlashAt).toLocaleTimeString() : ''}`
-    : 'Off. No AI, no mic — just the spotlights. Settings are saved.';
-  for (const k of ['skeleton', 'witch']) {
-    const p = st.pairs[k];
-    const on = document.getElementById(`lm-${k}-on`);
-    on.textContent = p.on ? 'ON' : 'OFF';
-    on.className = 'btn btn-sm ' + (p.on ? 'btn-green' : 'btn-red');
-    document.getElementById(`lm-${k}-ip`).textContent = (st.ips[k] || []).join(', ') || 'no IP set';
-    document.getElementById(`lm-${k}-color`).value = '#' + hex2(p.color.r) + hex2(p.color.g) + hex2(p.color.b);
-    const bri = document.getElementById(`lm-${k}-bri`);
-    if (document.activeElement !== bri) bri.value = p.bri;
-    document.getElementById(`lm-${k}-briv`).textContent = p.bri + '%';
-  }
-  document.querySelectorAll('.lm-fx').forEach(b => {
-    const sel = !st.twoPair && st.pairs[b.dataset.pair].effect === b.dataset.fx;
-    b.style.opacity = sel ? 1 : .45;
-    b.style.outline = sel ? '2px solid currentColor' : 'none';
-  });
-  for (const [id, fx] of [['lm-drift', 'drift'], ['lm-coven', 'coven']]) {
-    const b = document.getElementById(id);
-    b.style.opacity = st.twoPair === fx ? 1 : .45;
-    b.style.outline = st.twoPair === fx ? '2px solid currentColor' : 'none';
-  }
-  const tg = (id, on, label) => { const b = document.getElementById(id); b.textContent = `${label}: ${on ? 'ON' : 'OFF'}`; b.className = 'btn btn-sm ' + (on ? 'btn-green' : ''); };
-  tg('lm-storm', st.stormFlash, '⚡ STORM FLASH (12 MIN)');
-  tg('lm-ambient', st.ambient, '🔈 AMBIENT');
-  tg('lm-bulbs', st.bulbs, '💡 A19 BULBS');
+  const fxOf = p => st.twoPair || st.pairs[p].effect;
+  // Status: what each pair is doing right now
+  const line = p => {
+    const x = st.pairs[p];
+    const sw = (fxOf(p) === 'color' || fxOf(p) === 'breathe') ? ` <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${toHex(x.color)};vertical-align:middle"></span>` : '';
+    return `<b>${LM_NAMES[p]}</b>: ${x.on ? LM_FX[fxOf(p)] + sw + ' · ' + x.bri + '%' : 'off'}${(st.ips[p] || []).length ? '' : ' (no IP set)'}`;
+  };
+  document.getElementById('lm-status').innerHTML =
+    `${st.running ? '🟢 <b>Lights are running</b>' : '⚪ Lights mode is off — tap LIGHTS ON'}<br>${line('skeleton')}<br>${line('witch')}` +
+    (st.nextFlashAt ? `<br>⚡ next lightning ${new Date(st.nextFlashAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '');
+  document.querySelectorAll('#lm-target button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
+  const tg = lmTargets();
+  const same = (f) => tg.every(p => f(p) === f(tg[0])) ? f(tg[0]) : null;
+  const fx = same(fxOf);
+  document.querySelectorAll('#lm-effects button').forEach(b => b.classList.toggle('sel', b.dataset.fx === fx));
+  const col = same(p => toHex(st.pairs[p].color));
+  document.querySelectorAll('#lm-swatches button').forEach(b => b.classList.toggle('sel', !st.twoPair && b.dataset.hex === col && ['color', 'breathe'].includes(fx)));
+  if (col) document.getElementById('lm-custom').value = col;
+  const bri = document.getElementById('lm-bri');
+  const bv = same(p => st.pairs[p].bri) ?? st.pairs[tg[0]].bri;
+  if (document.activeElement !== bri) bri.value = bv;
+  document.getElementById('lm-briv').textContent = bv + '%';
+  const flag = (id, on) => { document.getElementById(id).classList.toggle('sel', !!on); document.getElementById(id + '-s').textContent = on ? 'ON' : 'off'; };
+  flag('lm-storm', st.stormFlash); flag('lm-ambient', st.ambient); flag('lm-bulbs', st.bulbs);
 }
-async function lmPair(pair, patch) { await api('/api/lights/mode/pair', { pair, ...patch }); }
 async function singleLightTest() {
   const r = await api('/api/lights/single-test');
   alert(r && r.supported ? 'Supported' : (r && r.reason) || 'Not supported');
