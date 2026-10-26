@@ -100,8 +100,55 @@ function createSkeletonLines({ llama, bible, guardrail, getStage, stageNames, lo
     return { character: id, line: null, stage, engine: 'llama', ms: Date.now() - t0 };
   }
 
+  // ── Background-cast group reaction (owner spec 2026-10-25) ────────────────
+  // ONE Llama call returns 1-2 reactions (Jasper and/or Edgar, ~20 words each)
+  // as structured JSON. Fixed short system prompt (prefix-cached); the stage,
+  // its NUMBER and both registers are filled in by code per call. The crowd's
+  // inner voice: they never talk to guests, they react to the hosts/Evelina.
+  const groupSystem = [
+    'You write reactions for two skeletons at Thornfield Cemetery on Halloween night, during the Hollow Storm. ' +
+    'They stand behind the hosts (Lily, and Bob the skeleton showman) and the witch Evelina, and react like the ' +
+    "crowd's inner voice: they never speak to guests directly.",
+    `Jasper: ${chars.jasper.c.personality} ${chars.jasper.c.speechStyle} He calls out storm stages by NUMBER.`,
+    `Edgar: ${chars.edgar.c.personality} ${chars.edgar.c.speechStyle} He mocks Jasper and jokes that the hosts are over-dramatic.`,
+    'Write 1 or 2 reactions, each under 20 words, as JSON. No stage directions, no quotation marks, no names inside the line. ' +
+    'If the register says Edgar is silent, leave him out.',
+    guardrail,
+    GRAVE_REINFORCEMENT,
+  ].filter(Boolean).join('\n\n');
+  const groupFormat = {
+    type: 'object',
+    properties: {
+      reactions: {
+        type: 'array', minItems: 1, maxItems: 2,
+        items: { type: 'object', properties: { who: { type: 'string', enum: ['jasper', 'edgar'] }, line: { type: 'string' } }, required: ['who', 'line'] },
+      },
+    },
+    required: ['reactions'],
+  };
+  const register = (id, stage) => (chars[id].c.stormStageRegister || {})[stage] || '';
+
   const api = {
     KINDS,
+    // [{ character, line }] — 1-2 skeletons reacting to `line` said by `to`.
+    async reactGroup({ to, line, stage = getStage(), stageNumber }) {
+      const who = { evelina: 'Evelina', lenora: 'Lenora', lily: 'Lily', bob: 'Bob' }[String(to).toLowerCase()] || to;
+      const user = `Storm stage ${stageNumber || (stageNames.indexOf(stage) + 1)} of ${stageNames.length}: ${stage}.\n` +
+        `Jasper's register now: ${register('jasper', stage)}\nEdgar's register now: ${register('edgar', stage)}\n` +
+        `${who} just said: "${String(line).slice(0, 300)}"\nReact.`;
+      const { text } = await llama.chat([{ role: 'system', content: groupSystem }, { role: 'user', content: user }],
+        { priority: llama.PRIORITY.reaction, maxTokens: 110, format: groupFormat });
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch (_) { return []; }
+      const out = [];
+      for (const r of (parsed.reactions || []).slice(0, 2)) {
+        const id = String(r.who || '').toLowerCase();
+        if (!chars[id] || out.some(o => o.character === id)) continue;
+        const clean = cleanLine(r.line, chars[id].c.name);
+        if (clean) out.push({ character: id, line: clean });
+      }
+      return out;
+    },
     systemPrompt: (id) => system[id],
 
     // Direct generation (test tab, or anything without a bank slot).
@@ -130,7 +177,7 @@ function createSkeletonLines({ llama, bible, guardrail, getStage, stageNames, lo
         if (stage === 'Grand Ritual' && id === 'edgar' && Math.random() < 0.7) id = 'jasper';
       }
       lastReactor = id;
-      const who = { evelina: 'Evelina', lenora: 'Lenora', lily: 'Lily' }[String(to).toLowerCase()] || to;
+      const who = { evelina: 'Evelina', lenora: 'Lenora', lily: 'Lily', bob: 'Bob' }[String(to).toLowerCase()] || to;
       return write(id, stage, `${who} just said: "${String(line).slice(0, 300)}"\nReact to it.`, llama.PRIORITY.reaction);
     },
 

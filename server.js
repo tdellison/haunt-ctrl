@@ -32,6 +32,21 @@ let settings = {
   lilyEnabled: false,   // mirrored from lily-config.json by the Lily controller
 };
 
+// ─── Show mode: normal | rain (owner spec 2026-10-26) ─────────────────────────
+// Rain = Lily (and Bob, if working) in the garage doorway; the yard props stay
+// out, so nothing routes lines to them and the A19 bulbs stay off. Picked the
+// day before; normal stays the default. Persisted per machine (gitignored).
+const SHOW_MODE_FILE = path.join(__dirname, 'show-mode.json');
+const SHOW_MODES = ['normal', 'rain'];
+const RAIN_SKIPPED = ['evelina', 'lenora', 'jasper', 'edgar'];
+let showMode = 'normal';
+try { const m = JSON.parse(fs.readFileSync(SHOW_MODE_FILE, 'utf8')).mode; if (SHOW_MODES.includes(m)) showMode = m; } catch (_) {}
+const isRainMode = () => showMode === 'rain';
+// Is this character out tonight? (Rain mode skips the yard props.)
+// Lights-only mode (lights/lightMode.js) — created with its routes below.
+let lightMode = null;
+const characterActive = (id) => !(isRainMode() && RAIN_SKIPPED.includes(String(id).toLowerCase()));
+
 // Lily controller (lily/index.js) — created in the Lily section below. Declared
 // up here so stateSnapshot() can read it before that section runs.
 let lily = null;
@@ -298,6 +313,7 @@ const SLOT_BASES = {
 
 // Group aliases — a behavior usually addresses a pair, not one fixture. Callers
 // keep using getSlotIds('skeleton') and it expands to both skeleton slots.
+const BULB_SLOTS = ['cauldron', 'monument'];
 const SLOT_GROUPS = {
   skeleton: ['skeletonLeft', 'skeletonRight'],
   witch:    ['witchMain', 'witchSecond'],
@@ -311,8 +327,11 @@ function getSlotIds(...slots) {
     if (SLOT_GROUPS[s]) expanded.push(...SLOT_GROUPS[s]);
     else expanded.push(s);
   }
+  // A19 bulbs aren't waterproof: in rain mode and lights-only mode they are
+  // skipped (flashes, spells, monument) unless switched on in the Lights panel.
+  const bulbsOff = (isRainMode() || (lightMode && lightMode.running)) && !(lightMode && lightMode.bulbs);
   // Dedupe: a tethered pair shares ONE controller IP - both slots resolve to the same device id.
-  return [...new Set(expanded.map(s => GOVEE_SLOT_IDS[s]).filter(Boolean))];
+  return [...new Set(expanded.filter(s => !(bulbsOff && BULB_SLOTS.includes(s))).map(s => GOVEE_SLOT_IDS[s]).filter(Boolean))];
 }
 
 // Set every configured slot to its base show look
@@ -1072,8 +1091,25 @@ function muteMics(ms, reason) {
   return state.micGate.mutedUntil;
 }
 
+// Every one-shot sound the show plays (character voices, skeleton/witch clips,
+// storm, phantoms — anything through spawnPlayer except looping beds) also
+// gates the guest mic while it plays + a 0.5 s tail, so no character ever
+// "hears" another character (or itself) as a guest. Lily's and Bob's own
+// Bluetooth speakers are covered by the talk loop, which stays deaf for its
+// whole turn (+ tail). The ambient bed loops all night and is excluded.
+const SPEECH_TAIL_MS = 500;
+let oneShotsPlaying = 0;
+let oneShotTailUntil = 0;
+function trackOneShot(proc) {
+  oneShotsPlaying++;
+  let done = false;
+  const end = () => { if (done) return; done = true; oneShotsPlaying = Math.max(0, oneShotsPlaying - 1); oneShotTailUntil = Date.now() + SPEECH_TAIL_MS; };
+  proc.on('exit', end); proc.on('error', end);
+  return proc;
+}
+
 function micsMuted() {
-  return Date.now() < (state.micGate.mutedUntil || 0);
+  return Date.now() < (state.micGate.mutedUntil || 0) || oneShotsPlaying > 0 || Date.now() < oneShotTailUntil;
 }
 
 function micGateSnapshot() {
@@ -1270,6 +1306,8 @@ function anyVlcRunning() {
 function stateSnapshot() {
   const strike = STRIKE_SEQUENCE[strikeIndex];
   return {
+    showMode,
+    lightsOnly:       !!(lightMode && lightMode.running),
     connected:        state.connected,
     fogActive:        state.fogActive,
     fogCooldownUntil: state.fogCooldownUntil || 0,
@@ -1640,6 +1678,10 @@ const CHARACTERS = [
   // PIR-sensed presence only. (2026: the only guest-facing mic feeds Lily, the MC.)
   { id:'jasper',  name:'Jasper Bones',  zone:'z1', channel:'left',  hasMic:false, isStatic:false, voiceId:null },
   { id:'edgar',   name:'Edgar Rattle',  zone:'z1', channel:'right', hasMic:false, isStatic:false, voiceId:null },
+  // Bob (Ultra Skelly), second host beside Lily (2026). His own Bluetooth
+  // speaker is hooked up when his hardware is ready; until then his voice
+  // plays centred on the skeleton zone.
+  { id:'bob',     name:'Bob',           zone:'z1', channel:'center', hasMic:false, isStatic:false, voiceId:null },
   // future 5th character: add an entry here + a CHARACTER_BIBLE.characters entry + voiceId. No structural changes needed.
 ];
 
@@ -2833,13 +2875,15 @@ function spawnPlayer(file, { loop = false, zone = null, lavfi = false } = {}, op
   if (zone === 'all' && !IS_WINDOWS && PLAYER.kind === 'ffplay') {
     const sinks = [...new Set(ROUTED_ZONES.map(zoneSinkName).filter(Boolean))];
     if (sinks.length > 1) {
-      return new MultiPlayer(sinks.map(sink => spawn(playerBin(), playerArgs(file, { loop, lavfi }), {
+      const mp = new MultiPlayer(sinks.map(sink => spawn(playerBin(), playerArgs(file, { loop, lavfi }), {
         ...opts, env: { ...AUDIO_ENV, SDL_AUDIODRIVER: 'pulseaudio', PULSE_SINK: sink },
       })));
+      return loop ? mp : trackOneShot(mp);
     }
     zone = null;
   }
-  return spawn(playerBin(), playerArgs(file, { loop, zone, lavfi }), { ...opts, env: playerEnv(zone) });
+  const proc = spawn(playerBin(), playerArgs(file, { loop, zone, lavfi }), { ...opts, env: playerEnv(zone) });
+  return loop ? proc : trackOneShot(proc);
 }
 
 loadZoneRouting();
@@ -3645,6 +3689,11 @@ async function prepareCharacterVoice(id, line) {
 }
 
 async function playCharacterVoice(v, { trigger = 'scripted', engine = null, context = null } = {}) {
+  if (!characterActive(v.c.id)) {
+    broadcastLog(`${v.c.name} is out tonight (rain mode) — line skipped`, 'SYSTEM');
+    for (const f of [v.mp3, v.wav]) try { fs.unlinkSync(f); } catch (_) {}
+    return { character: v.c.id, line: null, skipped: 'rain mode' };
+  }
   logDialogue({ character: v.c.id, line: v.text, trigger, engine, context });
   broadcastLog(`${v.c.name}: "${v.text}"`, 'AUDIO');
   try {
@@ -3665,6 +3714,8 @@ async function speakCharacter(id, line, opts = {}) {
 // Llama line written + voiced) and PLAYED after Lily finishes — one voice at a
 // time, never overlapping (Lily's mic stays deaf until the chain ends).
 const EVELINA_REACT_CHANCE = 0.6;   // ordinary lines; big beats always
+const HOST_TURN_CAP_MS = 35000;     // one turn (hosts + Evelina + skeletons) never runs longer
+const LLAMA_GRACE_MS = 2500;        // skeleton reply late by more than this → banked line
 const SKELETON_FOLLOW_CHANCE = 0.5; // after Evelina; on next = "skeleton" always
 
 // Evelina's spell tag → the existing spell lights, with the existing
@@ -3682,20 +3733,29 @@ function castEvelinaSpell(key) {
 
 const lilyChain = {
   prepare(choice, stage) {
+    if (isRainMode()) return null;      // garage show: no Evelina / skeleton follow-ups
     const big = !!choice.big_beat;
     const evelinaLine = String(choice.evelina || '').trim();
-    const evelinaOn = !!evelinaLine && (choice.next === 'evelina' || big) && (big || Math.random() < EVELINA_REACT_CHANCE);
+    // Evelina plays whenever Claude wrote her a line: always on big beats or a
+    // next = "evelina" handoff, otherwise by chance (she doesn't react to every line).
+    const evelinaOn = !!evelinaLine && (big || choice.next === 'evelina' || Math.random() < EVELINA_REACT_CHANCE);
     const skeletonOn = choice.next === 'skeleton' || (evelinaOn && (big || Math.random() < SKELETON_FOLLOW_CHANCE));
     const h = { stage, spell: choice.spell, evelinaLine: evelinaOn ? evelinaLine : null };
     h.evelina = evelinaOn ? prepareCharacterVoice('evelina', evelinaLine).catch(e => { broadcastLog(`Evelina voice failed: ${e.message}`, 'SYSTEM'); return null; }) : null;
+    // Background cast: one Llama reactor, voiced as soon as it lands. Reacting to Evelina if she speaks, else to the host line.
+    // ONE skeleton, plain text (~4 s on this CPU). The two-skeleton JSON call
+    // measured 12-15 s and missed every turn (2026-10-25).
     h.skeleton = skeletonOn ? skeletonLines.react({
         to: evelinaOn ? 'evelina' : 'lily', line: evelinaOn ? evelinaLine : choice.line, stage })
-      .then(r => r.line ? prepareCharacterVoice(r.character, r.line).then(v => ({ v, context: evelinaOn ? evelinaLine : choice.line })) : null)
-      .catch(e => { broadcastLog(`Skeleton reaction failed: ${e.message}`, 'SYSTEM'); return null; }) : null;
+      .then(r => (r && r.line ? [{ character: r.character, line: r.line }] : []))
+      .then(list => Promise.all(list.map(r => prepareCharacterVoice(r.character, r.line).then(v => ({ v, context: evelinaOn ? evelinaLine : choice.line })))))
+      .catch(e => { broadcastLog(`Skeleton reaction failed: ${e.message}`, 'SYSTEM'); return []; }) : null;
+    h.startedAt = Date.now();
     return h;
   },
   async play(h) {
     if (h.evelina) {
+      if (Date.now() - h.startedAt > HOST_TURN_CAP_MS) { broadcastLog('Turn over its time cap — follow-ups skipped', 'SYSTEM'); return; }
       const v = await h.evelina;
       if (v) {
         castEvelinaSpell(h.spell);
@@ -3703,8 +3763,21 @@ const lilyChain = {
       }
     }
     if (h.skeleton) {
-      const s2 = await h.skeleton;
-      if (s2) await playCharacterVoice(s2.v, { trigger: 'cross_character', engine: 'llama', context: s2.context });
+      if (Date.now() - h.startedAt > HOST_TURN_CAP_MS) { broadcastLog('Turn over its time cap — skeletons skipped', 'SYSTEM'); return; }
+      // Llama gets ~2.5 s of grace once it's their turn; if it's still writing,
+      // a pre-written bank line plays instead and the late reply is dropped.
+      const ready = await Promise.race([h.skeleton, new Promise(r => setTimeout(() => r('late'), LLAMA_GRACE_MS))]);
+      if (ready === 'late') {
+        const who = Math.random() < 0.5 ? 'jasper' : 'edgar';
+        const banked = skeletonLines.take({ character: who, kind: 'banter' });
+        broadcastLog(`Llama late — ${who} plays a banked line`, 'SYSTEM');
+        if (banked) {
+          try { await playCharacterVoice(await prepareCharacterVoice(who, banked.line), { trigger: 'cross_character', engine: 'llama', context: 'banked fallback' }); }
+          catch (e) { broadcastLog(`Banked line failed: ${e.message}`, 'SYSTEM'); }
+        }
+        return;
+      }
+      for (const s2 of ready || []) await playCharacterVoice(s2.v, { trigger: 'cross_character', engine: 'llama', context: s2.context });
     }
   },
 };
@@ -3719,6 +3792,7 @@ const EVELINA_COVER_LINES = [
 ];
 let coverIdx = 0;
 async function evelinaCover() {
+  if (isRainMode()) return;             // she isn't out in rain mode
   const line = EVELINA_COVER_LINES[coverIdx++ % EVELINA_COVER_LINES.length];
   try { await speakCharacter('evelina', line, { trigger: 'scripted', context: 'lily speaker dropped' }); }
   catch (e) { broadcastLog(`Evelina cover failed: ${e.message}`, 'SYSTEM'); }
@@ -3780,6 +3854,7 @@ process.on('exit', () => lilyCamera.stop());   // never leave its ffmpeg holding
 // Lily conversation: hear a guest, answer with one of her own stored clips.
 const lilyTalk = require('./lily/talk').createTalk({
   lily,
+  isRainMode,
   log: (m) => broadcastLog(`Lily talk: ${m}`, 'SYSTEM'),
   logDialogue,
   micsMuted,
@@ -3798,6 +3873,11 @@ const lilyTalk = require('./lily/talk').createTalk({
   getStage: () => (STRIKE_SEQUENCE[strikeIndex] || STRIKE_SEQUENCE[0]).name,
   chain: lilyChain,
   onLilyDrop: () => evelinaCover(),
+  // Bob's voice: prepared in parallel with Lily's, played one at a time.
+  speakBob: {
+    prepare: (text) => prepareCharacterVoice('bob', text).catch(e => { broadcastLog(`Bob voice failed: ${e.message}`, 'SYSTEM'); return null; }),
+    play: async (h, heard) => { const v = await h; if (v) await playCharacterVoice(v, { trigger: heard && !heard.startsWith('(') ? 'guest_mic' : 'proactive', engine: 'claude', context: heard }); },
+  },
   seeGuests: () => lilyCamera.look(),
   // Her speaker not connected yet: speak through the witch zone instead.
   playFallback: (file) => new Promise((resolve) => {
@@ -3842,6 +3922,7 @@ app.post('/api/lily/talk/say',     lilyRoute(async ({ text }) => lilyTalk.say(te
 app.post('/api/lily/talk/reset',   lilyRoute(async () => lilyTalk.resetConversation()));
 app.post('/api/lily/talk/mode',    lilyRoute(async ({ mode }) => lilyTalk.setMode(mode)));
 app.post('/api/lily/talk/greet',   lilyRoute(async () => lilyTalk.greet()));
+app.post('/api/lily/talk/bob',     lilyRoute(async ({ enabled }) => lilyTalk.setBob(enabled)));
 app.post('/api/lily/talk/prepare-greeting', lilyRoute(async () => { await lilyTalk.prepareGreeting(); return lilyTalk.status(); }));
 app.post('/api/lily/talk/speak',   lilyRoute(async ({ text, tone }) => lilyTalk.speak(text, tone)));
 app.post('/api/lily/talk/clip',    lilyRoute(async ({ serial, text }) => lilyTalk.setClipText(Number(serial), text)));
@@ -3993,8 +4074,60 @@ app.post('/api/fog/kill', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Lights-only mode + show mode routes (owner spec 2026-10-26) ──────────────
+const pairIps = (pair) => [...new Set((SLOT_GROUPS[pair] || []).map(s => GOVEE_IPS[s]).filter(Boolean))];
+lightMode = require('./lights/lightMode').createLightMode({
+  file: path.join(__dirname, 'light-mode.json'),
+  pairIps,
+  bulbIps: () => [...new Set(BULB_SLOTS.map(s => GOVEE_IPS[s]).filter(Boolean))],
+  send: goveeSend,
+  queued: (ip) => (goveeQueues[ip] ? goveeQueues[ip].q.length + (goveeQueues[ip].busy ? 1 : 0) : 0),
+  log: (m) => broadcastLog(m, 'LIGHT'),
+  onChange: () => broadcast({ type: 'lightMode', data: lightMode.status() }),
+  beforeStart: () => {
+    if (state.showActive) throw new Error('End the show first — Lights-only mode is for non-show nights');
+    stopEffects();                       // the show's living effects would fight it
+    try { lilyTalk.stop(); } catch (_) {} // no AI: Lily stops listening
+  },
+  ambient: { start: startAmbientLoop, stop: stopAmbientLoop },
+});
+
+const lightRoute = (fn) => async (req, res) => {
+  try { res.json({ ok: true, lights: await fn(req.body || {}) }); }
+  catch (e) { res.status(409).json({ error: e.message }); }
+};
+app.get('/api/lights/mode', (req, res) => res.json({ ok: true, lights: lightMode.status() }));
+app.post('/api/lights/mode/start', lightRoute(() => lightMode.start()));
+app.post('/api/lights/mode/stop', lightRoute(() => lightMode.stop()));
+app.post('/api/lights/mode/pair', lightRoute(({ pair, ...patch }) => lightMode.setPair(pair, patch)));
+app.post('/api/lights/mode/two-pair', lightRoute(({ effect }) => lightMode.setTwoPair(effect)));
+app.post('/api/lights/mode/all-off', lightRoute(() => lightMode.allOff()));
+app.post('/api/lights/mode/storm', lightRoute(({ enabled }) => lightMode.setStormFlash(enabled)));
+app.post('/api/lights/mode/flash', lightRoute(() => lightMode.flashNow()));
+app.post('/api/lights/mode/bulbs', lightRoute(({ enabled }) => lightMode.setBulbs(enabled)));
+app.post('/api/lights/mode/ambient', lightRoute(({ enabled }) => lightMode.setAmbient(enabled)));
+// Single light test: Govee's LAN API (turn / brightness / colorwc / devStatus)
+// addresses a whole controller, and a tethered pair is ONE controller on one
+// IP — there is no per-light (or per-segment) command. Not supported, so
+// Shadow Sway / Looming Monster stay hidden.
+app.post('/api/lights/single-test', (req, res) => res.json({ ok: true, supported: false,
+  reason: "Not supported: Govee's local (LAN) control only takes on/off, brightness and colour for the whole controller, and each pair is one controller on one IP." }));
+
+app.get('/api/mode', (req, res) => res.json({ ok: true, mode: showMode, skipped: isRainMode() ? RAIN_SKIPPED : [] }));
+app.post('/api/mode', (req, res) => {
+  const mode = String(req.body?.mode || '');
+  if (!SHOW_MODES.includes(mode)) return res.status(400).json({ error: `mode must be ${SHOW_MODES.join(' or ')}` });
+  showMode = mode;
+  try { fs.writeFileSync(SHOW_MODE_FILE, JSON.stringify({ mode })); } catch (e) { broadcastLog(`show mode save failed: ${e.message}`, 'SYSTEM'); }
+  try { lilyTalk.resetConversation(); } catch (_) {}   // her conversation restarts with the new setting
+  broadcastLog(mode === 'rain' ? 'RAIN MODE ON — Lily only; Evelina, Lenora, Jasper, Edgar and the A19 bulbs are out' : 'Normal show mode', 'SYSTEM');
+  broadcastState();
+  res.json({ ok: true, mode });
+});
+
 app.post('/api/allstop', async (req, res) => {
   lilySafeStop();
+  lightMode.stop({ lightsOff: false });
   broadcastLog('ALL STOP', 'SYSTEM');
   stopEffects();
   state.paused = false;
@@ -4358,7 +4491,8 @@ app.get('/api/context', (req, res) => {
 
 // ─── One-tap Show Start / Stop — Phase 2 ──────────────────────────────────────
 app.post('/api/show/start', async (req, res) => {
-  broadcastLog('SHOW START sequence initiated', 'SYSTEM');
+  if (lightMode.running) lightMode.stop({ lightsOff: false });
+  broadcastLog(`SHOW START sequence initiated${isRainMode() ? ' — RAIN MODE (Lily only, yard props out)' : ''}`, 'SYSTEM');
 
   // 1. Fog machine warmup (4 min) — does NOT auto-burst until warmup completes.
   // Llama warm-up at Start Show, so the first skeleton line of the night
@@ -4904,6 +5038,7 @@ app.get('/api/system/info', (req, res) => {
 
 app.post('/api/strikedown', async (req, res) => {
   lilySafeStop();
+  lightMode.stop({ lightsOff: false });
   broadcastLog('STRIKE DOWN — lights to white, all else stopping', 'SYSTEM');
   // Stop all timers (effects first so loops don't fight the final white)
   stopEffects();

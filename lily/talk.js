@@ -146,7 +146,34 @@ function systemPrompt(clips, guardrail) {
 // the ONLY character who talks to the crowd. Evelina reacts to Lily (Lily's
 // Claude call writes Evelina's reaction too, plus a handoff tag); Jasper and
 // Edgar react after, on Llama. The storm stage is passed with every turn.
-function voicePrompt(guardrail) {
+// Bob (Ultra Skelly) — second host, owner spec 2026-10-25. Only included when
+// he is switched on (settings.bob), so the prompt never mentions a host who
+// isn't there.
+const BOB_PROMPT = [
+  'CO-HOST BOB: Bob is a skeleton showman standing beside you — loud, theatrical, the counterweight to your dry ' +
+  'watchfulness. He breaks the fourth wall, jokes about a guest\'s costume, then pivots to a booming threat; he ' +
+  'mocks Jasper\'s panic, steps on Edgar\'s punchlines, and pushes a big crowd along. He was the first body ' +
+  'buried in Thornfield (1724), the judge who bound your coven 300 years ago; the Hollow Storm trapped his soul in ' +
+  'his bones and made him its master of ceremonies. He passes "sentence" on guests; the Grand Ritual is his "trial".',
+  'Bob KNOWS what lies in the unmarked grave and keeps it sealed: he only HINTS, never confirms, his hints contradict ' +
+  'each other, and he NEVER states any link between you and that grave. Kid-safe: he never singles out a child\'s ' +
+  'fear — around small children he softens or goes quiet.',
+  'Write Bob\'s line in "bob" (one or two short punchy sentences) or leave it empty. You answer guests first ' +
+  '(lead = "lily") and hand to Bob when it suits; if a guest speaks to Bob BY NAME, set lead = "bob" and let him ' +
+  'answer first — your line then plays AFTER his, so react to what Bob just said (or leave it empty). ' +
+  'The two of you can talk to each other. ' +
+  'Bob never talks over you — one voice at a time.',
+].join('\n\n');
+
+// Rain mode (owner spec 2026-10-26): the show runs small from the garage
+// doorway. Placed after everything else so it overrides the yard cast above.
+const RAIN_PROMPT =
+  'TONIGHT IT IS RAINING: you are holding court from the garage doorway, sheltering from the storm. Evelina, ' +
+  'Lenora, Jasper and Edgar are NOT out tonight — never hand off to them, never describe them as present or ' +
+  'react to them; you may say they are sheltering from the rain. Always leave evelina empty, next = "none", ' +
+  'spell = "none". You carry the show: greet trick-or-treaters, talk with them, keep it lively and kid-safe.';
+
+function voicePrompt(guardrail, withBob = false, rain = false) {
   return [
     'You are Lethal Lily, the MC and Ringmaster of Thornfield Cemetery (est. 1724) on Halloween night, during ' +
     'the Hollow Storm. You are the ONLY one who speaks directly to the guests. Like a theatrical ringmaster you ' +
@@ -168,6 +195,8 @@ function voicePrompt(guardrail) {
     'EVELINA: also write Evelina\'s short reaction to YOUR line (under 20 words, her voice: confident, theatrical, ' +
     'a little vain), or leave it empty. Evelina never answers guests herself — she reacts to you and to the moment. ' +
     'Set next = "evelina" when she should react, "skeleton" to hand straight to the skeletons, or "none". ' +
+    'Keep the yard lively: hand off (next = "evelina" or "skeleton") on roughly HALF your lines, and usually write ' +
+    'Evelina a reaction even when you don\'t hand to her. ' +
     'Set big_beat = true for important moments (a spell, a scolding, the ritual nearing). If Evelina\'s reaction ' +
     'casts a spell, name it in spell (binding, calling, unraveling, memory), else "none" — spells are occasional.',
     'Pick your lantern mood: calm (friendly), wary (uneasy, suspicious), ward (protective flare — threats, ' +
@@ -178,6 +207,8 @@ function voicePrompt(guardrail) {
     'angry (scolding), whisper, ominous (storm warnings) — strong tones sparingly.',
     'Never reveal, hint at, or speculate about Lenora\'s secret or who lies in the unmarked grave — that truth ' +
     'stays unspoken, by you and by Evelina.',
+    withBob ? BOB_PROMPT : '',
+    rain ? RAIN_PROMPT : '',
     guardrail || '',
   ].filter(Boolean).join('\n\n');
 }
@@ -232,8 +263,10 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   getStage = () => 'Distant', // current storm stage name
   chain = null,              // { prepare(choice, stage), play(handle) } — Evelina + skeleton follow-ups
   onLilyDrop = null,         // () => Promise — Evelina covers while Lily's speaker is unreachable
-  seeGuests = null }) {      // () => Promise<string|null> — her camera: what the guests are wearing
-  let settings = { mode: 'voice' };
+  seeGuests = null,         // () => Promise<string|null> — her camera: what the guests are wearing
+  speakBob = null,           // { prepare(text, tone) -> handle, play(handle, heard) } — Bob's voice
+  isRainMode = () => false }) { // rain mode: garage show, yard cast out
+  let settings = { mode: 'voice', bob: false };   // bob: co-host on/off (off until his hardware is ready)
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch (_) {}
   const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (_) {} };
   let clips = [];
@@ -324,7 +357,14 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     required: ['line', 'evelina', 'next', 'big_beat', 'spell', 'tone', 'lantern', 'move'],
     additionalProperties: false,
   };
-  const schema = () => settings.mode === 'voice' ? voiceSchema : ({
+  const bobSchema = () => {
+    const sch = JSON.parse(JSON.stringify(voiceSchema));
+    sch.properties.lead = { type: 'string', enum: ['lily', 'bob'] };
+    sch.properties.bob = { type: 'string' };
+    sch.required = [...sch.required, 'lead', 'bob'];
+    return sch;
+  };
+  const schema = () => settings.mode === 'voice' ? (settings.bob ? bobSchema() : voiceSchema) : ({
     type: 'object',
     properties: {
       clip: { type: 'integer', enum: [0, ...clips.map(c => c.serial)] },
@@ -345,7 +385,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       model: MODEL,
       max_tokens: 512,
       output_config: { format: { type: 'json_schema', schema: schema() } },
-      system: [{ type: 'text', text: settings.mode === 'voice' ? voicePrompt(guardrail) : systemPrompt(clips, guardrail),
+      system: [{ type: 'text', text: settings.mode === 'voice' ? voicePrompt(guardrail, !!(settings.bob && speakBob), isRainMode()) : systemPrompt(clips, guardrail),
         cache_control: { type: 'ephemeral' } }],
       messages,
     });
@@ -391,7 +431,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
           // Owner decision #1: Evelina covers in character while Lily is gone;
           // the speaker watchdog keeps trying to reconnect her.
           log(`her speaker unavailable (${e.message}) — Evelina covers`);
-          if (onLilyDrop) { await onLilyDrop(); return 'evelina covered'; }
+          if (onLilyDrop && !isRainMode()) { await onLilyDrop(); return 'evelina covered'; }
           if (!playFallback) throw e;
           await playFallback(file);
         }
@@ -408,16 +448,26 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   // Act out a choice: lantern, then movement for the clip's length, then clip.
   async function perform(choice, heard) {
     if (settings.mode === 'voice') {
-      const line = String(choice.line || '').replace(/\*[^*]*\*/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!line) { set({ lastReply: { heard, text: '(stayed silent)' } }); return; }
-      set({ lastReply: { heard, text: line, lantern: choice.lantern, move: choice.move, evelina: choice.evelina, next: choice.next } });
-      logDialogue({ character: 'lily', line, trigger: heard.startsWith('(') ? 'proactive' : 'guest_mic', context: heard, engine: 'claude',
+      // Keep *emphasised* words — drop only the asterisks (removing the whole
+      // span once turned "you should be *terrified*" into "you should be .").
+      const tidy = (t) => String(t || '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim();
+      const line = tidy(choice.line);
+      const bobLine = settings.bob && speakBob ? tidy(choice.bob) : '';
+      const bobFirst = !!bobLine && choice.lead === 'bob';
+      if (!line && !bobLine) { set({ lastReply: { heard, text: '(stayed silent)' } }); return; }
+      set({ lastReply: { heard, text: line, bob: bobLine || undefined, lead: bobFirst ? 'bob' : 'lily', lantern: choice.lantern, move: choice.move, evelina: choice.evelina, next: choice.next } });
+      // Bob's voice starts generating now, in parallel with Lily's; one voice
+      // at a time — whoever leads speaks first, the other follows.
+      const bobH = bobLine ? speakBob.prepare(bobLine, choice.tone) : null;
+      if (bobFirst) await speakBob.play(bobH, heard);
+      if (line) logDialogue({ character: 'lily', line, trigger: heard.startsWith('(') ? 'proactive' : 'guest_mic', context: heard, engine: 'claude',
         extra: { mode: 'voice', lantern: choice.lantern, move: choice.move, next: choice.next, bigBeat: choice.big_beat } });
       // The next speakers start preparing NOW (Evelina's voice, the skeleton's
       // Llama line) so they are ready the moment Lily finishes.
-      const handle = chain ? chain.prepare({ ...choice, line }, getStage()) : null;
-      const where = await speakLine(line, choice);
+      const handle = chain ? chain.prepare({ ...choice, line: line || bobLine }, getStage()) : null;
+      const where = line ? await speakLine(line, choice) : 'bob only';
       set({ lastReply: { ...status.lastReply, where } });
+      if (bobLine && !bobFirst && where !== 'evelina covered') await speakBob.play(bobH, heard);
       if (handle && where !== 'evelina covered') {
         try { await chain.play(handle); } catch (e) { log(`follow-up failed: ${e.message}`); }
       }
@@ -566,7 +616,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
 
   const api = {
     status: () => ({
-      ...status, mode: settings.mode, clips: clips.length, model: MODEL, hasKey: !!getApiKey(),
+      ...status, mode: settings.mode, bob: !!settings.bob, clips: clips.length, model: MODEL, hasKey: !!getApiKey(),
       hasVoiceKey: !!getElevenKey(), voiceId: getVoiceId() || null,
     }),
     setMode(mode) {
@@ -618,6 +668,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     },
 
     // Voice test with no Claude call: say exactly this text in her voice.
+    setBob(on) { settings.bob = !!on; saveSettings(); history.length = 0; set({}); return api.status(); },
     tones: Object.keys(TONES),
     async speak(text, tone = 'normal') {
       if (busy) throw new Error('Lily is still answering');

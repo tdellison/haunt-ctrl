@@ -70,16 +70,16 @@ function createLlama({ log = console.log } = {}) {
     });
   }
 
-  async function call(messages, { maxTokens = 48, temperature = 0.9, signal } = {}) {
+  async function call(messages, { maxTokens = 48, temperature = 0.9, signal, format } = {}) {
     const t0 = Date.now();
     const r = await fetch(`${HOST}/api/chat`, {
       method: 'POST',
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000),
       body: JSON.stringify({
-        model: MODEL, stream: false, keep_alive: -1,
+        model: MODEL, stream: false, keep_alive: -1, ...(format ? { format } : {}),
         // 4 threads (owner spec 2026-10-12): leaves cores for whisper, ffmpeg
         // and the server instead of letting Llama take all 6.
-        options: { num_predict: maxTokens, temperature, num_thread: 4 },
+        options: { num_predict: maxTokens, temperature, num_thread: 4, num_ctx: 2048 },
         messages,
       }),
     });
@@ -104,8 +104,8 @@ function createLlama({ log = console.log } = {}) {
       } catch (e) { lastError = e.message; log(`Llama warm-up failed: ${e.message}`); return false; }
     },
     // messages: [{role, content}], priority: PRIORITY.*
-    chat(messages, { priority = PRIORITY.live, maxTokens, temperature } = {}) {
-      return enqueue(priority, (signal) => call(messages, { maxTokens, temperature, signal })).catch((e) => {
+    chat(messages, { priority = PRIORITY.live, maxTokens, temperature, format } = {}) {
+      return enqueue(priority, (signal) => call(messages, { maxTokens, temperature, signal, format })).catch((e) => {
         if (e.name !== 'AbortError') lastError = e.message;
         throw e;
       });

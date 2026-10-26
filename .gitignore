@@ -12,3 +12,5 @@ greeter/team/
 greeter/.venv/
 greeter/models/
 lily-camera.json
+light-mode.json
+show-mode.json
