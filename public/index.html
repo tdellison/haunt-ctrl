@@ -739,6 +739,8 @@ html, body { touch-action: manipulation; }
 .lily-dot.on { background:var(--green); box-shadow:0 0 10px var(--green); }
 .lily-dot.part { background:var(--amber); }
 .tab[data-pane="test"].active  { color:var(--blue);  border-bottom-color:var(--blue);  background:rgba(79,195,247,.06);  text-shadow:0 0 10px var(--gb); }
+.tab[data-pane="lights"].active { color:var(--orange); border-bottom-color:var(--orange); background:rgba(255,130,0,.06); }
+.tab[data-pane="rain"].active { color:var(--blue); border-bottom-color:var(--blue); background:rgba(79,195,247,.06); }
 
 /* ── Storm panel blue theme ── */
 .panel-storm { border-color:rgba(79,195,247,.3) !important; }
@@ -867,6 +869,8 @@ body::before { animation:scanlines 10s linear infinite; }
 <!-- ══ TABS ══ -->
 <div class="tabs">
   <div class="tab active" data-pane="show">🎃 SHOW</div>
+  <div class="tab" data-pane="lights">💡 LIGHTS</div>
+  <div class="tab" data-pane="rain">🌧 RAIN</div>
   <div class="tab" data-pane="test">🧪 TEST</div>
   <div class="tab" data-pane="lily">🏮 LILY</div>
   <div class="tab" data-pane="setup">⚙ SETUP</div>
@@ -875,25 +879,8 @@ body::before { animation:scanlines 10s linear infinite; }
 <!-- ══ CONTENT ══ -->
 <div class="content">
 
-<!-- ─── SHOW ─── -->
-<div class="pane active" id="pane-show">
-
-  <!-- One-tap Show Start -->
-  <div class="panel">
-    <button class="btn btn-green btn-full btn-lg" id="show-start-btn" onclick="toggleShow()">▶ START SHOW</button>
-    <div id="show-elapsed" style="font-size:.7em;color:var(--dim2);letter-spacing:1px;margin-top:8px;text-align:center;display:none"></div>
-  </div>
-
-  <!-- Show mode: normal / rain (owner spec 2026-10-26) -->
-  <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🌧</span>Show Mode</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-green btn-sm" id="mode-normal" style="flex:1" onclick="api('/api/mode',{mode:'normal'})">🎃 NORMAL</button>
-      <button class="btn btn-blue btn-sm" id="mode-rain" style="flex:1" onclick="if(confirm('Rain mode: Lily only (plus Bob if on). Evelina, Lenora, Jasper, Edgar and the A19 bulbs stay out. Switch?'))api('/api/mode',{mode:'rain'})">🌧 RAIN</button>
-    </div>
-    <div id="mode-note" style="font-size:.68em;color:var(--dim2);margin-top:8px"></div>
-  </div>
-
+<!-- ─── LIGHTS ─── -->
+<div class="pane" id="pane-lights">
   <!-- Lights-only mode (owner spec 2026-10-26): no AI, manual start -->
   <div class="panel" id="lm-panel">
     <div class="panel-title"><span class="pt-icon">💡</span>Lights Only</div>
@@ -953,6 +940,31 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-sm" id="lm-ambient" onclick="api('/api/lights/mode/ambient',{enabled:!lmCur.ambient})">🔈 AMBIENT: OFF</button>
       <button class="btn btn-sm" id="lm-bulbs" onclick="api('/api/lights/mode/bulbs',{enabled:!lmCur.bulbs})">💡 A19 BULBS: OFF</button>
     </div>
+  </div>
+
+</div>
+
+<!-- ─── RAIN ─── -->
+<div class="pane" id="pane-rain">
+  <!-- Show mode: normal / rain (owner spec 2026-10-26) -->
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌧</span>Rain Mode</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-green btn-sm" id="mode-normal" style="flex:1" onclick="api('/api/mode',{mode:'normal'})">🎃 NORMAL</button>
+      <button class="btn btn-blue btn-sm" id="mode-rain" style="flex:1" onclick="if(confirm('Rain mode: Lily only (plus Bob if on). Evelina, Lenora, Jasper, Edgar and the A19 bulbs stay out. Switch?'))api('/api/mode',{mode:'rain'})">🌧 RAIN</button>
+    </div>
+    <div id="mode-note" style="font-size:.68em;color:var(--dim2);margin-top:8px"></div>
+  </div>
+
+</div>
+
+<!-- ─── SHOW ─── -->
+<div class="pane active" id="pane-show">
+
+  <!-- One-tap Show Start -->
+  <div class="panel">
+    <button class="btn btn-green btn-full btn-lg" id="show-start-btn" onclick="toggleShow()">▶ START SHOW</button>
+    <div id="show-elapsed" style="font-size:.7em;color:var(--dim2);letter-spacing:1px;margin-top:8px;text-align:center;display:none"></div>
   </div>
 
   <!-- Zone level indicators (read-only) -->
