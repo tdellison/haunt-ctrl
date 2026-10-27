@@ -943,10 +943,9 @@ body::before { animation:scanlines 10s linear infinite; }
     <div class="lm-grid lm-grid2" id="lm-seg-themes">
       <button data-fx="blood" onclick="lmEffect('blood')"><span>🩸</span>Blood &amp; Lightning</button>
       <button data-fx="ecto" onclick="lmEffect('ecto')"><span>🟢</span>Ghost Drift<small>wave rolls light 1 → 4</small></button>
-      <button data-fx="sway" onclick="lmEffect('sway')"><span>↔️</span>Shadow Sway<small>shadows creep side to side</small></button>
-      <button data-fx="loom" onclick="lmEffect('loom')"><span>👹</span>Looming Monster<small>shadows grow, then shrink</small></button>
+      <button data-fx="sway" onclick="lmEffect('sway')"><span>↔️</span>Shadow Sway<small>cyan sways between lights 2 &amp; 3</small></button>
+      <button data-fx="loom" onclick="lmEffect('loom')"><span>👹</span>Looming Monsters<small>purple, random lime surges</small></button>
     </div>
-    <div style="font-size:.68em;color:var(--dim2);margin-top:8px">Shadow Sway and Looming Monster use each light's color — pick colors first (step 3), then the theme.</div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-sm" style="flex:2" onclick="lmSingleTest()">🔦 TEST: CAN EACH LIGHT GO SOLO?</button>
       <button class="btn btn-sm" style="flex:1" onclick="lmFlip()">⇄ FLIP DIRECTION</button>
@@ -2428,7 +2427,7 @@ let lmCur = null;
 let lmTgt = 'both';
 const LM_PAIRS = ['skeleton', 'witch'];
 const LM_NAMES = { skeleton: 'Pair 1', witch: 'Pair 2' };
-const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift', sway: 'Shadow Sway', loom: 'Looming Monster' };
+const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift', sway: 'Shadow Sway', loom: 'Looming Monsters' };
 const LM_THEMES = ['blood', 'ecto', 'sway', 'loom'];
 const LM_COLORS = [
   ['Pumpkin', '#ff5a00'], ['Candy Corn', '#ffb000'], ['Blood Red', '#b00000'], ['Witch Purple', '#6400b4'],
@@ -2484,7 +2483,7 @@ function renderLightMode(st) {
   const line = (k, name, hasIp) => {
     const x = lmCfg(k);
     const fx = fxOf(k);
-    const sw = (fx === 'color' || fx === 'breathe' || fx === 'sway' || fx === 'loom') ? ` <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${toHex(x.color)};vertical-align:middle"></span>` : '';
+    const sw = (fx === 'color' || fx === 'breathe') ? ` <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${toHex(x.color)};vertical-align:middle"></span>` : '';
     return `<b>${name}</b>: ${st.twoPair || x.on ? LM_FX[fx] + sw + ' · ' + x.bri + '%' : 'off'}${hasIp ? '' : ' (no IP set)'}`;
   };
   const lines = solo

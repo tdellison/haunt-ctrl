@@ -215,28 +215,47 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     return { color: mix(CORPSE, accent, k), level: lerp(0.3, 1, k) };
   }
 
-  // Shadow Sway: neighbouring lights (1+2, 3+4) crossfade back and forth so
-  // a prop lit by both throws a shadow that creeps left and right. Uses each
-  // light's own colour.
+  // Shadow Sway (owner spec "Official Shadow Sway", 2026-10-27): lights 1 and
+  // 4 hold a low Witch Magenta depth border; lights 2 and 3 trade a slow sine
+  // (sin(t/2000)): toward +1 light 2 rises to 90% Ghostly Cyan while light 3
+  // sinks to 20% Corpse Blue-Gray, and the reverse toward -1 — the cool
+  // highlight slides left and right so the shadows sway like trees in a breeze.
+  const SWAY_MAGENTA = { r: 0xD5, g: 0, b: 0xF9 }, SWAY_CYAN = { r: 0, g: 0xE5, b: 0xFF }, SWAY_CORPSE = { r: 0x1A, g: 0x23, b: 0x7E };
   function swayLook(i, t) {
-    const k = smooth(0.5 - 0.5 * Math.cos(2 * Math.PI * t / 7000 + (i < 2 ? 0 : 1.3)));
-    const mine = i % 2 === 0 ? k : 1 - k;
-    return { color: lightCfg(i).color, level: lerp(0.08, 1, mine) };
+    if (i === 0 || i === 3) return { color: SWAY_MAGENTA, level: 0.25 };
+    const v = Math.sin(t / 2000);
+    const k = (i === 1 ? v + 1 : 1 - v) / 2;              // 0..1, inverted between 2 and 3
+    return { color: mix(SWAY_CORPSE, SWAY_CYAN, k), level: lerp(0.2, 0.9, k) };
   }
 
-  // Looming Monster: the far lights (1 and 3) fade out while the close, low
-  // lights (2 and 4) rise, so the shadow swells up the wall; it holds, then
-  // slowly shrinks back. Use FLIP DIRECTION if near/far are the wrong way round.
-  const LOOM = [3000, 4000, 3000, 5000];     // small hold, grow, loom, shrink
+  // Looming Monsters (owner spec "Official Looming Monsters", 2026-10-27): all
+  // four rest at 15% Monster Purple. Every 4-6 s ONE random light surges:
+  // 800 ms ease-in to 100% Radioactive Lime, holds 1 s (a big crisp shadow),
+  // then fades back to the purple floor over 1.5 s.
+  const LOOM_PURPLE = { r: 0x6A, g: 0x0D, b: 0xAD }, LOOM_LIME = { r: 0x39, g: 0xFF, b: 0x14 };
+  const LOOM_UP = 800, LOOM_HOLD = 1000, LOOM_DOWN = 1500;
+  const surges = [];                        // { light, at }
+  let nextSurgeAt = 0;
+  function loomSurges(t) {
+    if (!nextSurgeAt) nextSurgeAt = t + rand(4000, 6000);
+    if (t >= nextSurgeAt) {
+      const busy = new Set(surges.map(s => s.light));
+      const free = [0, 1, 2, 3].filter(n => !busy.has(n));
+      if (free.length) surges.push({ light: free[Math.floor(Math.random() * free.length)], at: t });
+      nextSurgeAt = t + rand(4000, 6000);
+    }
+    while (surges.length && t - surges[0].at > LOOM_UP + LOOM_HOLD + LOOM_DOWN) surges.shift();
+  }
   function loomLook(i, t) {
-    const total = LOOM.reduce((a, b) => a + b, 0);
-    let d = t % total, g;
-    if (d < LOOM[0]) g = 0;
-    else if ((d -= LOOM[0]) < LOOM[1]) g = smooth(d / LOOM[1]);
-    else if ((d -= LOOM[1]) < LOOM[2]) g = 1;
-    else g = 1 - smooth((d - LOOM[2]) / LOOM[3]);
-    const close = i % 2 === 1;
-    return { color: lightCfg(i).color, level: close ? lerp(0.05, 1, g) : lerp(1, 0.05, g) };
+    const s = surges.find(x => x.light === i);
+    let k = 0;
+    if (s) {
+      const d = t - s.at;
+      if (d < LOOM_UP) { const x = d / LOOM_UP; k = x * x; }            // ease in
+      else if (d < LOOM_UP + LOOM_HOLD) k = 1;
+      else k = 1 - smooth((d - LOOM_UP - LOOM_HOLD) / LOOM_DOWN);
+    }
+    return { color: mix(LOOM_PURPLE, LOOM_LIME, k), level: lerp(0.15, 1, k) };
   }
 
   // Spectral Drift across all four lights, back and forth: the accent rises
@@ -307,6 +326,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
   // Four lights: one ptReal per controller per tick carrying both its lights.
   function segmentTick(t) {
     if (cfg.twoPair === 'blood') bloodStrikes(t);
+    if (cfg.twoPair === 'loom') loomSurges(t);
     const byIp = {};
     cfg.order.forEach(([pair, seg], i) => {
       const ip = pairIps(pair)[0];
