@@ -2495,7 +2495,7 @@ function renderLightMode(st) {
     (st.nextFlashAt ? `<br>⚡ next lightning ${new Date(st.nextFlashAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '');
   document.getElementById('lm-target-solo').style.display = solo ? 'flex' : 'none';
   if (!solo && lmTgt[0] === 'l') lmTgt = 'both';
-  document.getElementById('lm-drift-s').textContent = solo ? 'moves through lights 1 → 4' : 'uses both pairs';
+  document.getElementById('lm-drift-s').textContent = solo ? 'sweeps 1 → 4 and back' : 'uses both pairs';
   document.querySelectorAll('#lm-target-solo button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
   document.querySelectorAll('#lm-target button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
   const tg = lmTargets();

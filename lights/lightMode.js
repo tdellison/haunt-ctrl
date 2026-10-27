@@ -239,16 +239,18 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     return { color: lightCfg(i).color, level: close ? lerp(0.05, 1, g) : lerp(1, 0.05, g) };
   }
 
-  // Spectral Drift across all four lights: the accent rises on light 1, holds
-  // 1.5 s, and hands off to light 2 (fading back as 2 rises) ... through 4,
-  // then starts again at light 1 with the other accent (violet <-> green).
+  // Spectral Drift across all four lights, back and forth: the accent rises
+  // on light 1, holds 1.5 s, hands off to 2 (fading back as 2 rises) ... to 4,
+  // then sweeps back 3 -> 2 -> 1. The accent swaps (violet <-> green) at each
+  // end.
+  const DRIFT_PATH = [0, 1, 2, 3, 2, 1];
   function drift4Look(i, t) {
     const step = Math.floor(t / DRIFT_STEP), inStep = t % DRIFT_STEP;
-    const active = step % 4, prev = (step + 3) % 4;
-    const accentOf = (st) => DRIFT_ACCENTS[Math.floor(st / 4) % DRIFT_ACCENTS.length];
+    const at = (st) => DRIFT_PATH[st % DRIFT_PATH.length];
+    const accentOf = (st) => DRIFT_ACCENTS[Math.floor(st / 3) % DRIFT_ACCENTS.length];
     const rise = smooth(inStep / DRIFT_FADE);
-    if (i === active) return { color: mix(DRIFT_BASE, accentOf(step), rise), level: lerp(0.2, 0.85, rise) };
-    if (i === prev && step > 0) return { color: mix(DRIFT_BASE, accentOf(step - 1), 1 - rise), level: lerp(0.2, 0.85, 1 - rise) };
+    if (i === at(step)) return { color: mix(DRIFT_BASE, accentOf(step), rise), level: lerp(0.2, 0.85, rise) };
+    if (step > 0 && i === at(step - 1)) return { color: mix(DRIFT_BASE, accentOf(step - 1), 1 - rise), level: lerp(0.2, 0.85, 1 - rise) };
     return { color: DRIFT_BASE, level: 0.2 };
   }
 
