@@ -945,6 +945,9 @@ body::before { animation:scanlines 10s linear infinite; }
       <button data-fx="ecto" onclick="lmEffect('ecto')"><span>🟢</span>Ghost Drift<small>wave rolls light 1 → 4</small></button>
       <button data-fx="sway" onclick="lmEffect('sway')"><span>↔️</span>Shadow Sway<small>cyan sways between lights 2 &amp; 3</small></button>
       <button data-fx="loom" onclick="lmEffect('loom')"><span>👹</span>Looming Monsters<small>purple, random lime surges</small></button>
+      <button data-fx="brew" onclick="lmEffect('brew')"><span>🧪</span>Witch Cauldron<small>fire outside, green brew inside</small></button>
+      <button data-fx="swamp" onclick="lmEffect('swamp')"><span>☢️</span>Toxic Swamp<small>lime &amp; purple sludge</small></button>
+      <button data-fx="candle" onclick="lmEffect('candle')"><span>🎃</span>Jack-O'-Lantern<small>candle flicker</small></button>
     </div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-sm" style="flex:2" onclick="lmSingleTest()">🔦 TEST: CAN EACH LIGHT GO SOLO?</button>
@@ -2427,8 +2430,8 @@ let lmCur = null;
 let lmTgt = 'both';
 const LM_PAIRS = ['skeleton', 'witch'];
 const LM_NAMES = { skeleton: 'Pair 1', witch: 'Pair 2' };
-const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift', sway: 'Shadow Sway', loom: 'Looming Monsters' };
-const LM_THEMES = ['blood', 'ecto', 'sway', 'loom'];
+const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift', sway: 'Shadow Sway', loom: 'Looming Monsters', brew: 'Witch Cauldron', swamp: 'Toxic Swamp', candle: "Jack-O'-Lantern" };
+const LM_THEMES = ['blood', 'ecto', 'sway', 'loom', 'brew', 'swamp', 'candle'];
 const LM_COLORS = [
   ['Pumpkin', '#ff5a00'], ['Candy Corn', '#ffb000'], ['Blood Red', '#b00000'], ['Witch Purple', '#6400b4'],
   ['Slime Green', '#39ff14'], ['Poison', '#00b450'], ['Ghost Teal', '#00f2fe'], ['Midnight', '#0a1aa0'],

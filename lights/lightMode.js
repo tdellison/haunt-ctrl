@@ -27,10 +27,10 @@ const STORM_FLASH_EVERY_MS = 12 * 60 * 1000;
 const STORM_FLASH_MS = 400;
 const PAIRS = ['skeleton', 'witch'];
 const SINGLE_EFFECTS = ['color', 'breathe', 'fire', 'witch'];
-const TWO_PAIR_EFFECTS = ['drift', 'coven', 'blood', 'ecto', 'sway', 'loom'];
+const TWO_PAIR_EFFECTS = ['drift', 'coven', 'blood', 'ecto', 'sway', 'loom', 'brew', 'swamp', 'candle'];
 // Four-light themes: each spotlight on its own (needs per-segment control —
 // unlocked by the single light test).
-const SEGMENT_EFFECTS = ['blood', 'ecto', 'sway', 'loom'];
+const SEGMENT_EFFECTS = ['blood', 'ecto', 'sway', 'loom', 'brew', 'swamp', 'candle'];
 const LIGHT_IDS = ['skeleton:0', 'skeleton:1', 'witch:0', 'witch:1'];   // pair:segment
 
 // ── Per-light control: Govee "ptReal" over LAN ───────────────────────────────
@@ -258,6 +258,55 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     return { color: mix(LOOM_PURPLE, LOOM_LIME, k), level: lerp(0.15, 1, k) };
   }
 
+  // Fast flickers below pick new values on the owner's timings (30-120 ms),
+  // but the lights only receive what the 10/s tick samples — Govee drops
+  // packets much faster than that.
+  const flick = {};                          // `${theme}:${i}` -> { next, color, level }
+  function flickerAt(key, t, minMs, maxMs, pick) {
+    let f = flick[key];
+    if (!f || t >= f.next) f = flick[key] = { ...pick(), next: t + rand(minMs, maxMs) };
+    return f;
+  }
+
+  // Evil Witch Cauldron Burning (owner spec, 2026-10-27): outer lights 1 and 4
+  // are the fire — asynchronous flicker between Smoldering Orange and Ember
+  // Red every 60-120 ms; inner lights 2 and 3 are the potion — solid Toxic
+  // Witch Green breathing 15%-80%.
+  const BREW_GREEN = { r: 0, g: 0xFF, b: 0x33 }, BREW_ORANGE = { r: 0xFF, g: 0x33, b: 0 }, BREW_EMBER = { r: 0x8B, g: 0, b: 0 };
+  function brewLook(i, t) {
+    if (i === 0 || i === 3) {
+      const f = flickerAt(`brew:${i}`, t, 60, 120, () => ({ color: mix(BREW_EMBER, BREW_ORANGE, Math.random()), level: rand(0.55, 1) }));
+      return { color: f.color, level: f.level };
+    }
+    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / 6000 + (i === 2 ? 1.2 : 0));
+    return { color: BREW_GREEN, level: lerp(0.15, 0.8, w) };
+  }
+
+  // Toxic Swamp / Radioactive Spill (owner spec): lights 1+3 start Gamma Lime,
+  // 2+4 Deep Acid Purple; a slow, heavily overlapping crossfade swaps them
+  // every 8 s (and back), a murky neon sludge across the props.
+  const SWAMP_LIME = { r: 0xAD, g: 0xFF, b: 0x2F }, SWAMP_PURPLE = { r: 0x6A, g: 0x0D, b: 0xAD };
+  function swampLook(i, t) {
+    const k = 0.5 - 0.5 * Math.cos(Math.PI * t / 8000);   // 0 -> 1 over 8 s, back over the next 8
+    const toPurple = i % 2 === 0 ? k : 1 - k;
+    return { color: mix(SWAMP_LIME, SWAMP_PURPLE, toPurple), level: 1 };
+  }
+
+  // Classic Jack-O'-Lantern Candle Flicker (owner spec): every light micro-
+  // flickers on its own between Amber and Gold (30-70 ms); each frame has a 5%
+  // chance that one random light gusts down to 10% Dying Ember Red for 100 ms.
+  const CANDLE_AMBER = { r: 0xFF, g: 0x99, b: 0 }, CANDLE_GOLD = { r: 0xFF, g: 0xCC, b: 0 }, CANDLE_EMBER = { r: 0x99, g: 0x22, b: 0 };
+  let gust = null;                           // { light, until }
+  function candleGusts(t) {
+    if (gust && t >= gust.until) gust = null;
+    if (!gust && Math.random() < 0.05) gust = { light: Math.floor(Math.random() * 4), until: t + 100 };
+  }
+  function candleLook(i, t) {
+    if (gust && gust.light === i) return { color: CANDLE_EMBER, level: 0.1 };
+    const f = flickerAt(`candle:${i}`, t, 30, 70, () => ({ color: mix(CANDLE_AMBER, CANDLE_GOLD, Math.random()), level: rand(0.85, 1) }));
+    return { color: f.color, level: f.level };
+  }
+
   // Spectral Drift across all four lights, back and forth: the accent rises
   // on light 1, holds 1.5 s, hands off to 2 (fading back as 2 rises) ... to 4,
   // then sweeps back 3 -> 2 -> 1. The accent swaps (violet <-> green) at each
@@ -286,6 +335,9 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       case 'ecto': return ectoLook(i, t);
       case 'sway': return swayLook(i, t);
       case 'loom': return loomLook(i, t);
+      case 'brew': return brewLook(i, t);
+      case 'swamp': return swampLook(i, t);
+      case 'candle': return candleLook(i, t);
       case 'drift': return drift4Look(i, t);
       case 'coven': return covenLook(pair, t);
     }
@@ -327,6 +379,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
   function segmentTick(t) {
     if (cfg.twoPair === 'blood') bloodStrikes(t);
     if (cfg.twoPair === 'loom') loomSurges(t);
+    if (cfg.twoPair === 'candle') candleGusts(t);
     const byIp = {};
     cfg.order.forEach(([pair, seg], i) => {
       const ip = pairIps(pair)[0];
