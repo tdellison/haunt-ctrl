@@ -932,6 +932,19 @@ body::before { animation:scanlines 10s linear infinite; }
   </div>
 
   <div class="panel">
+    <div class="lm-step">4-LIGHT THEMES <small style="letter-spacing:0">(each spotlight on its own)</small></div>
+    <div id="lm-seg-note" style="font-size:.75em;color:var(--dim2);margin-bottom:10px"></div>
+    <div class="lm-grid lm-grid2" id="lm-seg-themes">
+      <button data-fx="blood" onclick="lmEffect('blood')"><span>🩸</span>Blood &amp; Lightning</button>
+      <button data-fx="ecto" onclick="lmEffect('ecto')"><span>👻</span>Ghost Drift<small>rolls light 1 → 4</small></button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-sm" style="flex:2" onclick="lmSingleTest()">🔦 TEST: CAN EACH LIGHT GO SOLO?</button>
+      <button class="btn btn-sm" style="flex:1" onclick="lmFlip()">⇄ FLIP DIRECTION</button>
+    </div>
+  </div>
+
+  <div class="panel">
     <div class="lm-step">3 · COLOR <small style="letter-spacing:0">(for Steady / Breathing)</small></div>
     <div class="lm-swatches" id="lm-swatches"></div>
     <label class="lm-custom">Custom color <input type="color" id="lm-custom" onchange="lmColor(this.value)"></label>
@@ -2406,7 +2419,7 @@ let lmCur = null;
 let lmTgt = 'both';
 const LM_PAIRS = ['skeleton', 'witch'];
 const LM_NAMES = { skeleton: 'Pair 1', witch: 'Pair 2' };
-const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse' };
+const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift' };
 const LM_COLORS = [
   ['Pumpkin', '#ff5a00'], ['Candy Corn', '#ffb000'], ['Blood Red', '#b00000'], ['Witch Purple', '#6400b4'],
   ['Slime Green', '#39ff14'], ['Poison', '#00b450'], ['Ghost Teal', '#00f2fe'], ['Midnight', '#0a1aa0'],
@@ -2422,7 +2435,8 @@ const lmTargets = () => lmTgt === 'both' ? LM_PAIRS : [lmTgt];
 function lmTarget(t) { lmTgt = t; if (lmCur) renderLightMode(lmCur); }
 async function lmSet(patch) { for (const p of lmTargets()) await api('/api/lights/mode/pair', { pair: p, ...patch }); }
 async function lmEffect(fx) {
-  if (fx === 'drift' || fx === 'coven') return api('/api/lights/mode/two-pair', { effect: fx });
+  if ((fx === 'blood' || fx === 'ecto') && !(lmCur && lmCur.segments === true)) return alert('Run "TEST: CAN EACH LIGHT GO SOLO?" first.');
+  if (['drift', 'coven', 'blood', 'ecto'].includes(fx)) return api('/api/lights/mode/two-pair', { effect: fx });
   await lmSet({ effect: fx, on: true });
 }
 async function lmColor(hex) {
@@ -2456,7 +2470,10 @@ function renderLightMode(st) {
   const tg = lmTargets();
   const same = (f) => tg.every(p => f(p) === f(tg[0])) ? f(tg[0]) : null;
   const fx = same(fxOf);
-  document.querySelectorAll('#lm-effects button').forEach(b => b.classList.toggle('sel', b.dataset.fx === fx));
+  document.querySelectorAll('#lm-effects button, #lm-seg-themes button').forEach(b => b.classList.toggle('sel', b.dataset.fx === fx));
+  document.querySelectorAll('#lm-seg-themes button').forEach(b => b.style.opacity = st.segments === true ? 1 : .4);
+  document.getElementById('lm-seg-note').textContent = st.segments === true ? 'Unlocked — each light works on its own.'
+    : st.segments === false ? 'Locked — the test showed each pair only changes together.' : 'Locked until the test below passes (about 10 seconds).';
   const col = same(p => toHex(st.pairs[p].color));
   document.querySelectorAll('#lm-swatches button').forEach(b => b.classList.toggle('sel', !st.twoPair && b.dataset.hex === col && ['color', 'breathe'].includes(fx)));
   if (col) document.getElementById('lm-custom').value = col;
@@ -2473,10 +2490,18 @@ function renderLightMode(st) {
   for (const [id, v] of [['lm-son', sc.on], ['lm-soff', sc.off]]) { const el = document.getElementById(id); if (document.activeElement !== el) el.value = String(v).padStart(5, '0'); }
   flag('lm-storm', st.stormFlash); flag('lm-ambient', st.ambient); flag('lm-bulbs', st.bulbs);
 }
-async function singleLightTest() {
+async function lmSingleTest() {
+  alert('Watch the lights: all of them turn RED, then 2 seconds later ONE light of each pair should turn BLUE. Tap OK to start.');
   const r = await api('/api/lights/single-test');
-  alert(r && r.supported ? 'Supported' : (r && r.reason) || 'Not supported');
+  if (!r || !r.ok) return;
+  setTimeout(async () => {
+    const ok = confirm('Did only ONE light in each pair turn blue (the other stayed red)?\n\nOK = yes   Cancel = no');
+    await api('/api/lights/segments', { ok });
+    alert(ok ? 'Unlocked! Blood & Lightning and Ghost Drift are ready.' : "Got it — each pair can only change together, so the 4-light themes stay locked.");
+  }, 5000);
 }
+const singleLightTest = lmSingleTest;
+async function lmFlip() { if (lmCur) await api('/api/lights/order', { order: [...lmCur.order].reverse() }); }
 (async () => {
   try {
     const l = await apiGet('/api/lights/mode'); if (l && l.lights) renderLightMode(l.lights);

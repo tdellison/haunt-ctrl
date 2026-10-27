@@ -4107,12 +4107,12 @@ app.post('/api/lights/mode/flash', lightRoute(() => lightMode.flashNow()));
 app.post('/api/lights/mode/bulbs', lightRoute(({ enabled }) => lightMode.setBulbs(enabled)));
 app.post('/api/lights/mode/ambient', lightRoute(({ enabled }) => lightMode.setAmbient(enabled)));
 app.post('/api/lights/mode/schedule', lightRoute((b) => lightMode.setSchedule(b)));
-// Single light test: Govee's LAN API (turn / brightness / colorwc / devStatus)
-// addresses a whole controller, and a tethered pair is ONE controller on one
-// IP — there is no per-light (or per-segment) command. Not supported, so
-// Shadow Sway / Looming Monster stay hidden.
-app.post('/api/lights/single-test', (req, res) => res.json({ ok: true, supported: false,
-  reason: "Not supported: Govee's local (LAN) control only takes on/off, brightness and colour for the whole controller, and each pair is one controller on one IP." }));
+// Single light test: sets each controller red, then tries to turn ONLY light 2
+// blue over ptReal (per-segment). The owner watches and reports pass/fail;
+// pass unlocks the four-light themes (Blood & Lightning, Ghost Drift).
+app.post('/api/lights/single-test', lightRoute(() => lightMode.singleTest()));
+app.post('/api/lights/segments', lightRoute(({ ok }) => lightMode.setSegments(ok)));
+app.post('/api/lights/order', lightRoute(({ order }) => lightMode.setOrder(order)));
 
 app.get('/api/mode', (req, res) => res.json({ ok: true, mode: showMode, skipped: isRainMode() ? RAIN_SKIPPED : [] }));
 app.post('/api/mode', (req, res) => {

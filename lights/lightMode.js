@@ -27,7 +27,26 @@ const STORM_FLASH_EVERY_MS = 12 * 60 * 1000;
 const STORM_FLASH_MS = 400;
 const PAIRS = ['skeleton', 'witch'];
 const SINGLE_EFFECTS = ['color', 'breathe', 'fire', 'witch'];
-const TWO_PAIR_EFFECTS = ['drift', 'coven'];
+const TWO_PAIR_EFFECTS = ['drift', 'coven', 'blood', 'ecto'];
+// Four-light themes: each spotlight on its own (needs per-segment control —
+// unlocked by the single light test).
+const SEGMENT_EFFECTS = ['blood', 'ecto'];
+
+// ── Per-light control: Govee "ptReal" over LAN ───────────────────────────────
+// Undocumented but widely used (govee2mqtt, govee-lan-bridge): the controller's
+// own Bluetooth-style 20-byte frames, base64'd, in {cmd:'ptReal'} to UDP 4003.
+// Segment colour frame: 33 05 15 01 RR GG BB 00 00 00 00 00 <mask lo> <mask hi>
+// ... zero-padded to 19 bytes, byte 20 = XOR of the first 19. Mask bit n =
+// segment n+1. On a spotlight 2-pack, segment 1 / 2 = light 1 / 2 (to be
+// confirmed on the real lights by the single light test).
+function segmentFrame(rgb, mask) {
+  const b = Buffer.alloc(20);
+  b.set([0x33, 0x05, 0x15, 0x01, rgb.r, rgb.g, rgb.b, 0, 0, 0, 0, 0, mask & 0xff, (mask >> 8) & 0xff]);
+  let x = 0; for (let i = 0; i < 19; i++) x ^= b[i];
+  b[19] = x;
+  return b.toString('base64');
+}
+const ptReal = (frames) => ({ cmd: 'ptReal', data: { command: frames } });
 
 const FIRE_PALETTE = [
   { r: 255, g: 80, b: 0 }, { r: 255, g: 40, b: 0 }, { r: 200, g: 30, b: 0 },
@@ -45,7 +64,10 @@ const DEFAULTS = {
     skeleton: { on: true, effect: 'fire', color: { r: 255, g: 80, b: 0 }, bri: 60 },
     witch: { on: true, effect: 'witch', color: { r: 100, g: 0, b: 180 }, bri: 60 },
   },
-  twoPair: null,          // null | 'drift' | 'coven'
+  twoPair: null,          // null | 'drift' | 'coven' | 'blood' | 'ecto'
+  segments: null,         // per-light control: null = untested, true = works, false = doesn't
+  // Yard order left -> right: [pair, segment]. Light 1-4 in the themes.
+  order: [['skeleton', 0], ['skeleton', 1], ['witch', 0], ['witch', 1]],
   stormFlash: false,
   bulbs: false,           // A19 bulbs: off unless switched on
   ambient: false,         // quiet ambient loop
@@ -144,6 +166,50 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     return { color: mix(COVEN_BASE, mix(SAPPHIRE, MAGENTA, hue), w), level: lerp(0.15, 0.8, w) };
   }
 
+  // ── Four-light themes (owner spec 2026-10-27) ─────────────────────────────
+  // Blood & Lightning: crimson/shadow breathing, each light on its own period
+  // and phase so the shadows warp and lean; now and then ONE light is struck:
+  // white pop -> black -> icy aftershock -> fades back into the heartbeat.
+  const CRIMSON = { r: 0x8B, g: 0, b: 0 }, SHADOW = { r: 0x2A, g: 0, b: 0 };
+  const BOLT = { r: 255, g: 255, b: 255 }, ICY = { r: 0xE0, g: 0xF7, b: 0xFA };
+  const BLOOD_PERIODS = [5200, 6100, 4700, 5700];
+  const BLOOD_PHASES = [0, 1.9, 3.7, 5.1];
+  let strike = null, nextStrikeAt = 0;
+  function bloodLook(i, t) {
+    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / BLOOD_PERIODS[i] + BLOOD_PHASES[i]);
+    const base = { color: mix(SHADOW, CRIMSON, w), level: lerp(0.35, 1, w) };
+    if (!strike || strike.light !== i) return base;
+    const d = t - strike.at;
+    if (d < 180) return { color: BOLT, level: 1 };          // primary bolt — a pop, not a fade
+    if (d < 380) return { color: { r: 0, g: 0, b: 0 }, level: 0 };   // total black
+    if (d < 560) return { color: ICY, level: 1 };           // aftershock
+    if (d < 1600) { const k = smooth((d - 560) / 1040); return { color: mix(ICY, base.color, k), level: lerp(1, base.level, k) }; }
+    strike = null;
+    return base;
+  }
+  function bloodStrikes(t) {
+    if (!nextStrikeAt) nextStrikeAt = t + rand(15000, 45000);
+    if (!strike && t >= nextStrikeAt) {
+      strike = { light: Math.floor(Math.random() * 4), at: t };
+      nextStrikeAt = t + rand(15000, 60000);               // asynchronous, never on a beat
+    }
+  }
+
+  // Ectoplasmic Ghost Drift: cold corpse-cyan base; a bright ectoplasm-green
+  // or witch-violet wave rolls light 1 -> 2 -> 3 -> 4 so the shadows slide
+  // along the walls, rests, then the next phantom (other colour) comes through.
+  const CORPSE = { r: 0, g: 0xF2, b: 0xFE };
+  const ECTO_ACCENTS = [{ r: 0x39, g: 0xFF, b: 0x14 }, { r: 0x94, g: 0, b: 0xD3 }];
+  const ECTO_PASS = 5000, ECTO_REST = 2500;
+  function ectoLook(i, t) {
+    const cycle = ECTO_PASS + ECTO_REST;
+    const n = Math.floor(t / cycle), d = t % cycle;
+    const accent = ECTO_ACCENTS[n % ECTO_ACCENTS.length];
+    const pos = -1 + 5 * (d / ECTO_PASS);                   // enters before light 1, leaves after light 4
+    const k = d < ECTO_PASS ? Math.exp(-((pos - i) ** 2) / (2 * 0.55 ** 2)) : 0;
+    return { color: mix(CORPSE, accent, k), level: lerp(0.3, 1, k) };
+  }
+
   function lookFor(pair, t) {
     if (cfg.twoPair === 'drift') return driftLook(pair, t);
     if (cfg.twoPair === 'coven') return covenLook(pair, t);
@@ -171,10 +237,55 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     put(ip, 'brightness', { value: bri }, 1);
   }
 
+  // Four lights: one ptReal per controller per tick carrying both its lights.
+  function segmentTick(t) {
+    if (cfg.twoPair === 'blood') bloodStrikes(t);
+    const byIp = {};
+    cfg.order.forEach(([pair, seg], i) => {
+      const ip = pairIps(pair)[0];
+      if (!ip) return;
+      const look = cfg.twoPair === 'blood' ? bloodLook(i, t) : ectoLook(i, t);
+      const c = scale(look.color, clamp01(look.level));
+      (byIp[ip] = byIp[ip] || { pair, segs: [] }).segs.push({ seg, rgb: { r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) } });
+    });
+    for (const [ip, { pair, segs }] of Object.entries(byIp)) {
+      const p = cfg.pairs[pair];
+      setPower(ip, true);
+      setBri(ip, Math.max(1, Math.min(100, Math.round(p.bri))));
+      if (queued(ip) > 0) continue;
+      const key = segs.map(s => `${s.seg}:${s.rgb.r},${s.rgb.g},${s.rgb.b}`).join('|');
+      if (sent[ip].color === key) continue;
+      sent[ip].color = key;
+      send(ip, ptReal(segs.map(s => segmentFrame(s.rgb, 1 << s.seg))), 2).catch(() => {});
+    }
+  }
+
+  // ── Single light test ─────────────────────────────────────────────────────
+  // Both lights on each controller go red; 2 s later ONLY light 2 of each
+  // should turn blue. The owner watches and reports pass/fail.
+  let testing = false;
+  async function singleTest() {
+    const ips = PAIRS.flatMap(p => pairIps(p));
+    if (!ips.length) throw new Error('No light IPs set');
+    testing = true;
+    for (const ip of ips) {
+      await put(ip, 'turn', { value: 1 }, 0);
+      await put(ip, 'brightness', { value: 100 }, 0);
+      await put(ip, 'colorwc', { color: { r: 255, g: 0, b: 0 }, colorTemInKelvin: 0 }, 0);
+    }
+    setTimeout(() => { for (const ip of ips) send(ip, ptReal([segmentFrame({ r: 0, g: 0, b: 255 }, 0x02)]), 0).catch(() => {}); }, 2000);
+    setTimeout(() => {
+      testing = false;
+      for (const ip of ips) if (sent[ip]) { delete sent[ip].color; delete sent[ip].bri; delete sent[ip].on; }
+    }, 10000);
+  }
+
   function tick() {
     if (!running) return;
     const t = Date.now() - t0;
-    if (!flashing) {
+    if (!flashing && !testing && SEGMENT_EFFECTS.includes(cfg.twoPair)) {
+      segmentTick(t);
+    } else if (!flashing && !testing) {
       for (const pair of PAIRS) {
         const p = cfg.pairs[pair];
         for (const ip of pairIps(pair)) {
@@ -294,8 +405,17 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       return api.status();
     },
 
+    async singleTest() { await singleTest(); return api.status(); },
+    setSegments(ok) { cfg.segments = !!ok; if (!ok && SEGMENT_EFFECTS.includes(cfg.twoPair)) cfg.twoPair = null; save(); onChange(); return api.status(); },
+    setOrder(order) {
+      const valid = Array.isArray(order) && order.length === 4 && order.every(o => Array.isArray(o) && PAIRS.includes(o[0]) && (o[1] === 0 || o[1] === 1));
+      if (!valid) throw new Error('order must be 4 × [pair, 0|1]');
+      cfg.order = order; save(); onChange(); return api.status();
+    },
+
     setTwoPair(effect) {
       if (effect && !TWO_PAIR_EFFECTS.includes(effect)) throw new Error(`Unknown two-pair effect "${effect}"`);
+      if (SEGMENT_EFFECTS.includes(effect) && cfg.segments !== true) throw new Error('Run the single light test first — this theme needs each light controlled on its own');
       cfg.twoPair = effect || null;
       if (cfg.twoPair) for (const p of PAIRS) cfg.pairs[p].on = true;
       save(); onChange();
@@ -333,7 +453,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       return {
         running, ...JSON.parse(JSON.stringify(cfg)), nextFlashAt,
         ips: Object.fromEntries(PAIRS.map(p => [p, pairIps(p)])), bulbIps: bulbIps(),
-        effects: SINGLE_EFFECTS, twoPairEffects: TWO_PAIR_EFFECTS,
+        effects: SINGLE_EFFECTS, twoPairEffects: TWO_PAIR_EFFECTS, segmentEffects: SEGMENT_EFFECTS, testing,
       };
     },
   };
