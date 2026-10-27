@@ -4100,6 +4100,7 @@ app.get('/api/lights/mode', (req, res) => res.json({ ok: true, lights: lightMode
 app.post('/api/lights/mode/start', lightRoute(() => lightMode.start()));
 app.post('/api/lights/mode/stop', lightRoute(() => lightMode.stop()));
 app.post('/api/lights/mode/pair', lightRoute(({ pair, ...patch }) => lightMode.setPair(pair, patch)));
+app.post('/api/lights/mode/lights', lightRoute(({ ids, ...patch }) => lightMode.setLights(ids, patch)));
 app.post('/api/lights/mode/two-pair', lightRoute(({ effect }) => lightMode.setTwoPair(effect)));
 app.post('/api/lights/mode/all-off', lightRoute(() => lightMode.allOff()));
 app.post('/api/lights/mode/storm', lightRoute(({ enabled }) => lightMode.setStormFlash(enabled)));

@@ -913,9 +913,15 @@ body::before { animation:scanlines 10s linear infinite; }
   <div class="panel">
     <div class="lm-step">1 · WHICH LIGHTS?</div>
     <div class="lm-seg" id="lm-target">
-      <button data-t="both" onclick="lmTarget('both')">BOTH</button>
+      <button data-t="both" onclick="lmTarget('both')">ALL</button>
       <button data-t="skeleton" onclick="lmTarget('skeleton')">PAIR 1</button>
       <button data-t="witch" onclick="lmTarget('witch')">PAIR 2</button>
+    </div>
+    <div class="lm-seg" id="lm-target-solo" style="margin-top:6px;display:none">
+      <button data-t="l0" onclick="lmTarget('l0')">LIGHT 1</button>
+      <button data-t="l1" onclick="lmTarget('l1')">LIGHT 2</button>
+      <button data-t="l2" onclick="lmTarget('l2')">LIGHT 3</button>
+      <button data-t="l3" onclick="lmTarget('l3')">LIGHT 4</button>
     </div>
   </div>
 
@@ -926,7 +932,7 @@ body::before { animation:scanlines 10s linear infinite; }
       <button data-fx="breathe" onclick="lmEffect('breathe')"><span>◐</span>Breathing</button>
       <button data-fx="fire" onclick="lmEffect('fire')"><span>🔥</span>Fire</button>
       <button data-fx="witch" onclick="lmEffect('witch')"><span>🟣</span>Purple Pulse</button>
-      <button data-fx="drift" onclick="lmEffect('drift')"><span>👻</span>Spectral Drift<small>uses both pairs</small></button>
+      <button data-fx="drift" onclick="lmEffect('drift')"><span>👻</span>Spectral Drift<small id="lm-drift-s">uses both pairs</small></button>
       <button data-fx="coven" onclick="lmEffect('coven')"><span>🔮</span>Coven Pulse<small>uses both pairs</small></button>
     </div>
   </div>
@@ -936,8 +942,11 @@ body::before { animation:scanlines 10s linear infinite; }
     <div id="lm-seg-note" style="font-size:.75em;color:var(--dim2);margin-bottom:10px"></div>
     <div class="lm-grid lm-grid2" id="lm-seg-themes">
       <button data-fx="blood" onclick="lmEffect('blood')"><span>🩸</span>Blood &amp; Lightning</button>
-      <button data-fx="ecto" onclick="lmEffect('ecto')"><span>👻</span>Ghost Drift<small>rolls light 1 → 4</small></button>
+      <button data-fx="ecto" onclick="lmEffect('ecto')"><span>🟢</span>Ghost Drift<small>wave rolls light 1 → 4</small></button>
+      <button data-fx="sway" onclick="lmEffect('sway')"><span>↔️</span>Shadow Sway<small>shadows creep side to side</small></button>
+      <button data-fx="loom" onclick="lmEffect('loom')"><span>👹</span>Looming Monster<small>shadows grow, then shrink</small></button>
     </div>
+    <div style="font-size:.68em;color:var(--dim2);margin-top:8px">Shadow Sway and Looming Monster use each light's color — pick colors first (step 3), then the theme.</div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-sm" style="flex:2" onclick="lmSingleTest()">🔦 TEST: CAN EACH LIGHT GO SOLO?</button>
       <button class="btn btn-sm" style="flex:1" onclick="lmFlip()">⇄ FLIP DIRECTION</button>
@@ -2419,7 +2428,8 @@ let lmCur = null;
 let lmTgt = 'both';
 const LM_PAIRS = ['skeleton', 'witch'];
 const LM_NAMES = { skeleton: 'Pair 1', witch: 'Pair 2' };
-const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift' };
+const LM_FX = { color: 'Steady', breathe: 'Breathing', fire: 'Fire', witch: 'Purple Pulse', drift: 'Spectral Drift', coven: 'Coven Pulse', blood: 'Blood & Lightning', ecto: 'Ghost Drift', sway: 'Shadow Sway', loom: 'Looming Monster' };
+const LM_THEMES = ['blood', 'ecto', 'sway', 'loom'];
 const LM_COLORS = [
   ['Pumpkin', '#ff5a00'], ['Candy Corn', '#ffb000'], ['Blood Red', '#b00000'], ['Witch Purple', '#6400b4'],
   ['Slime Green', '#39ff14'], ['Poison', '#00b450'], ['Ghost Teal', '#00f2fe'], ['Midnight', '#0a1aa0'],
@@ -2427,21 +2437,33 @@ const LM_COLORS = [
 ];
 const hex2 = n => n.toString(16).padStart(2, '0');
 const toHex = c => '#' + hex2(c.r) + hex2(c.g) + hex2(c.b);
-const lmTargets = () => lmTgt === 'both' ? LM_PAIRS : [lmTgt];
+// Per-light mode (after the solo test passes) works on lights; otherwise on pairs.
+const lmSolo = () => !!(lmCur && lmCur.segments === true);
+const lmTargets = () => {
+  if (!lmSolo()) return lmTgt === 'both' || lmTgt[0] === 'l' ? LM_PAIRS : [lmTgt];
+  const ids = lmCur.order.map(o => o.join(':'));
+  if (lmTgt === 'both') return ids;
+  if (lmTgt[0] === 'l') return [ids[+lmTgt[1]]];
+  return ids.filter(id => id.startsWith(lmTgt + ':'));
+};
+const lmCfg = (k) => lmSolo() ? lmCur.lights[k] : lmCur.pairs[k];
 (() => {
   const box = document.getElementById('lm-swatches');
   box.innerHTML = LM_COLORS.map(([n, h]) => `<button data-hex="${h}" style="background:${h}" onclick="lmColor('${h}')">${n}</button>`).join('');
 })();
 function lmTarget(t) { lmTgt = t; if (lmCur) renderLightMode(lmCur); }
-async function lmSet(patch) { for (const p of lmTargets()) await api('/api/lights/mode/pair', { pair: p, ...patch }); }
+async function lmSet(patch) {
+  if (lmSolo()) return api('/api/lights/mode/lights', { ids: lmTargets(), ...patch });
+  for (const p of lmTargets()) await api('/api/lights/mode/pair', { pair: p, ...patch });
+}
 async function lmEffect(fx) {
-  if ((fx === 'blood' || fx === 'ecto') && !(lmCur && lmCur.segments === true)) return alert('Run "TEST: CAN EACH LIGHT GO SOLO?" first.');
-  if (['drift', 'coven', 'blood', 'ecto'].includes(fx)) return api('/api/lights/mode/two-pair', { effect: fx });
+  if (LM_THEMES.includes(fx) && !lmSolo()) return alert('Run "TEST: CAN EACH LIGHT GO SOLO?" first.');
+  if (['drift', 'coven', ...LM_THEMES].includes(fx)) return api('/api/lights/mode/two-pair', { effect: fx });
   await lmSet({ effect: fx, on: true });
 }
 async function lmColor(hex) {
   // A colour means Steady, unless the chosen lights are already Breathing.
-  const breathing = lmCur && !lmCur.twoPair && lmTargets().every(p => lmCur.pairs[p].effect === 'breathe');
+  const breathing = lmCur && !lmCur.twoPair && lmTargets().every(k => lmCfg(k).effect === 'breathe');
   await lmSet({ color: hex, effect: breathing ? 'breathe' : 'color', on: true });
 }
 const lmBri = v => lmSet({ bri: v });
@@ -2456,16 +2478,25 @@ function renderShowMode(mode) {
 }
 function renderLightMode(st) {
   lmCur = st;
-  const fxOf = p => st.twoPair || st.pairs[p].effect;
-  // Status: what each pair is doing right now
-  const line = p => {
-    const x = st.pairs[p];
-    const sw = (fxOf(p) === 'color' || fxOf(p) === 'breathe') ? ` <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${toHex(x.color)};vertical-align:middle"></span>` : '';
-    return `<b>${LM_NAMES[p]}</b>: ${x.on ? LM_FX[fxOf(p)] + sw + ' · ' + x.bri + '%' : 'off'}${(st.ips[p] || []).length ? '' : ' (no IP set)'}`;
+  const solo = st.segments === true;
+  const fxOf = k => st.twoPair || lmCfg(k).effect;
+  // Status: what each light (or pair) is doing right now
+  const line = (k, name, hasIp) => {
+    const x = lmCfg(k);
+    const fx = fxOf(k);
+    const sw = (fx === 'color' || fx === 'breathe' || fx === 'sway' || fx === 'loom') ? ` <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${toHex(x.color)};vertical-align:middle"></span>` : '';
+    return `<b>${name}</b>: ${st.twoPair || x.on ? LM_FX[fx] + sw + ' · ' + x.bri + '%' : 'off'}${hasIp ? '' : ' (no IP set)'}`;
   };
+  const lines = solo
+    ? st.order.map((o, i) => line(o.join(':'), `Light ${i + 1}`, (st.ips[o[0]] || []).length))
+    : LM_PAIRS.map(p => line(p, LM_NAMES[p], (st.ips[p] || []).length));
   document.getElementById('lm-status').innerHTML =
-    `${st.running ? '🟢 <b>Lights are running</b>' : '⚪ Lights mode is off — tap LIGHTS ON'}<br>${line('skeleton')}<br>${line('witch')}` +
+    `${st.running ? '🟢 <b>Lights are running</b>' : '⚪ Lights mode is off — tap LIGHTS ON'}<br>${lines.join('<br>')}` +
     (st.nextFlashAt ? `<br>⚡ next lightning ${new Date(st.nextFlashAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '');
+  document.getElementById('lm-target-solo').style.display = solo ? 'flex' : 'none';
+  if (!solo && lmTgt[0] === 'l') lmTgt = 'both';
+  document.getElementById('lm-drift-s').textContent = solo ? 'moves through lights 1 → 4' : 'uses both pairs';
+  document.querySelectorAll('#lm-target-solo button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
   document.querySelectorAll('#lm-target button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
   const tg = lmTargets();
   const same = (f) => tg.every(p => f(p) === f(tg[0])) ? f(tg[0]) : null;
@@ -2474,11 +2505,11 @@ function renderLightMode(st) {
   document.querySelectorAll('#lm-seg-themes button').forEach(b => b.style.opacity = st.segments === true ? 1 : .4);
   document.getElementById('lm-seg-note').textContent = st.segments === true ? 'Unlocked — each light works on its own.'
     : st.segments === false ? 'Locked — the test showed each pair only changes together.' : 'Locked until the test below passes (about 10 seconds).';
-  const col = same(p => toHex(st.pairs[p].color));
+  const col = same(k => toHex(lmCfg(k).color));
   document.querySelectorAll('#lm-swatches button').forEach(b => b.classList.toggle('sel', !st.twoPair && b.dataset.hex === col && ['color', 'breathe'].includes(fx)));
   if (col) document.getElementById('lm-custom').value = col;
   const bri = document.getElementById('lm-bri');
-  const bv = same(p => st.pairs[p].bri) ?? st.pairs[tg[0]].bri;
+  const bv = same(k => lmCfg(k).bri) ?? lmCfg(tg[0]).bri;
   if (document.activeElement !== bri) bri.value = bv;
   document.getElementById('lm-briv').textContent = bv + '%';
   const flag = (id, on) => { document.getElementById(id).classList.toggle('sel', !!on); document.getElementById(id + '-s').textContent = on ? 'ON' : 'off'; };

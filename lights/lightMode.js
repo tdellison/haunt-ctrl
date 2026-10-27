@@ -27,10 +27,11 @@ const STORM_FLASH_EVERY_MS = 12 * 60 * 1000;
 const STORM_FLASH_MS = 400;
 const PAIRS = ['skeleton', 'witch'];
 const SINGLE_EFFECTS = ['color', 'breathe', 'fire', 'witch'];
-const TWO_PAIR_EFFECTS = ['drift', 'coven', 'blood', 'ecto'];
+const TWO_PAIR_EFFECTS = ['drift', 'coven', 'blood', 'ecto', 'sway', 'loom'];
 // Four-light themes: each spotlight on its own (needs per-segment control —
 // unlocked by the single light test).
-const SEGMENT_EFFECTS = ['blood', 'ecto'];
+const SEGMENT_EFFECTS = ['blood', 'ecto', 'sway', 'loom'];
+const LIGHT_IDS = ['skeleton:0', 'skeleton:1', 'witch:0', 'witch:1'];   // pair:segment
 
 // ── Per-light control: Govee "ptReal" over LAN ───────────────────────────────
 // Undocumented but widely used (govee2mqtt, govee-lan-bridge): the controller's
@@ -102,6 +103,10 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     for (const p of PAIRS) cfg.pairs[p] = { ...DEFAULTS.pairs[p], ...(saved.pairs || {})[p] };
     cfg.schedule = { ...DEFAULTS.schedule, ...(saved.schedule || {}) };
   } catch (_) {}
+  // Per-light settings (used once per-light control is confirmed). Seeded
+  // from each light's pair so nothing changes the moment it unlocks.
+  cfg.lights = cfg.lights || {};
+  for (const id of LIGHT_IDS) cfg.lights[id] = { ...cfg.pairs[id.split(':')[0]], ...cfg.lights[id] };
   const save = () => { try { fs.writeFileSync(file, JSON.stringify(cfg, null, 2)); } catch (e) { log(`light mode save failed: ${e.message}`); } };
 
   let running = false;
@@ -210,6 +215,66 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     return { color: mix(CORPSE, accent, k), level: lerp(0.3, 1, k) };
   }
 
+  // Shadow Sway: neighbouring lights (1+2, 3+4) crossfade back and forth so
+  // a prop lit by both throws a shadow that creeps left and right. Uses each
+  // light's own colour.
+  function swayLook(i, t) {
+    const k = smooth(0.5 - 0.5 * Math.cos(2 * Math.PI * t / 7000 + (i < 2 ? 0 : 1.3)));
+    const mine = i % 2 === 0 ? k : 1 - k;
+    return { color: lightCfg(i).color, level: lerp(0.08, 1, mine) };
+  }
+
+  // Looming Monster: the far lights (1 and 3) fade out while the close, low
+  // lights (2 and 4) rise, so the shadow swells up the wall; it holds, then
+  // slowly shrinks back. Use FLIP DIRECTION if near/far are the wrong way round.
+  const LOOM = [3000, 4000, 3000, 5000];     // small hold, grow, loom, shrink
+  function loomLook(i, t) {
+    const total = LOOM.reduce((a, b) => a + b, 0);
+    let d = t % total, g;
+    if (d < LOOM[0]) g = 0;
+    else if ((d -= LOOM[0]) < LOOM[1]) g = smooth(d / LOOM[1]);
+    else if ((d -= LOOM[1]) < LOOM[2]) g = 1;
+    else g = 1 - smooth((d - LOOM[2]) / LOOM[3]);
+    const close = i % 2 === 1;
+    return { color: lightCfg(i).color, level: close ? lerp(0.05, 1, g) : lerp(1, 0.05, g) };
+  }
+
+  // Spectral Drift across all four lights: the accent rises on light 1, holds
+  // 1.5 s, and hands off to light 2 (fading back as 2 rises) ... through 4,
+  // then starts again at light 1 with the other accent (violet <-> green).
+  function drift4Look(i, t) {
+    const step = Math.floor(t / DRIFT_STEP), inStep = t % DRIFT_STEP;
+    const active = step % 4, prev = (step + 3) % 4;
+    const accentOf = (st) => DRIFT_ACCENTS[Math.floor(st / 4) % DRIFT_ACCENTS.length];
+    const rise = smooth(inStep / DRIFT_FADE);
+    if (i === active) return { color: mix(DRIFT_BASE, accentOf(step), rise), level: lerp(0.2, 0.85, rise) };
+    if (i === prev && step > 0) return { color: mix(DRIFT_BASE, accentOf(step - 1), 1 - rise), level: lerp(0.2, 0.85, 1 - rise) };
+    return { color: DRIFT_BASE, level: 0.2 };
+  }
+
+  // Settings for light i in yard order.
+  const lightId = (i) => cfg.order[i].join(':');
+  const lightCfg = (i) => cfg.lights[lightId(i)];
+
+  // One light's look in per-light mode: a theme, a both-pairs effect (by its
+  // pair), or its own effect.
+  function lightLook(i, t) {
+    const pair = cfg.order[i][0];
+    switch (cfg.twoPair) {
+      case 'blood': return bloodLook(i, t);
+      case 'ecto': return ectoLook(i, t);
+      case 'sway': return swayLook(i, t);
+      case 'loom': return loomLook(i, t);
+      case 'drift': return drift4Look(i, t);
+      case 'coven': return covenLook(pair, t);
+    }
+    const L = lightCfg(i);
+    if (L.effect === 'fire') return fireLook(lightId(i), t);
+    if (L.effect === 'witch') return witchLook(t);
+    if (L.effect === 'breathe') return breatheLook(L.color, t);
+    return { color: L.color, level: 1 };
+  }
+
   function lookFor(pair, t) {
     if (cfg.twoPair === 'drift') return driftLook(pair, t);
     if (cfg.twoPair === 'coven') return covenLook(pair, t);
@@ -244,14 +309,21 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     cfg.order.forEach(([pair, seg], i) => {
       const ip = pairIps(pair)[0];
       if (!ip) return;
-      const look = cfg.twoPair === 'blood' ? bloodLook(i, t) : ectoLook(i, t);
-      const c = scale(look.color, clamp01(look.level));
-      (byIp[ip] = byIp[ip] || { pair, segs: [] }).segs.push({ seg, rgb: { r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) } });
+      const L = lightCfg(i);
+      const theme = !!cfg.twoPair;
+      const on = theme || L.on;
+      const look = on ? lightLook(i, t) : { color: { r: 0, g: 0, b: 0 }, level: 0 };
+      // Each light's brightness rides in its RGB (the controller's own
+      // brightness is shared by both lights, so it stays at 100).
+      const c = scale(look.color, clamp01(look.level) * (on ? L.bri / 100 : 0));
+      const e = byIp[ip] = byIp[ip] || { segs: [], anyOn: false };
+      e.anyOn = e.anyOn || on;
+      e.segs.push({ seg, rgb: { r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) } });
     });
-    for (const [ip, { pair, segs }] of Object.entries(byIp)) {
-      const p = cfg.pairs[pair];
+    for (const [ip, { segs, anyOn }] of Object.entries(byIp)) {
+      if (!anyOn) { setPower(ip, false); continue; }
       setPower(ip, true);
-      setBri(ip, Math.max(1, Math.min(100, Math.round(p.bri))));
+      setBri(ip, 100);
       if (queued(ip) > 0) continue;
       const key = segs.map(s => `${s.seg}:${s.rgb.r},${s.rgb.g},${s.rgb.b}`).join('|');
       if (sent[ip].color === key) continue;
@@ -283,7 +355,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
   function tick() {
     if (!running) return;
     const t = Date.now() - t0;
-    if (!flashing && !testing && SEGMENT_EFFECTS.includes(cfg.twoPair)) {
+    if (!flashing && !testing && cfg.segments === true) {
       segmentTick(t);
     } else if (!flashing && !testing) {
       for (const pair of PAIRS) {
@@ -313,7 +385,8 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
   // ── Storm flash ───────────────────────────────────────────────────────────
   async function flash() {
     if (flashing) return;
-    const ips = [...PAIRS.filter(p => cfg.pairs[p].on).flatMap(p => pairIps(p)), ...(cfg.bulbs ? bulbIps() : [])];
+    const pairOn = (p) => cfg.segments === true ? !!cfg.twoPair || LIGHT_IDS.some(id => id.startsWith(p + ':') && cfg.lights[id].on) : cfg.pairs[p].on;
+    const ips = [...PAIRS.filter(pairOn).flatMap(p => pairIps(p)), ...(cfg.bulbs ? bulbIps() : [])];
     if (!ips.length) return;
     flashing = true;
     log('Lights-only: storm flash');
@@ -354,6 +427,14 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
   }
   setInterval(scheduleCheck, 30000);
   setTimeout(scheduleCheck, 5000);
+
+  function applyLight(id, patch) {
+    const L = cfg.lights[id];
+    if (patch.on !== undefined) L.on = !!patch.on;
+    if (patch.effect !== undefined) L.effect = patch.effect;
+    if (patch.color !== undefined) L.color = parseColor(patch.color);
+    if (patch.bri !== undefined) L.bri = Math.max(1, Math.min(100, Math.round(Number(patch.bri) || 1)));
+  }
 
   const api = {
     PAIRS, SINGLE_EFFECTS, TWO_PAIR_EFFECTS,
@@ -401,6 +482,17 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       }
       if (patch.color !== undefined) p.color = parseColor(patch.color);
       if (patch.bri !== undefined) p.bri = Math.max(1, Math.min(100, Math.round(Number(patch.bri) || 1)));
+      for (const id of LIGHT_IDS) if (id.startsWith(pair + ':')) applyLight(id, patch);
+      save(); onChange();
+      return api.status();
+    },
+
+    // Per-light settings: ids = ['skeleton:0', ...]; same patch as setPair.
+    setLights(ids, patch = {}) {
+      if (!Array.isArray(ids) || !ids.length || !ids.every(id => LIGHT_IDS.includes(id))) throw new Error(`ids must be from ${LIGHT_IDS.join(', ')}`);
+      if (patch.effect !== undefined && !SINGLE_EFFECTS.includes(patch.effect)) throw new Error(`Unknown effect "${patch.effect}"`);
+      for (const id of ids) applyLight(id, patch);
+      if (patch.effect !== undefined) cfg.twoPair = null;
       save(); onChange();
       return api.status();
     },
@@ -417,13 +509,14 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       if (effect && !TWO_PAIR_EFFECTS.includes(effect)) throw new Error(`Unknown two-pair effect "${effect}"`);
       if (SEGMENT_EFFECTS.includes(effect) && cfg.segments !== true) throw new Error('Run the single light test first — this theme needs each light controlled on its own');
       cfg.twoPair = effect || null;
-      if (cfg.twoPair) for (const p of PAIRS) cfg.pairs[p].on = true;
+      if (cfg.twoPair) { for (const p of PAIRS) cfg.pairs[p].on = true; for (const id of LIGHT_IDS) cfg.lights[id].on = true; }
       save(); onChange();
       return api.status();
     },
 
     allOff() {
       for (const p of PAIRS) cfg.pairs[p].on = false;
+      for (const id of LIGHT_IDS) cfg.lights[id].on = false;
       cfg.twoPair = null;
       save(); onChange();
       if (!running) for (const ip of PAIRS.flatMap(p => pairIps(p))) put(ip, 'turn', { value: 0 }, 1);
@@ -453,7 +546,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
       return {
         running, ...JSON.parse(JSON.stringify(cfg)), nextFlashAt,
         ips: Object.fromEntries(PAIRS.map(p => [p, pairIps(p)])), bulbIps: bulbIps(),
-        effects: SINGLE_EFFECTS, twoPairEffects: TWO_PAIR_EFFECTS, segmentEffects: SEGMENT_EFFECTS, testing,
+        effects: SINGLE_EFFECTS, twoPairEffects: TWO_PAIR_EFFECTS, segmentEffects: SEGMENT_EFFECTS, lightIds: LIGHT_IDS, testing,
       };
     },
   };
