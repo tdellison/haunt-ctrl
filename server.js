@@ -4082,6 +4082,15 @@ lightMode = require('./lights/lightMode').createLightMode({
   bulbIps: () => [...new Set(BULB_SLOTS.map(s => GOVEE_IPS[s]).filter(Boolean))],
   send: goveeSend,
   queued: (ip) => (goveeQueues[ip] ? goveeQueues[ip].q.length + (goveeQueues[ip].busy ? 1 : 0) : 0),
+  // Lightning drops pending low-priority (effect) packets so none lands right
+  // behind the white flash and hides it.
+  dropQueued: (ip) => {
+    const q = goveeQueues[ip];
+    if (!q) return;
+    const keep = q.q.filter(it => it.priority < 2);
+    for (const it of q.q) if (it.priority >= 2) it.resolve();
+    q.q = keep;
+  },
   log: (m) => broadcastLog(m, 'LIGHT'),
   onChange: () => broadcast({ type: 'lightMode', data: lightMode.status() }),
   beforeStart: () => {

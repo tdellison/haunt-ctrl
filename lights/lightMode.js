@@ -94,7 +94,7 @@ const scale = (c, k) => ({ r: c.r * k, g: c.g * k, b: c.b * k });
 const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };   // ease in/out
 const rand = (a, b) => a + Math.random() * (b - a);
 
-function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.log, onChange = () => {},
+function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = () => {}, log = console.log, onChange = () => {},
   beforeStart = () => {}, ambient = { start() {}, stop() {} } }) {
   let cfg = JSON.parse(JSON.stringify(DEFAULTS));
   try {
@@ -458,6 +458,11 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
   }
 
   // ── Storm flash ───────────────────────────────────────────────────────────
+  // Lightning: a bright white strike, a beat of dark, a second flicker, then
+  // back to the running look. Queued colour updates are dropped first — one
+  // sent right behind the white used to cover it within ~0.1 s. In per-light
+  // mode the white also goes out per segment, so both lights of a box flash.
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   async function flash() {
     if (flashing) return;
     const pairOn = (p) => cfg.segments === true ? !!cfg.twoPair || LIGHT_IDS.some(id => id.startsWith(p + ':') && cfg.lights[id].on) : cfg.pairs[p].on;
@@ -465,15 +470,26 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, log = console.l
     if (!ips.length) return;
     flashing = true;
     log('Lights-only: storm flash');
-    await Promise.all(ips.map(ip => Promise.all([
-      put(ip, 'colorwc', { color: { r: 255, g: 255, b: 255 }, colorTemInKelvin: 0 }, 0),
-      put(ip, 'brightness', { value: 100 }, 0),
+    const WHITE = { r: 255, g: 255, b: 255 };
+    const paint = (rgb, bri) => Promise.all(ips.map(ip => Promise.all([
+      put(ip, 'brightness', { value: bri }, 0),
+      cfg.segments === true && pairIps('skeleton').concat(pairIps('witch')).includes(ip)
+        ? send(ip, ptReal([segmentFrame(rgb, 0x03)]), 0).catch(() => {})
+        : put(ip, 'colorwc', { color: rgb, colorTemInKelvin: 0 }, 0),
     ])));
-    setTimeout(() => {
+    try {
+      for (const ip of ips) dropQueued(ip);
+      await paint(WHITE, 100);
+      await sleep(STORM_FLASH_MS);
+      await paint({ r: 0, g: 0, b: 0 }, 100);
+      await sleep(120);
+      await paint(WHITE, 100);
+      await sleep(150);
+    } finally {
       // Forget what was sent so the next tick repaints every light.
       for (const ip of ips) if (sent[ip]) { delete sent[ip].color; delete sent[ip].bri; }
       flashing = false;
-    }, STORM_FLASH_MS);
+    }
   }
   function scheduleStorm() {
     clearTimeout(stormTimer); stormTimer = null; nextFlashAt = null;
