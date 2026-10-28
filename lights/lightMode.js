@@ -192,10 +192,10 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
     strike = null;
     return base;
   }
-  function bloodStrikes(t) {
+  function bloodStrikes(t, members) {
     if (!nextStrikeAt) nextStrikeAt = t + rand(15000, 45000);
     if (!strike && t >= nextStrikeAt) {
-      strike = { light: Math.floor(Math.random() * 4), at: t };
+      strike = { light: members[Math.floor(Math.random() * members.length)], at: t };
       nextStrikeAt = t + rand(15000, 60000);               // asynchronous, never on a beat
     }
   }
@@ -206,12 +206,12 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   const CORPSE = { r: 0, g: 0xF2, b: 0xFE };
   const ECTO_ACCENTS = [{ r: 0x39, g: 0xFF, b: 0x14 }, { r: 0x94, g: 0, b: 0xD3 }];
   const ECTO_PASS = 5000, ECTO_REST = 2500;
-  function ectoLook(i, t) {
+  function ectoLook(at, n, t) {
     const cycle = ECTO_PASS + ECTO_REST;
-    const n = Math.floor(t / cycle), d = t % cycle;
-    const accent = ECTO_ACCENTS[n % ECTO_ACCENTS.length];
-    const pos = -1 + 5 * (d / ECTO_PASS);                   // enters before light 1, leaves after light 4
-    const k = d < ECTO_PASS ? Math.exp(-((pos - i) ** 2) / (2 * 0.55 ** 2)) : 0;
+    const pass = Math.floor(t / cycle), d = t % cycle;
+    const accent = ECTO_ACCENTS[pass % ECTO_ACCENTS.length];
+    const pos = -1 + (n + 1) * (d / ECTO_PASS);             // enters before the first light, leaves after the last
+    const k = d < ECTO_PASS ? Math.exp(-((pos - at) ** 2) / (2 * 0.55 ** 2)) : 0;
     return { color: mix(CORPSE, accent, k), level: lerp(0.3, 1, k) };
   }
 
@@ -221,10 +221,12 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   // sinks to 20% Corpse Blue-Gray, and the reverse toward -1 — the cool
   // highlight slides left and right so the shadows sway like trees in a breeze.
   const SWAY_MAGENTA = { r: 0xD5, g: 0, b: 0xF9 }, SWAY_CYAN = { r: 0, g: 0xE5, b: 0xFF }, SWAY_CORPSE = { r: 0x1A, g: 0x23, b: 0x7E };
-  function swayLook(i, t) {
-    if (i === 0 || i === 3) return { color: SWAY_MAGENTA, level: 0.25 };
+  // On fewer than 4 lights there is no border: they sway against each other.
+  function swayLook(at, n, t) {
+    if (n >= 4 && (at === 0 || at === n - 1)) return { color: SWAY_MAGENTA, level: 0.25 };
     const v = Math.sin(t / 2000);
-    const k = (i === 1 ? v + 1 : 1 - v) / 2;              // 0..1, inverted between 2 and 3
+    const inner = n >= 4 ? at - 1 : at;
+    const k = (inner % 2 === 0 ? v + 1 : 1 - v) / 2;      // 0..1, inverted between neighbours
     return { color: mix(SWAY_CORPSE, SWAY_CYAN, k), level: lerp(0.2, 0.9, k) };
   }
 
@@ -236,11 +238,11 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   const LOOM_UP = 800, LOOM_HOLD = 1000, LOOM_DOWN = 1500;
   const surges = [];                        // { light, at }
   let nextSurgeAt = 0;
-  function loomSurges(t) {
+  function loomSurges(t, members) {
     if (!nextSurgeAt) nextSurgeAt = t + rand(4000, 6000);
     if (t >= nextSurgeAt) {
       const busy = new Set(surges.map(s => s.light));
-      const free = [0, 1, 2, 3].filter(n => !busy.has(n));
+      const free = members.filter(n => !busy.has(n));
       if (free.length) surges.push({ light: free[Math.floor(Math.random() * free.length)], at: t });
       nextSurgeAt = t + rand(4000, 6000);
     }
@@ -273,12 +275,14 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   // Red every 60-120 ms; inner lights 2 and 3 are the potion — solid Toxic
   // Witch Green breathing 15%-80%.
   const BREW_GREEN = { r: 0, g: 0xFF, b: 0x33 }, BREW_ORANGE = { r: 0xFF, g: 0x33, b: 0 }, BREW_EMBER = { r: 0x8B, g: 0, b: 0 };
-  function brewLook(i, t) {
-    if (i === 0 || i === 3) {
+  // Fire on the outer lights of the group (the first one, if only two);
+  // potion in between.
+  function brewLook(i, at, n, t) {
+    if (at === 0 || (n >= 3 && at === n - 1)) {
       const f = flickerAt(`brew:${i}`, t, 60, 120, () => ({ color: mix(BREW_EMBER, BREW_ORANGE, Math.random()), level: rand(0.55, 1) }));
       return { color: f.color, level: f.level };
     }
-    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / 6000 + (i === 2 ? 1.2 : 0));
+    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / 6000 + at * 1.2);
     return { color: BREW_GREEN, level: lerp(0.15, 0.8, w) };
   }
 
@@ -286,9 +290,9 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   // 2+4 Deep Acid Purple; a slow, heavily overlapping crossfade swaps them
   // every 8 s (and back), a murky neon sludge across the props.
   const SWAMP_LIME = { r: 0xAD, g: 0xFF, b: 0x2F }, SWAMP_PURPLE = { r: 0x6A, g: 0x0D, b: 0xAD };
-  function swampLook(i, t) {
+  function swampLook(at, t) {
     const k = 0.5 - 0.5 * Math.cos(Math.PI * t / 8000);   // 0 -> 1 over 8 s, back over the next 8
-    const toPurple = i % 2 === 0 ? k : 1 - k;
+    const toPurple = at % 2 === 0 ? k : 1 - k;
     return { color: mix(SWAMP_LIME, SWAMP_PURPLE, toPurple), level: 1 };
   }
 
@@ -297,9 +301,9 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   // chance that one random light gusts down to 10% Dying Ember Red for 100 ms.
   const CANDLE_AMBER = { r: 0xFF, g: 0x99, b: 0 }, CANDLE_GOLD = { r: 0xFF, g: 0xCC, b: 0 }, CANDLE_EMBER = { r: 0x99, g: 0x22, b: 0 };
   let gust = null;                           // { light, until }
-  function candleGusts(t) {
+  function candleGusts(t, members) {
     if (gust && t >= gust.until) gust = null;
-    if (!gust && Math.random() < 0.05) gust = { light: Math.floor(Math.random() * 4), until: t + 100 };
+    if (!gust && Math.random() < 0.05) gust = { light: members[Math.floor(Math.random() * members.length)], until: t + 100 };
   }
   function candleLook(i, t) {
     if (gust && gust.light === i) return { color: CANDLE_EMBER, level: 0.1 };
@@ -311,14 +315,15 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   // on light 1, holds 1.5 s, hands off to 2 (fading back as 2 rises) ... to 4,
   // then sweeps back 3 -> 2 -> 1. The accent swaps (violet <-> green) at each
   // end.
-  const DRIFT_PATH = [0, 1, 2, 3, 2, 1];
-  function drift4Look(i, t) {
+  // On a smaller group it sweeps across just those lights.
+  function drift4Look(pos, n, t) {
+    const path = n > 1 ? [...Array(n).keys(), ...[...Array(n).keys()].slice(1, -1).reverse()] : [0];
     const step = Math.floor(t / DRIFT_STEP), inStep = t % DRIFT_STEP;
-    const at = (st) => DRIFT_PATH[st % DRIFT_PATH.length];
-    const accentOf = (st) => DRIFT_ACCENTS[Math.floor(st / 3) % DRIFT_ACCENTS.length];
+    const at = (st) => path[st % path.length];
+    const accentOf = (st) => DRIFT_ACCENTS[Math.floor(st / Math.max(1, n - 1)) % DRIFT_ACCENTS.length];
     const rise = smooth(inStep / DRIFT_FADE);
-    if (i === at(step)) return { color: mix(DRIFT_BASE, accentOf(step), rise), level: lerp(0.2, 0.85, rise) };
-    if (step > 0 && i === at(step - 1)) return { color: mix(DRIFT_BASE, accentOf(step - 1), 1 - rise), level: lerp(0.2, 0.85, 1 - rise) };
+    if (pos === at(step)) return { color: mix(DRIFT_BASE, accentOf(step), rise), level: lerp(0.2, 0.85, rise) };
+    if (step > 0 && pos === at(step - 1)) return { color: mix(DRIFT_BASE, accentOf(step - 1), 1 - rise), level: lerp(0.2, 0.85, 1 - rise) };
     return { color: DRIFT_BASE, level: 0.2 };
   }
 
@@ -326,20 +331,46 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   const lightId = (i) => cfg.order[i].join(':');
   const lightCfg = (i) => cfg.lights[lightId(i)];
 
-  // One light's look in per-light mode: a theme, a both-pairs effect (by its
-  // pair), or its own effect.
-  function lightLook(i, t) {
-    const pair = cfg.order[i][0];
-    switch (cfg.twoPair) {
-      case 'blood': return bloodLook(i, t);
-      case 'ecto': return ectoLook(i, t);
-      case 'sway': return swayLook(i, t);
-      case 'loom': return loomLook(i, t);
-      case 'brew': return brewLook(i, t);
-      case 'swamp': return swampLook(i, t);
-      case 'candle': return candleLook(i, t);
-      case 'drift': return drift4Look(i, t);
-      case 'coven': return covenLook(pair, t);
+  // Coven Pulse per light: the group's lights breathe evenly out of step.
+  function coven4Look(at, n, t) {
+    const off = 2 * Math.PI * at / Math.max(2, n);
+    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / 7000 + off);
+    const hue = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / 23000 + off);
+    return { color: mix(COVEN_BASE, mix(SAPPHIRE, MAGENTA, hue), w), level: lerp(0.15, 0.8, w) };
+  }
+
+  // Which theme light i runs: the all-lights theme, or its own setting when
+  // that is a theme (themes can run on any group of lights, e.g. Fire on
+  // lights 1-2 and Coven Pulse on 3-4).
+  const themeOf = (i) => cfg.twoPair || (TWO_PAIR_EFFECTS.includes(lightCfg(i).effect) ? lightCfg(i).effect : null);
+  // theme -> its lights in yard order (only lights that are on).
+  function themeGroups() {
+    const g = {};
+    for (let i = 0; i < 4; i++) {
+      const th = themeOf(i);
+      if (th && (cfg.twoPair || lightCfg(i).on)) (g[th] = g[th] || []).push(i);
+    }
+    return g;
+  }
+
+  // One light's look in per-light mode: its theme (placed within its group)
+  // or its own effect.
+  function lightLook(i, t, groups) {
+    const th = themeOf(i);
+    if (th) {
+      const members = groups[th] || [i];
+      const at = members.indexOf(i), n = members.length;
+      switch (th) {
+        case 'blood': return bloodLook(i, t);
+        case 'ecto': return ectoLook(at, n, t);
+        case 'sway': return swayLook(at, n, t);
+        case 'loom': return loomLook(i, t);
+        case 'brew': return brewLook(i, at, n, t);
+        case 'swamp': return swampLook(at, t);
+        case 'candle': return candleLook(i, t);
+        case 'drift': return drift4Look(at, n, t);
+        case 'coven': return coven4Look(at, n, t);
+      }
     }
     const L = lightCfg(i);
     if (L.effect === 'fire') return fireLook(lightId(i), t);
@@ -377,9 +408,10 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
 
   // Four lights: one ptReal per controller per tick carrying both its lights.
   function segmentTick(t) {
-    if (cfg.twoPair === 'blood') bloodStrikes(t);
-    if (cfg.twoPair === 'loom') loomSurges(t);
-    if (cfg.twoPair === 'candle') candleGusts(t);
+    const groups = themeGroups();
+    if (groups.blood) bloodStrikes(t, groups.blood);
+    if (groups.loom) loomSurges(t, groups.loom);
+    if (groups.candle) candleGusts(t, groups.candle);
     const byIp = {};
     cfg.order.forEach(([pair, seg], i) => {
       const ip = pairIps(pair)[0];
@@ -387,7 +419,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
       const L = lightCfg(i);
       const theme = !!cfg.twoPair;
       const on = theme || L.on;
-      const look = on ? lightLook(i, t) : { color: { r: 0, g: 0, b: 0 }, level: 0 };
+      const look = on ? lightLook(i, t, groups) : { color: { r: 0, g: 0, b: 0 }, level: 0 };
       // Each light's brightness rides in its RGB (the controller's own
       // brightness is shared by both lights, so it stays at 100).
       const c = scale(look.color, clamp01(look.level) * (on ? L.bri / 100 : 0));
@@ -581,9 +613,15 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
     // Per-light settings: ids = ['skeleton:0', ...]; same patch as setPair.
     setLights(ids, patch = {}) {
       if (!Array.isArray(ids) || !ids.length || !ids.every(id => LIGHT_IDS.includes(id))) throw new Error(`ids must be from ${LIGHT_IDS.join(', ')}`);
-      if (patch.effect !== undefined && !SINGLE_EFFECTS.includes(patch.effect)) throw new Error(`Unknown effect "${patch.effect}"`);
+      if (patch.effect !== undefined && !SINGLE_EFFECTS.includes(patch.effect) && !TWO_PAIR_EFFECTS.includes(patch.effect)) throw new Error(`Unknown effect "${patch.effect}"`);
+      if (TWO_PAIR_EFFECTS.includes(patch.effect) && cfg.segments !== true) throw new Error('Themes on single lights need per-light control — run the solo test first');
+      // Leaving an all-lights theme: the lights NOT being changed take it over
+      // as their own setting, so they keep doing what they were doing.
+      if (patch.effect !== undefined && cfg.twoPair) {
+        for (const id of LIGHT_IDS) if (!ids.includes(id)) { cfg.lights[id].effect = cfg.twoPair; cfg.lights[id].on = true; }
+        cfg.twoPair = null;
+      }
       for (const id of ids) applyLight(id, patch);
-      if (patch.effect !== undefined) cfg.twoPair = null;
       save(); onChange();
       return api.status();
     },

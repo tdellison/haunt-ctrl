@@ -933,12 +933,12 @@ body::before { animation:scanlines 10s linear infinite; }
       <button data-fx="fire" onclick="lmEffect('fire')"><span>🔥</span>Fire</button>
       <button data-fx="witch" onclick="lmEffect('witch')"><span>🟣</span>Purple Pulse</button>
       <button data-fx="drift" onclick="lmEffect('drift')"><span>👻</span>Spectral Drift<small id="lm-drift-s">uses both pairs</small></button>
-      <button data-fx="coven" onclick="lmEffect('coven')"><span>🔮</span>Coven Pulse<small>uses both pairs</small></button>
+      <button data-fx="coven" onclick="lmEffect('coven')"><span>🔮</span>Coven Pulse<small id="lm-coven-s">uses both pairs</small></button>
     </div>
   </div>
 
   <div class="panel">
-    <div class="lm-step">4-LIGHT THEMES <small style="letter-spacing:0">(each spotlight on its own)</small></div>
+    <div class="lm-step">THEMES <small style="letter-spacing:0">(ALL = every light; or pick a pair / light first)</small></div>
     <div id="lm-seg-note" style="font-size:.75em;color:var(--dim2);margin-bottom:10px"></div>
     <div class="lm-grid lm-grid2" id="lm-seg-themes">
       <button data-fx="blood" onclick="lmEffect('blood')"><span>🩸</span>Blood &amp; Lightning</button>
@@ -2460,7 +2460,9 @@ async function lmSet(patch) {
 }
 async function lmEffect(fx) {
   if (LM_THEMES.includes(fx) && !lmSolo()) return alert('Run "TEST: CAN EACH LIGHT GO SOLO?" first.');
-  if (['drift', 'coven', ...LM_THEMES].includes(fx)) return api('/api/lights/mode/two-pair', { effect: fx });
+  // A theme on ALL takes over every light; on a pair or single light (per-light
+  // mode) it runs on just those, and the rest keep their own effect.
+  if (['drift', 'coven', ...LM_THEMES].includes(fx) && (lmTgt === 'both' || !lmSolo())) return api('/api/lights/mode/two-pair', { effect: fx });
   await lmSet({ effect: fx, on: true });
 }
 async function lmColor(hex) {
@@ -2498,6 +2500,7 @@ function renderLightMode(st) {
   document.getElementById('lm-target-solo').style.display = solo ? 'flex' : 'none';
   if (!solo && lmTgt[0] === 'l') lmTgt = 'both';
   document.getElementById('lm-drift-s').textContent = solo ? 'sweeps 1 → 4 and back' : 'uses both pairs';
+  document.getElementById('lm-coven-s').textContent = solo ? 'on the lights you picked' : 'uses both pairs';
   document.querySelectorAll('#lm-target-solo button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
   document.querySelectorAll('#lm-target button').forEach(b => b.classList.toggle('sel', b.dataset.t === lmTgt));
   const tg = lmTargets();
