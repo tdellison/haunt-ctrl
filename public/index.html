@@ -938,7 +938,7 @@ body::before { animation:scanlines 10s linear infinite; }
   </div>
 
   <div class="panel">
-    <div class="lm-step">THEMES <small style="letter-spacing:0">(ALL = every light; or pick a pair / light first)</small></div>
+    <div class="lm-step">4-LIGHT THEMES <small style="letter-spacing:0">(always use all 4 lights)</small></div>
     <div id="lm-seg-note" style="font-size:.75em;color:var(--dim2);margin-bottom:10px"></div>
     <div class="lm-grid lm-grid2" id="lm-seg-themes">
       <button data-fx="blood" onclick="lmEffect('blood')"><span>🩸</span>Blood &amp; Lightning</button>
@@ -2462,7 +2462,9 @@ async function lmEffect(fx) {
   if (LM_THEMES.includes(fx) && !lmSolo()) return alert('Run "TEST: CAN EACH LIGHT GO SOLO?" first.');
   // A theme on ALL takes over every light; on a pair or single light (per-light
   // mode) it runs on just those, and the rest keep their own effect.
-  if (['drift', 'coven', ...LM_THEMES].includes(fx) && (lmTgt === 'both' || !lmSolo())) return api('/api/lights/mode/two-pair', { effect: fx });
+  // The 4-light themes always use all four lights (owner, 2026-10-28). Spectral
+  // Drift / Coven Pulse can run on a pair or single lights in per-light mode.
+  if (LM_THEMES.includes(fx) || (['drift', 'coven'].includes(fx) && (lmTgt === 'both' || !lmSolo()))) return api('/api/lights/mode/two-pair', { effect: fx });
   await lmSet({ effect: fx, on: true });
 }
 async function lmColor(hex) {
