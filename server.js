@@ -3636,7 +3636,9 @@ const skeletonLines = require('./ai/skeletons').createSkeletonLines({
   log: (m) => broadcastLog(`Llama: ${m}`, 'SYSTEM'),
   // While Lily is listening, her speech-to-text needs the CPU: no background
   // bank writing (measured: it pushed her transcription from 0.6 s to 2-7 s).
-  quiet: () => { try { return !!lilyTalk.status().listening; } catch (_) { return false; } },
+  // Pause the background line bank while Lily listens (CPU for speech-to-text)
+  // and in Lights-only mode (no AI on those nights — it ran the CPU at 90 °C).
+  quiet: () => { try { return !!lilyTalk.status().listening || !!(lightMode && lightMode.running); } catch (_) { return false; } },
 });
 if (!IS_WINDOWS) {
   llama.warm().then(ok => { if (ok) skeletonLines.refill(); });
@@ -4095,6 +4097,7 @@ lightMode = require('./lights/lightMode').createLightMode({
   onChange: () => broadcast({ type: 'lightMode', data: lightMode.status() }),
   beforeStart: () => {
     if (state.showActive) throw new Error('End the show first — Lights-only mode is for non-show nights');
+    llama.abortBackground();             // stop any skeleton line being written
     stopEffects();                       // the show's living effects would fight it
     try { lilyTalk.stop(); } catch (_) {} // no AI: Lily stops listening
   },
