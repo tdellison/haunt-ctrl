@@ -690,7 +690,9 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
         if (wearing && !busy) {
           try {
             await respond(`(Looking at the guests in front of you, you notice: ${wearing}. React to what they are wearing in ONE short line — ` +
-              'playful and in character, never mocking; extra warmth for small children.)');
+              'call the character by name if there is one and play along with who they are (a hero: thank them for guarding the ' +
+              'graveyard; a famous monster or villain: playful mock-fright or a knowing nod, one creature of the night to another; ' +
+              'a princess or cute costume: delight). Playful and in character, never mocking, PG; extra warmth for small children.)');
           } catch (_) {}
         }
       }

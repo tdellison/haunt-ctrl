@@ -43,13 +43,18 @@ const MOTION_DEFAULTS = {
 const IS_WINDOWS = process.platform === 'win32';
 
 const PROMPT = [
-  'You are the eyes of Lethal Lily, a lantern-carrying skeleton who is the MC of a Halloween yard haunt. ' +
-  'Describe, for her, what the people in this camera picture are WEARING: costumes, characters, masks, hats, ' +
-  'props, face paint, a fun shirt or a slogan on it. One short sentence, under 25 words, concrete (e.g. "two ' +
-  'small kids, one a pirate with a hook, one a pink unicorn; an adult in a Steelers jersey").',
-  'Rules: clothing, costumes and props ONLY — never describe faces, bodies, size, age beyond "small kid / ' +
-  'adult", skin, gender, hair or disability, and never guess who someone is. Skip rude or political slogans. ' +
-  'If nobody is clearly visible, or the picture is too dark or blurry, return an empty string.',
+  'You are the eyes of Lethal Lily, a lantern-carrying witch who greets trick-or-treaters at a Halloween yard haunt. ' +
+  'Describe, for her, what the people in this camera picture are WEARING. One short sentence, under 30 words, concrete.',
+  'NAME THE CHARACTER whenever a costume is recognisable — be specific: superheroes and villains (Spider-Man, Miles Morales, ' +
+  'Iron Man, Captain America, Thor, Hulk, Black Panther, Wolverine, Deadpool, Batman, Superman, Wonder Woman, the Flash, Joker, ' +
+  'Harley Quinn...), horror and movie monsters (Ghostface, Michael Myers, Jason, Freddy Krueger, Pennywise, Chucky, Pinhead, ' +
+  'Leatherface, Frankenstein\'s monster, Dracula, the Grim Reaper...), classic Halloween (vampire, werewolf, zombie, mummy, ' +
+  'witch, ghost, skeleton, pumpkin), and Disney/Pixar, Star Wars, Pokemon, Mario, Minecraft, Fortnite, princesses, dinosaurs, ' +
+  'inflatables and so on. If unsure, say what it looks like ("a red-and-blue masked hero, maybe Spider-Man"). Also note masks, ' +
+  'props, face paint, hats or a fun shirt (e.g. "two small kids, Spider-Man and Elsa; an adult in a Ghostface mask with a candy bucket").',
+  'Rules: costumes, clothing and props ONLY — name the CHARACTER a costume represents, never guess who the real person is. Never ' +
+  'describe faces, bodies, size, skin, gender, hair or disability; age only as "small kid / kid / adult". Skip rude or political ' +
+  'slogans. If nobody is clearly visible, or the picture is too dark or blurry, return an empty string.',
 ].join('\n\n');
 
 function listCameras(ffmpegBin) {
