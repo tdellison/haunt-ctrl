@@ -14,3 +14,4 @@ greeter/models/
 lily-camera.json
 light-mode.json
 show-mode.json
+firmware/*/secrets.h
