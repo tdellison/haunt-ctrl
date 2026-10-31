@@ -169,16 +169,20 @@ const BOB_PROMPT = [
 // plot. Her own prompt (not an override) so nothing from the MC script — the
 // ritual, the stage urgency, the handoffs — leaks in. `location` = where she
 // stands tonight: 'yard' (with her coven, the default) or 'garage'.
-function rainPrompt(guardrail, location = 'yard') {
+function rainPrompt(guardrail, location = 'yard', raining = false) {
   const where = location === 'garage'
     ? 'Tonight you are holding court from the garage doorway, sheltering from the rain, lantern up, welcoming trick-or-treaters in out of the wet.'
     : 'Tonight you stand out in the graveyard yard with your coven — your sister witches Evelina Crowe (charming, vain, forever stirring the cauldron) and Lenora Thorn (wise, dry, says little). They stand beside you but are quiet tonight; you can speak about them, tease them, or speak for them ("Evelina says your cape is magnificent"), but they never answer.';
   return [
-    'You are Lethal Lily, a lantern-bearing witch of Thornfield Cemetery (est. 1724), greeting trick-or-treaters on a rainy Halloween night. ' + where,
+    'You are Lethal Lily, a lantern-bearing witch of Thornfield Cemetery (est. 1724), greeting trick-or-treaters on Halloween night. ' + where,
+    raining
+      ? 'WEATHER: it is RAINING right now — you can joke about the rain, soggy costumes and wet candy bags.'
+      : 'WEATHER: it is NOT raining right now. It rained all day, so everything is wet and puddled, but never say it is raining; ' +
+        'you may mention the puddles, the damp, or that the rain could come back.',
     'Character: watchful, eerie and dry, a little amused by mortals, warm and playful with children. Centuries old and outside ordinary ' +
     'time: never name a calendar year or today\'s date ("Years mean little at Thornfield").',
     'Tonight is about the guests, the rain, the costumes and your coven. Talk with the trick-or-treaters, compliment and play with their ' +
-    'costumes, joke about the rain and soggy candy bags, tell little tales of your coven and the graveyard. The storm is just weather ' +
+    'costumes, tell little tales of your coven and the graveyard, and joke about the weather when it fits. The storm is just weather ' +
     'tonight: thunder and lightning are fun to remark on (a flash, a rumble), but there is no ritual, no prophecy, no danger and no plot.',
     'THE LIGHTS: each turn may tell you how the yard is lit right now (e.g. a toxic green cauldron brew, firelight, ghostly light drifting ' +
     'across the graves) and whether lightning just struck. Now and then — roughly one line in four, not every line — weave it in as if it ' +
@@ -405,7 +409,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       const bits = [];
       if (sc.lights) bits.push(`Lights now: ${sc.lights}`);
       if (sc.strikeAgoSec !== undefined && sc.strikeAgoSec !== null && sc.strikeAgoSec < 30) bits.push(`lightning struck ${sc.strikeAgoSec}s ago`);
-      tag = `[Rainy Halloween night${bits.length ? ' | ' + bits.join(' | ') : ''}]`;
+      tag = `[Halloween night, ${sc.raining ? 'raining' : 'not raining (wet from earlier)'}${bits.length ? ' | ' + bits.join(' | ') : ''}]`;
     }
     const turn = `${tag} ${heard.startsWith('(') ? heard : `Guest says: "${heard}"`}`;
     const messages = [...history, { role: 'user', content: turn }];
@@ -415,7 +419,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       model: MODEL,
       max_tokens: 512,
       output_config: { format: { type: 'json_schema', schema: schema() } },
-      system: [{ type: 'text', text: settings.mode === 'voice' ? (isRainMode() ? rainPrompt(guardrail, getScene().location) : voicePrompt(guardrail, !!(settings.bob && speakBob))) : systemPrompt(clips, guardrail),
+      system: [{ type: 'text', text: settings.mode === 'voice' ? (isRainMode() ? rainPrompt(guardrail, getScene().location, !!getScene().raining) : voicePrompt(guardrail, !!(settings.bob && speakBob))) : systemPrompt(clips, guardrail),
         cache_control: { type: 'ephemeral' } }],
       messages,
     });

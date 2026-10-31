@@ -1010,6 +1010,11 @@ body::before { animation:scanlines 10s linear infinite; }
       <button data-loc="yard" onclick="api('/api/rain/location',{location:'yard'})">🪦 YARD (with her coven)</button>
       <button data-loc="garage" onclick="api('/api/rain/location',{location:'garage'})">🏠 GARAGE</button>
     </div>
+    <div class="lm-step" style="margin-top:12px">RAINING RIGHT NOW?</div>
+    <div class="lm-seg" id="rain-wx">
+      <button data-wx="0" onclick="api('/api/rain/raining',{raining:false})">☁️ NO (just wet)</button>
+      <button data-wx="1" onclick="api('/api/rain/raining',{raining:true})">🌧 YES, RAINING</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -2689,6 +2694,7 @@ function renderRain(st) {
     `💡 ${L.running ? (L.look || 'lights on') : 'lights off'}${L.nextFlashAt ? ' · ⚡ next ' + fmtT(L.nextFlashAt) : ''}`,
   ].join('<br>');
   document.querySelectorAll('#rain-loc button').forEach(b => b.classList.toggle('sel', b.dataset.loc === st.location));
+  document.querySelectorAll('#rain-wx button').forEach(b => b.classList.toggle('sel', b.dataset.wx === (st.raining ? '1' : '0')));
   const lr = tk.lastReply;
   document.getElementById('rain-last').textContent = lr && lr.text ? `Last: "${lr.text}"` : '';
   const flag = (id, on) => { document.getElementById(id).classList.toggle('sel', !!on); document.getElementById(id + '-s').textContent = on ? 'ON' : 'off'; };

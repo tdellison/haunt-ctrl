@@ -43,12 +43,14 @@ let showMode = 'normal';
 // Rain night: where Lily stands — 'yard' (with her coven, default) or 'garage'.
 const LOCATIONS = ['yard', 'garage'];
 let showLocation = 'yard';
+let showRaining = false;            // owner flips it when it actually rains
 try {
   const saved = JSON.parse(fs.readFileSync(SHOW_MODE_FILE, 'utf8'));
   if (SHOW_MODES.includes(saved.mode)) showMode = saved.mode;
   if (LOCATIONS.includes(saved.location)) showLocation = saved.location;
+  showRaining = !!saved.raining;
 } catch (_) {}
-const saveShowMode = () => { try { fs.writeFileSync(SHOW_MODE_FILE, JSON.stringify({ mode: showMode, location: showLocation })); } catch (e) { broadcastLog(`show mode save failed: ${e.message}`, 'SYSTEM'); } };
+const saveShowMode = () => { try { fs.writeFileSync(SHOW_MODE_FILE, JSON.stringify({ mode: showMode, location: showLocation, raining: showRaining })); } catch (e) { broadcastLog(`show mode save failed: ${e.message}`, 'SYSTEM'); } };
 const isRainMode = () => showMode === 'rain';
 // Is this character out tonight? (Rain mode skips the yard props.)
 // Lights-only mode (lights/lightMode.js) — created with its routes below.
@@ -3870,6 +3872,7 @@ const lilyTalk = require('./lily/talk').createTalk({
   isRainMode,
   getScene: () => ({
     location: showLocation,
+    raining: showRaining,
     lights: lightMode && lightMode.running ? lightMode.describe() : null,
     strikeAgoSec: lightMode && lightMode.lastStrikeAt ? Math.round((Date.now() - lightMode.lastStrikeAt) / 1000) : null,
   }),
@@ -4172,7 +4175,7 @@ const yardSpeaker = require('./audio/btSpeaker').createBtSpeaker({
 let rainShowOn = false;
 function rainStatus() {
   return {
-    mode: showMode, location: showLocation, running: rainShowOn,
+    mode: showMode, location: showLocation, raining: showRaining, running: rainShowOn,
     lights: lightMode.status(), speaker: yardSpeaker.status(),
     talk: lilyTalk.status(), lily: lily ? lily.status() : null, camera: lilyCamera.status(),
   };
@@ -4190,6 +4193,11 @@ app.post('/api/rain/location', rainRoute(({ location }) => {
   showLocation = location; saveShowMode();
   try { lilyTalk.resetConversation(); } catch (_) {}
   broadcastLog(`Lily is now in the ${location}`, 'SYSTEM');
+}));
+app.post('/api/rain/raining', rainRoute(({ raining }) => {
+  showRaining = !!raining; saveShowMode();
+  try { lilyTalk.resetConversation(); } catch (_) {}
+  broadcastLog(showRaining ? 'It is RAINING — Lily knows' : 'Not raining — Lily knows (wet from earlier)', 'SYSTEM');
 }));
 // One tap: rain mode on, lights running, ambient on the yard speaker, camera
 // watching, Lily listening.
