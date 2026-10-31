@@ -88,6 +88,8 @@ async function transcribeViaServer(pcm) {
 }
 const cleanHeard = (t) => t.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/[♪♫]/g, ' ').replace(/\s+/g, ' ').trim();
 // whisper tags music as ♪ ... ♪, [Music], (music playing), [singing] ...
+// ...and car horns as (car horn honking), [horn], (honk) ...
+const HONK_MARK = /[\[(][^\])]*\b(horns?|honk\w*|beep\w*|car alarm)\b[^\])]*[\])]/i;
 const MUSIC_MARK = /[♪♫]|[\[(][^\])]*\b(music|singing|song|melody|instrumental)\b[^\])]*[\])]/i;
 
 // Raw whisper text (with its [tags]) — the caller decides what's speech.
@@ -613,7 +615,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   // While music is going, the instant murmur is skipped — every bar of a
   // song would otherwise get a "Hmm...".
   const MUSIC_REACT_CHANCE = 0.45, MUSIC_ROLL_MS = 4 * 60000, MUSIC_RECENT_MS = 90000;
-  let lastMusicAt = 0, lastMusicRollAt = 0;
+  let lastMusicAt = 0, lastMusicRollAt = 0, lastHonkAt = 0;
 
   async function onUtterance(pcm) {
     if (busy) return;
@@ -626,6 +628,17 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     const raw = await transcribeRaw(pcm);
     const heard = cleanHeard(raw);
     timing.sttMs = Date.now() - tStt;
+    // Car horn (owner, Halloween 2026): react, at most once a minute.
+    if (HONK_MARK.test(raw)) {
+      if (Date.now() - lastHonkAt >= 60000) {
+        lastHonkAt = Date.now();
+        log('hears a car horn — reacting');
+        respond('(A car just honked its horn out on the street. React in ONE short line — playful, in character: wave them on, ' +
+          'tease the noisy carriage, or tell them the dead are trying to rest. PG.)').catch(e => log(`turn failed: ${e.message}`));
+        return;
+      }
+      set({ phase: 'listening' }); return;
+    }
     if (MUSIC_MARK.test(raw)) {
       lastMusicAt = Date.now();
       if (Date.now() - lastMusicRollAt >= MUSIC_ROLL_MS) {
