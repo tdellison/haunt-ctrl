@@ -86,12 +86,16 @@ async function transcribeViaServer(pcm) {
   if (!r.ok) throw new Error(`whisper-server ${r.status}`);
   return String((await r.json()).text || '');
 }
-const cleanHeard = (t) => t.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+const cleanHeard = (t) => t.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/[♪♫]/g, ' ').replace(/\s+/g, ' ').trim();
+// whisper tags music as ♪ ... ♪, [Music], (music playing), [singing] ...
+const MUSIC_MARK = /[♪♫]|[\[(][^\])]*\b(music|singing|song|melody|instrumental)\b[^\])]*[\])]/i;
 
-async function transcribe(pcm) {
-  try { if (whisperServer) return cleanHeard(await transcribeViaServer(pcm)); } catch (_) {}
+// Raw whisper text (with its [tags]) — the caller decides what's speech.
+async function transcribeRaw(pcm) {
+  try { if (whisperServer) return await transcribeViaServer(pcm); } catch (_) {}
   return transcribeCli(pcm);
 }
+async function transcribe(pcm) { return cleanHeard(await transcribeRaw(pcm)); }
 
 function transcribeCli(pcm) {
   const file = path.join(os.tmpdir(), `lily-heard-${Date.now()}.wav`);
@@ -101,8 +105,8 @@ function transcribeCli(pcm) {
       { timeout: 30000 }, (err, out) => {
         try { fs.unlinkSync(file); } catch (_) {}
         if (err) return resolve('');
-        // whisper marks non-speech as [BLANK_AUDIO], (wind), etc.
-        resolve(out.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim());
+        // raw: whisper marks non-speech as [BLANK_AUDIO], (wind), ♪ ... ♪
+        resolve(String(out || '').trim());
       });
   });
 }
@@ -599,15 +603,41 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
     return proc;
   }
 
+  // Music (owner, 2026-10-31: there WILL be music): when she hears it she
+  // reacts 45% of the time, rolled at most once per 4 min while it plays.
+  // While music is going, the instant murmur is skipped — every bar of a
+  // song would otherwise get a "Hmm...".
+  const MUSIC_REACT_CHANCE = 0.45, MUSIC_ROLL_MS = 4 * 60000, MUSIC_RECENT_MS = 90000;
+  let lastMusicAt = 0, lastMusicRollAt = 0;
+
   async function onUtterance(pcm) {
     if (busy) return;
     timing.heardAt = Date.now();
     // Murmur NOW — before transcription — so she reacts the instant you stop.
-    playFiller();
+    const musicOn = Date.now() - lastMusicAt < MUSIC_RECENT_MS;
+    if (!musicOn) playFiller();
     set({ phase: 'transcribing' });
     const tStt = Date.now();
-    const heard = await transcribe(pcm);
+    const raw = await transcribeRaw(pcm);
+    const heard = cleanHeard(raw);
     timing.sttMs = Date.now() - tStt;
+    if (MUSIC_MARK.test(raw)) {
+      lastMusicAt = Date.now();
+      if (Date.now() - lastMusicRollAt >= MUSIC_ROLL_MS) {
+        lastMusicRollAt = Date.now();
+        if (Math.random() < MUSIC_REACT_CHANCE) {
+          log('hears music — reacting');
+          const lyric = heard ? ` (it sounds like: "${heard.slice(0, 80)}")` : '';
+          respond(`(Music is playing nearby${lyric}. If you RECOGNISE the song from those words, name it and comment on it ` +
+            '(a Halloween classic like Thriller or Monster Mash deserves delight); if you are not sure, do NOT guess a title — just ' +
+            'react to the music. ONE short line: sway along, hum a note, or invite the trick-or-treaters to dance. PG, in character.)')
+            .catch(e => log(`turn failed: ${e.message}`));
+          return;
+        }
+        log('hears music — letting it play (55%)');
+      }
+      set({ phase: 'listening' }); return;   // lyrics are not a guest talking to her
+    }
     // whisper "hears" these in plain room noise — never answer them.
     if (!heard || heard.length < 2 || /^(you|thank you|thanks for watching)[.!]?$/i.test(heard)) {
       set({ phase: 'listening' }); return;
