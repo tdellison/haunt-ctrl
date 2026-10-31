@@ -24,6 +24,22 @@ const path = require('path');
 const SETTINGS_FILE = path.join(__dirname, '..', 'lily-camera.json');
 const MODEL = 'claude-haiku-4-5';
 const THUMB = 16 * 12;
+// Motion trigger (owner, 2026-10-31: the camera is her guest sensor) — the
+// work greeter's method: 160x120 grey frames at 5 fps compared to a slowly
+// adapting background; the share of changed pixels inside the drawn box is
+// the motion level. A person who stops fades into the background, and slow
+// light changes are absorbed, so neither keeps re-triggering.
+const MW = 160, MH = 120, MPIX = MW * MH;
+const MOTION_DEFAULTS = {
+  enabled: false,
+  box: { x0: 0.2, y0: 0.15, x1: 0.8, y1: 0.95 },  // fractions of the picture
+  pixelDelta: 25,          // how much a pixel must change (0-255) to count
+  minArea: 0.06,           // share of the box that must change (sensitivity)
+  framesToTrigger: 2,
+  quietFramesToRearm: 10,  // 2 s quiet before the next arrival counts
+  adapt: 0.1,              // background learning rate per frame
+  cooldownSec: 30,         // one greeting per group
+};
 const IS_WINDOWS = process.platform === 'win32';
 
 const PROMPT = [
@@ -58,14 +74,51 @@ function listCameras(ffmpegBin) {
   });
 }
 
-function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}, ffmpegBin = 'ffmpeg' }) {
-  let settings = { enabled: false, device: '', minBrightness: 35, chance: 1 };
-  try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch (_) {}
+function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}, ffmpegBin = 'ffmpeg', onArrival = () => {} }) {
+  let settings = { enabled: false, device: '', minBrightness: 35, chance: 1, motion: { ...MOTION_DEFAULTS } };
+  try {
+    const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    settings = { ...settings, ...saved, motion: { ...MOTION_DEFAULTS, ...(saved.motion || {}), box: { ...MOTION_DEFAULTS.box, ...((saved.motion || {}).box || {}) } } };
+  } catch (_) {}
   const save = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (e) { log(`camera settings save failed: ${e.message}`); } };
 
   const status = { running: false, device: null, brightness: null, lastError: null, lastSeen: null, lastSeenAt: null };
   let proc = null, wanted = false, restartTimer = null;
   let jpegBuf = Buffer.alloc(0), latest = null, latestAt = 0, thumbBuf = Buffer.alloc(0);
+  let motionBuf = Buffer.alloc(0), bg = null, hotFrames = 0, quietFrames = 999, armed = true, lastArrivalAt = 0;
+  status.motionLevel = 0; status.lastArrival = null;
+
+  function onMotion(d) {
+    motionBuf = motionBuf.length ? Buffer.concat([motionBuf, d]) : d;
+    while (motionBuf.length >= MPIX) {
+      motionFrame(motionBuf.subarray(0, MPIX));
+      motionBuf = motionBuf.subarray(MPIX);
+    }
+  }
+  function motionFrame(frame) {
+    const c = settings.motion;
+    if (!bg) { bg = Float32Array.from(frame); return; }
+    const x0 = Math.floor(c.box.x0 * MW), x1 = Math.ceil(c.box.x1 * MW);
+    const y0 = Math.floor(c.box.y0 * MH), y1 = Math.ceil(c.box.y1 * MH);
+    let changed = 0, total = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const i = y * MW + x; total++;
+      if (Math.abs(frame[i] - bg[i]) > c.pixelDelta) changed++;
+    }
+    for (let i = 0; i < MPIX; i++) bg[i] += (frame[i] - bg[i]) * c.adapt;
+    const level = total ? changed / total : 0;
+    status.motionLevel = Math.round(level * 1000) / 1000;
+    if (level >= c.minArea) { hotFrames++; quietFrames = 0; } else { hotFrames = 0; quietFrames++; }
+    if (quietFrames >= c.quietFramesToRearm) armed = true;
+    if (c.enabled && armed && hotFrames >= c.framesToTrigger) {
+      armed = false;
+      if (Date.now() - lastArrivalAt < c.cooldownSec * 1000) return;
+      lastArrivalAt = Date.now();
+      status.lastArrival = new Date().toISOString();
+      log(`Lily camera: guests arriving (motion ${Math.round(level * 100)}% of the box)`);
+      try { onArrival({ level }); } catch (_) {}
+    }
+  }
   let client = null;
   // Ask for 720p MJPEG (Linux): a 4K camera's full frames are wasted work —
   // everything is scaled to 640 wide. If it refuses, fall back to its default.
@@ -107,12 +160,15 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
       : askedMode ? ['-f', 'v4l2', '-input_format', 'mjpeg', '-video_size', '1280x720', '-framerate', '15', '-i', dev]
       : ['-f', 'v4l2', '-i', dev];
     const args = ['-hide_banner', '-loglevel', 'error', ...input,
-      '-filter_complex', '[0:v]fps=2,split=2[a][b];[a]scale=640:-2,format=yuvj420p[j];[b]scale=16:12,format=gray[t]',
+      '-filter_complex', `[0:v]split=2[v][m];[v]fps=2,split=2[a][b];[a]scale=640:-2,format=yuvj420p[j];[b]scale=16:12,format=gray[t];[m]fps=5,scale=${MW}:${MH},format=gray[g]`,
       '-map', '[j]', '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '5', 'pipe:1',
-      '-map', '[t]', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:3'];
-    jpegBuf = Buffer.alloc(0); thumbBuf = Buffer.alloc(0);
+      '-map', '[t]', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:3',
+      '-map', '[g]', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:4'];
+    jpegBuf = Buffer.alloc(0); thumbBuf = Buffer.alloc(0); motionBuf = Buffer.alloc(0);
+    bg = null; hotFrames = 0; quietFrames = 999; armed = true;
     status.device = dev;
-    proc = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe', 'pipe'], windowsHide: true });
+    proc = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe', 'pipe', 'pipe'], windowsHide: true });
+    proc.stdio[4].on('data', onMotion);
     status.running = true;
     if (!status.lastError) log(`Lily camera: watching ${dev}`);
     let errText = '';
@@ -197,6 +253,18 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
       if (patch.device !== undefined) settings.device = String(patch.device || '');
       if (patch.minBrightness !== undefined) settings.minBrightness = Math.max(0, Math.min(255, Number(patch.minBrightness) || 0));
       if (patch.chance !== undefined) settings.chance = Math.max(0, Math.min(1, Number(patch.chance)));
+      if (patch.motion) {
+        const m = patch.motion, c = settings.motion;
+        if (m.enabled !== undefined) c.enabled = !!m.enabled;
+        if (m.minArea !== undefined) c.minArea = Math.max(0.005, Math.min(0.9, Number(m.minArea) || 0.06));
+        if (m.cooldownSec !== undefined) c.cooldownSec = Math.max(0, Math.min(600, Number(m.cooldownSec) || 0));
+        if (m.box) {
+          const b = { ...c.box, ...m.box };
+          const v = (x) => Math.max(0, Math.min(1, Number(x)));
+          const nb = { x0: v(Math.min(b.x0, b.x1)), x1: v(Math.max(b.x0, b.x1)), y0: v(Math.min(b.y0, b.y1)), y1: v(Math.max(b.y0, b.y1)) };
+          if (nb.x1 - nb.x0 >= 0.05 && nb.y1 - nb.y0 >= 0.05) c.box = nb;
+        }
+      }
       save();
       if (JSON.stringify([settings.enabled, settings.device]) !== before) {
         stop();
@@ -204,7 +272,7 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
       }
       return { ...settings };
     },
-    status: () => ({ ...status, ...settings, hasPicture: !!latest && Date.now() - latestAt < 3000 }),
+    status: () => ({ ...status, ...settings, motion: { ...settings.motion, box: { ...settings.motion.box } }, hasPicture: !!latest && Date.now() - latestAt < 3000 }),
   };
 }
 

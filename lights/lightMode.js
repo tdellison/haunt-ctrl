@@ -75,7 +75,25 @@ const DEFAULTS = {
   // Daily auto on/off (owner, 2026-10-26: 4:30 pm - midnight, Utah time, the
   // nights before Halloween; Halloween itself is started by hand).
   schedule: { enabled: false, on: '16:30', off: '00:00', tz: 'America/Denver' },
+  // Auto-rotate playlist (owner, 2026-10-31): change the look every N minutes.
+  rotate: { enabled: false, minutes: 10, index: 0 },
 };
+
+// The playlist. a = lights 1-2 (skeletons), b = lights 3-4 (witches), in yard order.
+const ROTATION = [
+  { name: 'Fire + Coven Pulse', a: 'fire', b: 'coven' },
+  { name: 'Witch Cauldron', all: 'brew' },
+  { name: 'Fire + Spectral Drift', a: 'fire', b: 'drift' },
+  { name: 'Looming Monsters', all: 'loom' },
+  { name: 'Ghost Drift', all: 'ecto' },
+  { name: 'Blood & Lightning', all: 'blood' },
+];
+const LOOK_NAMES = { color: 'a steady colour', breathe: 'a slow breathing glow', fire: 'flickering firelight', witch: 'a purple witch pulse',
+  drift: 'Spectral Drift (violet and green spirits drifting light to light)', coven: 'Coven Pulse (blue and magenta breathing)',
+  blood: 'Blood & Lightning (blood-red heartbeat with sudden white strikes)', ecto: 'Ghost Drift (a green or violet ghost wave rolling across the yard)',
+  sway: 'Shadow Sway (cyan light swaying, magenta edges, shadows rocking)', loom: 'Looming Monsters (dim purple, sudden lime surges making shadows loom)',
+  brew: 'Witch Cauldron (fire on the outside, a toxic green brew bubbling in the middle)', swamp: 'Toxic Swamp (lime and purple sludge blending)',
+  candle: "Jack-O'-Lantern (amber candle flicker, gusts of wind)" };
 
 // "HH:MM" -> minutes after midnight in the schedule's time zone, right now.
 function localMinutes(tz, d = new Date()) {
@@ -94,7 +112,7 @@ const scale = (c, k) => ({ r: c.r * k, g: c.g * k, b: c.b * k });
 const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };   // ease in/out
 const rand = (a, b) => a + Math.random() * (b - a);
 
-function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = () => {}, log = console.log, onChange = () => {},
+function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = () => {}, onStrike = async () => {}, log = console.log, onChange = () => {},
   beforeStart = () => {}, ambient = { start() {}, stop() {} } }) {
   let cfg = JSON.parse(JSON.stringify(DEFAULTS));
   try {
@@ -102,6 +120,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
     cfg = { ...cfg, ...saved, pairs: { ...cfg.pairs } };
     for (const p of PAIRS) cfg.pairs[p] = { ...DEFAULTS.pairs[p], ...(saved.pairs || {})[p] };
     cfg.schedule = { ...DEFAULTS.schedule, ...(saved.schedule || {}) };
+    cfg.rotate = { ...DEFAULTS.rotate, ...(saved.rotate || {}) };
   } catch (_) {}
   // Per-light settings (used once per-light control is confirmed). Seeded
   // from each light's pair so nothing changes the moment it unlocks.
@@ -495,6 +514,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   // sent right behind the white used to cover it within ~0.1 s. In per-light
   // mode the white also goes out per segment, so both lights of a box flash.
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  let lastStrikeAt = 0;
   async function flash() {
     if (flashing) return;
     const pairOn = (p) => cfg.segments === true ? !!cfg.twoPair || LIGHT_IDS.some(id => id.startsWith(p + ':') && cfg.lights[id].on) : cfg.pairs[p].on;
@@ -510,6 +530,10 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
         : put(ip, 'colorwc', { color: rgb, colorTemInKelvin: 0 }, 0),
     ])));
     try {
+      // Thunder first: Bluetooth plays ~0.25 s late, so the hook starts the
+      // clip and returns when the flash should land.
+      try { await onStrike(); } catch (_) {}
+      lastStrikeAt = Date.now();
       for (const ip of ips) dropQueued(ip);
       await paint(WHITE, 100);
       await sleep(STORM_FLASH_MS);
@@ -550,6 +574,47 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
   }
   setInterval(scheduleCheck, 30000);
   setTimeout(scheduleCheck, 5000);
+
+  // ── Auto-rotate ───────────────────────────────────────────────────────────
+  let nextRotateAt = null;
+  function applyPreset(idx) {
+    const p = ROTATION[((idx % ROTATION.length) + ROTATION.length) % ROTATION.length];
+    if (cfg.segments !== true) return;          // the playlist needs per-light control
+    if (p.all) api.setTwoPair(p.all);
+    else {
+      const ids = cfg.order.map(o => o.join(':'));
+      api.setLights(ids.slice(0, 2), { effect: p.a, on: true });
+      api.setLights(ids.slice(2), { effect: p.b, on: true });
+    }
+    log(`Lights: rotation -> ${p.name}`);
+  }
+  function rotateCheck() {
+    const r = cfg.rotate;
+    if (!running || !r.enabled) { nextRotateAt = null; return; }
+    if (!nextRotateAt) { applyPreset(r.index); nextRotateAt = Date.now() + r.minutes * 60000; onChange(); return; }
+    if (Date.now() >= nextRotateAt) {
+      r.index = (r.index + 1) % ROTATION.length; save();
+      applyPreset(r.index);
+      nextRotateAt = Date.now() + r.minutes * 60000;
+      onChange();
+    }
+  }
+  setInterval(rotateCheck, 10000);
+
+  // What the yard looks like right now, in words (Lily remarks on it).
+  function describe() {
+    if (!running) return null;
+    if (cfg.twoPair) return LOOK_NAMES[cfg.twoPair] || cfg.twoPair;
+    if (cfg.segments !== true) return PAIRS.map((p, i) => `${LOOK_NAMES[cfg.pairs[p].effect]} on light pair ${i + 1}`).join(', ');
+    const parts = [];
+    cfg.order.forEach((o, i) => {
+      const L = cfg.lights[o.join(':')];
+      const what = L.on ? (LOOK_NAMES[L.effect] || L.effect) : 'off';
+      const last = parts[parts.length - 1];
+      if (last && last.what === what) last.to = i + 1; else parts.push({ what, from: i + 1, to: i + 1 });
+    });
+    return parts.map(x => `${x.what} on light${x.from === x.to ? ` ${x.from}` : `s ${x.from}-${x.to}`}`).join(', ');
+  }
 
   function applyLight(id, patch) {
     const L = cfg.lights[id];
@@ -662,6 +727,17 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
       return api.status();
     },
 
+    describe,
+    get lastStrikeAt() { return lastStrikeAt; },
+    rotation: ROTATION.map(p => p.name),
+    setRotate({ enabled, minutes } = {}) {
+      if (minutes !== undefined) cfg.rotate.minutes = Math.max(1, Math.min(120, Math.round(Number(minutes) || 10)));
+      if (enabled !== undefined) { cfg.rotate.enabled = !!enabled; nextRotateAt = null; }
+      save(); rotateCheck(); onChange();
+      return api.status();
+    },
+    nextRotation() { cfg.rotate.index = (cfg.rotate.index + 1) % ROTATION.length; save(); applyPreset(cfg.rotate.index); if (nextRotateAt) nextRotateAt = Date.now() + cfg.rotate.minutes * 60000; onChange(); return api.status(); },
+
     setSchedule({ enabled, on, off } = {}) {
       const ok = (t) => /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(t));
       if (on !== undefined) { if (!ok(on)) throw new Error('on time must be HH:MM'); cfg.schedule.on = on; }
@@ -676,6 +752,7 @@ function createLightMode({ file, pairIps, bulbIps, send, queued, dropQueued = ()
         running, ...JSON.parse(JSON.stringify(cfg)), nextFlashAt,
         ips: Object.fromEntries(PAIRS.map(p => [p, pairIps(p)])), bulbIps: bulbIps(),
         effects: SINGLE_EFFECTS, twoPairEffects: TWO_PAIR_EFFECTS, segmentEffects: SEGMENT_EFFECTS, lightIds: LIGHT_IDS, testing,
+        rotation: ROTATION.map(p => p.name), nextRotateAt, lastStrikeAt, look: describe(),
       };
     },
   };

@@ -40,7 +40,15 @@ const SHOW_MODE_FILE = path.join(__dirname, 'show-mode.json');
 const SHOW_MODES = ['normal', 'rain'];
 const RAIN_SKIPPED = ['evelina', 'lenora', 'jasper', 'edgar'];
 let showMode = 'normal';
-try { const m = JSON.parse(fs.readFileSync(SHOW_MODE_FILE, 'utf8')).mode; if (SHOW_MODES.includes(m)) showMode = m; } catch (_) {}
+// Rain night: where Lily stands — 'yard' (with her coven, default) or 'garage'.
+const LOCATIONS = ['yard', 'garage'];
+let showLocation = 'yard';
+try {
+  const saved = JSON.parse(fs.readFileSync(SHOW_MODE_FILE, 'utf8'));
+  if (SHOW_MODES.includes(saved.mode)) showMode = saved.mode;
+  if (LOCATIONS.includes(saved.location)) showLocation = saved.location;
+} catch (_) {}
+const saveShowMode = () => { try { fs.writeFileSync(SHOW_MODE_FILE, JSON.stringify({ mode: showMode, location: showLocation })); } catch (e) { broadcastLog(`show mode save failed: ${e.message}`, 'SYSTEM'); } };
 const isRainMode = () => showMode === 'rain';
 // Is this character out tonight? (Rain mode skips the yard props.)
 // Lights-only mode (lights/lightMode.js) — created with its routes below.
@@ -3849,6 +3857,9 @@ const lilyCamera = require('./lily/camera').createLilyCamera({
   getApiKey: anthropicKey,
   trackTokens,
   ffmpegBin: IS_WINDOWS ? FFPLAY_PATH.replace(/ffplay\.exe$/i, 'ffmpeg.exe') : 'ffmpeg',
+  // Camera as her guest sensor (rain night 2026): motion in the drawn box =
+  // her PIR firing — she greets, then remarks on the costumes.
+  onArrival: () => enqueueSensor('lily'),
 });
 if (lilyCamera.settings().enabled) lilyCamera.start();
 process.on('exit', () => lilyCamera.stop());   // never leave its ffmpeg holding the webcam
@@ -3857,6 +3868,11 @@ process.on('exit', () => lilyCamera.stop());   // never leave its ffmpeg holding
 const lilyTalk = require('./lily/talk').createTalk({
   lily,
   isRainMode,
+  getScene: () => ({
+    location: showLocation,
+    lights: lightMode && lightMode.running ? lightMode.describe() : null,
+    strikeAgoSec: lightMode && lightMode.lastStrikeAt ? Math.round((Date.now() - lightMode.lastStrikeAt) / 1000) : null,
+  }),
   log: (m) => broadcastLog(`Lily talk: ${m}`, 'SYSTEM'),
   logDialogue,
   micsMuted,
@@ -4096,10 +4112,22 @@ lightMode = require('./lights/lightMode').createLightMode({
   log: (m) => broadcastLog(m, 'LIGHT'),
   onChange: () => broadcast({ type: 'lightMode', data: lightMode.status() }),
   beforeStart: () => {
-    if (state.showActive) throw new Error('End the show first — Lights-only mode is for non-show nights');
     llama.abortBackground();             // stop any skeleton line being written
     stopEffects();                       // the show's living effects would fight it
+    // Rain night: the light themes ARE the show's lights, and Lily keeps talking.
+    if (isRainMode()) return;
+    if (state.showActive) throw new Error('End the show first — Lights-only mode is for non-show nights');
     try { lilyTalk.stop(); } catch (_) {} // no AI: Lily stops listening
+  },
+  // Each lightning strike: thunder on the yard speaker first (Bluetooth plays
+  // ~0.25 s late), mics deaf while it rumbles.
+  onStrike: async () => {
+    const clip = path.join(STORM_DIR, THUNDER_CLIPS[Math.floor(Math.random() * THUNDER_CLIPS.length)]);
+    const p = yardSpeaker.thunder(clip);
+    if (!p) return;
+    trackOneShot(p);
+    broadcastLog('Thunder on the yard speaker', 'AUDIO');
+    await new Promise(r => setTimeout(r, 250));
   },
   ambient: { start: startAmbientLoop, stop: stopAmbientLoop },
 });
@@ -4127,12 +4155,81 @@ app.post('/api/lights/single-test', lightRoute(() => lightMode.singleTest()));
 app.post('/api/lights/segments', lightRoute(({ ok }) => lightMode.setSegments(ok)));
 app.post('/api/lights/order', lightRoute(({ order }) => lightMode.setOrder(order)));
 
-app.get('/api/mode', (req, res) => res.json({ ok: true, mode: showMode, skipped: isRainMode() ? RAIN_SKIPPED : [] }));
+// ─── Yard speaker + rain night (owner, 2026-10-31) ────────────────────────────
+// Strike clips only (the long storm beds are left out); each plays its first 12 s.
+const THUNDER_CLIPS = ['646912__alexdarek__lightning-strike-2.wav', 'freesound_community-lightning-strike-29683.mp3',
+  'u_39xav15uou-lightning-237994.mp3', 'freesound_community-lightning-storm-6077.mp3'];
+const yardSpeaker = require('./audio/btSpeaker').createBtSpeaker({
+  file: path.join(__dirname, 'yard-speaker.json'),
+  log: (m) => broadcastLog(m, 'AUDIO'),
+  onChange: () => broadcastRain(),
+  ambientFile: () => path.join(AMBIENT_DIR, AMBIENT_FILE),
+  makeRouter: () => IS_WINDOWS
+    ? { listAdapters: async () => [], scanOn: async () => [], connectOn: async () => { throw new Error('The yard speaker needs the Linux server'); },
+        disconnectOn: async () => {}, sinkPresent: async () => false, spawnOnSink: () => { throw new Error('not on Windows'); } }
+    : require('./lily/audioRouter.linux').create({ log: (m) => broadcastLog(`yard speaker: ${m}`, 'AUDIO') }),
+});
+let rainShowOn = false;
+function rainStatus() {
+  return {
+    mode: showMode, location: showLocation, running: rainShowOn,
+    lights: lightMode.status(), speaker: yardSpeaker.status(),
+    talk: lilyTalk.status(), lily: lily ? lily.status() : null, camera: lilyCamera.status(),
+  };
+}
+function broadcastRain() { try { broadcast({ type: 'rain', data: rainStatus() }); } catch (_) {} }
+setInterval(() => { if (rainShowOn || isRainMode()) broadcastRain(); }, 2000);   // camera motion level, timers
+
+const rainRoute = (fn) => async (req, res) => {
+  try { const r = await fn(req.body || {}); broadcastRain(); res.json({ ok: true, rain: r || rainStatus() }); }
+  catch (e) { broadcastLog(`Rain: ${e.message}`, 'SYSTEM'); res.status(409).json({ ok: false, error: e.message }); }
+};
+app.get('/api/rain', (req, res) => res.json({ ok: true, rain: rainStatus() }));
+app.post('/api/rain/location', rainRoute(({ location }) => {
+  if (!LOCATIONS.includes(location)) throw new Error('location must be yard or garage');
+  showLocation = location; saveShowMode();
+  try { lilyTalk.resetConversation(); } catch (_) {}
+  broadcastLog(`Lily is now in the ${location}`, 'SYSTEM');
+}));
+// One tap: rain mode on, lights running, ambient on the yard speaker, camera
+// watching, Lily listening.
+app.post('/api/rain/start', rainRoute(async ({ source }) => {
+  if (showMode !== 'rain') { showMode = 'rain'; saveShowMode(); try { lilyTalk.resetConversation(); } catch (_) {} }
+  rainShowOn = true;
+  if (!lightMode.running) lightMode.start();
+  yardSpeaker.setAmbient(true);
+  if (!yardSpeaker.connected) broadcastLog('Rain show: yard speaker not connected — ambient starts when it connects', 'AUDIO');
+  if (lilyCamera.settings().enabled) lilyCamera.configure({ motion: { enabled: true } });
+  else broadcastLog('Rain show: camera is off — turn it on (and pick it) so she sees guests arrive', 'SYSTEM');
+  try { await lilyTalk.start(source || undefined); } catch (e) { broadcastLog(`Rain show: Lily not listening — ${e.message}`, 'SYSTEM'); }
+  broadcastLog(`RAIN SHOW STARTED — Lily in the ${showLocation}`, 'SYSTEM');
+}));
+app.post('/api/rain/stop', rainRoute(() => {
+  rainShowOn = false;
+  try { lilyTalk.stop(); } catch (_) {}
+  yardSpeaker.setAmbient(false);
+  broadcastLog('Rain show stopped (lights left as they are — use the Lights tab to switch them off)', 'SYSTEM');
+}));
+app.post('/api/speaker/adapters', rainRoute(async () => ({ adapters: await yardSpeaker.adapters() })));
+app.post('/api/speaker/scan', rainRoute(async ({ adapter }) => ({ devices: await yardSpeaker.scan(adapter, 12) })));
+app.post('/api/speaker/use', rainRoute(async (b) => { await yardSpeaker.use(b); }));
+app.post('/api/speaker/disconnect', rainRoute(async () => { await yardSpeaker.disconnect(); }));
+app.post('/api/speaker/ambient', rainRoute(({ enabled }) => { yardSpeaker.setAmbient(enabled); }));
+app.post('/api/speaker/volume', rainRoute((b) => { yardSpeaker.setVolumes(b); }));
+app.post('/api/speaker/thunder', rainRoute(() => {
+  const p = yardSpeaker.thunder(path.join(STORM_DIR, THUNDER_CLIPS[0]));
+  if (!p) throw new Error('Yard speaker not connected');
+  trackOneShot(p);
+}));
+app.post('/api/lights/mode/rotate', lightRoute((b) => lightMode.setRotate(b)));
+app.post('/api/lights/mode/rotate/next', lightRoute(() => lightMode.nextRotation()));
+
+app.get('/api/mode', (req, res) => res.json({ ok: true, mode: showMode, location: showLocation, skipped: isRainMode() ? RAIN_SKIPPED : [] }));
 app.post('/api/mode', (req, res) => {
   const mode = String(req.body?.mode || '');
   if (!SHOW_MODES.includes(mode)) return res.status(400).json({ error: `mode must be ${SHOW_MODES.join(' or ')}` });
   showMode = mode;
-  try { fs.writeFileSync(SHOW_MODE_FILE, JSON.stringify({ mode })); } catch (e) { broadcastLog(`show mode save failed: ${e.message}`, 'SYSTEM'); }
+  saveShowMode();
   try { lilyTalk.resetConversation(); } catch (_) {}   // her conversation restarts with the new setting
   broadcastLog(mode === 'rain' ? 'RAIN MODE ON — Lily only; Evelina, Lenora, Jasper, Edgar and the A19 bulbs are out' : 'Normal show mode', 'SYSTEM');
   broadcastState();
@@ -4142,6 +4239,7 @@ app.post('/api/mode', (req, res) => {
 app.post('/api/allstop', async (req, res) => {
   lilySafeStop();
   lightMode.stop({ lightsOff: false });
+  rainShowOn = false; yardSpeaker.setAmbient(false);
   broadcastLog('ALL STOP', 'SYSTEM');
   stopEffects();
   state.paused = false;

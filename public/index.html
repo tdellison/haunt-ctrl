@@ -991,17 +991,109 @@ body::before { animation:scanlines 10s linear infinite; }
 </div>
 
 <!-- ─── RAIN ─── -->
+<!-- Rain night (owner, 2026-10-31): Lily + light themes + yard speaker + camera. -->
 <div class="pane" id="pane-rain">
-  <!-- Show mode: normal / rain (owner spec 2026-10-26) -->
   <div class="panel">
-    <div class="panel-title"><span class="pt-icon">🌧</span>Rain Mode</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-green btn-lg" id="rain-start" style="flex:2" onclick="rainStart()">▶ START RAIN SHOW</button>
+      <button class="btn btn-red btn-lg" style="flex:1" onclick="api('/api/rain/stop')">■ STOP</button>
+    </div>
+    <div id="rain-status" class="lm-status"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.72em;color:var(--dim2)">
+      Lily's mic <select id="rain-mic" class="raw-input" style="flex:1"></select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">WHERE IS LILY?</div>
+    <div class="lm-seg" id="rain-loc">
+      <button data-loc="yard" onclick="api('/api/rain/location',{location:'yard'})">🪦 YARD (with her coven)</button>
+      <button data-loc="garage" onclick="api('/api/rain/location',{location:'garage'})">🏠 GARAGE</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">MAKE LILY TALK</div>
+    <div style="display:flex;gap:6px">
+      <input class="raw-input" id="rain-speak" placeholder="Exact words she says…" style="flex:1" onkeydown="if(event.key==='Enter')rainSpeak()"/>
+      <button class="btn btn-orange btn-sm" onclick="rainSpeak()">🗣 SAY IT</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input class="raw-input" id="rain-say" placeholder="…or something to answer in her own words" style="flex:1" onkeydown="if(event.key==='Enter')rainSay()"/>
+      <button class="btn btn-purple btn-sm" onclick="rainSay()">💬 ANSWER</button>
+    </div>
+    <div id="rain-last" style="font-size:.72em;color:var(--dim2);margin-top:8px"></div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">⚡ LIGHTNING</div>
+    <div class="lm-grid lm-grid2">
+      <button id="rain-storm" onclick="api('/api/lights/mode/storm',{enabled:!(window._rain&&window._rain.lights.stormFlash)})"><span>⚡</span>Every 12 minutes<small id="rain-storm-s"></small></button>
+      <button onclick="api('/api/lights/mode/flash')"><span>💥</span>Strike now<small>flash + thunder</small></button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">🔊 YARD SPEAKER</div>
+    <div id="spk-status" style="font-size:.75em;margin-bottom:8px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:.72em">
+      Adapter <select id="spk-adapter" class="raw-input" style="flex:1;min-width:150px"></select>
+      <button class="btn btn-sm" onclick="spkAdapters()">↻</button>
+      <button class="btn btn-blue btn-sm" id="spk-scan" onclick="spkScan()">🔍 SCAN (12 s)</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:.72em">
+      Speaker <select id="spk-device" class="raw-input" style="flex:1;min-width:150px"><option value="">— scan first —</option></select>
+      <button class="btn btn-green btn-sm" onclick="spkConnect()">🔗 CONNECT</button>
+      <button class="btn btn-red btn-sm" onclick="api('/api/speaker/disconnect')">✕</button>
+    </div>
+    <div class="lm-grid lm-grid2" style="margin-top:10px">
+      <button id="spk-amb" onclick="api('/api/speaker/ambient',{enabled:!(window._rain&&window._rain.speaker.ambientWanted)})"><span>🌫</span>Graveyard ambient<small id="spk-amb-s"></small></button>
+      <button onclick="api('/api/speaker/thunder')"><span>🌩</span>Test thunder<small>sound only</small></button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.7em;color:var(--dim2)">
+      AMBIENT <input type="range" min="0" max="100" id="spk-av" style="flex:1" onchange="api('/api/speaker/volume',{ambientVolume:+this.value})">
+      THUNDER <input type="range" min="0" max="100" id="spk-tv" style="flex:1" onchange="api('/api/speaker/volume',{thunderVolume:+this.value})">
+    </div>
+    <div style="font-size:.65em;color:var(--dim2);margin-top:6px">First time: put the speaker in pairing mode, pick the speaker's own dongle (not Lily's), SCAN, pick it, CONNECT. After that it reconnects by itself.</div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">📷 CAMERA (Lily's guest sensor)</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:.72em">
+      <select id="cam-dev" class="raw-input" style="flex:1;min-width:150px" onchange="api('/api/lily/camera/config',{device:this.value})"></select>
+      <button class="btn btn-sm" id="cam-on" onclick="api('/api/lily/camera/config',{enabled:!(window._rain&&window._rain.camera.enabled)}).then(rainLoad)"></button>
+      <button class="btn btn-sm" id="cam-motion" onclick="api('/api/lily/camera/config',{motion:{enabled:!(window._rain&&window._rain.camera.motion.enabled)}}).then(rainLoad)"></button>
+    </div>
+    <div style="position:relative;margin-top:8px;user-select:none">
+      <img id="cam-snap" alt="camera" style="display:block;width:100%;aspect-ratio:16/9;object-fit:fill;background:#000;border-radius:6px;cursor:crosshair" onclick="camClick(event)">
+      <div id="cam-box" style="position:absolute;border:2px solid var(--orange);pointer-events:none;border-radius:3px"></div>
+    </div>
+    <div style="font-size:.68em;color:var(--dim2);margin-top:6px">Tap the picture twice — top-left, then bottom-right — to draw where guests walk up. Keep it off the rain and the street.</div>
+    <div id="cam-info" style="font-size:.72em;margin-top:6px"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.7em;color:var(--dim2)">
+      SENSITIVITY <input type="range" min="2" max="30" id="cam-sens" style="flex:1" onchange="api('/api/lily/camera/config',{motion:{minArea:(32-this.value)/100}}).then(rainLoad)">
+      COOLDOWN <input type="number" min="0" max="600" id="cam-cool" class="raw-input" style="width:64px" onchange="api('/api/lily/camera/config',{motion:{cooldownSec:+this.value}}).then(rainLoad)"> s
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="lm-step">🔄 LIGHTS AUTO-ROTATE</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-sm" id="rot-on" style="flex:2" onclick="api('/api/lights/mode/rotate',{enabled:!(window._rain&&window._rain.lights.rotate.enabled)})"></button>
+      <input type="number" min="1" max="120" id="rot-min" class="raw-input" style="width:60px" onchange="api('/api/lights/mode/rotate',{minutes:+this.value})"><span style="font-size:.7em">min</span>
+      <button class="btn btn-blue btn-sm" onclick="api('/api/lights/mode/rotate/next')">⏭ NEXT</button>
+    </div>
+    <div id="rot-list" style="font-size:.7em;color:var(--dim2);margin-top:8px;line-height:1.6"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span class="pt-icon">🌧</span>Show Mode</div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-green btn-sm" id="mode-normal" style="flex:1" onclick="api('/api/mode',{mode:'normal'})">🎃 NORMAL</button>
-      <button class="btn btn-blue btn-sm" id="mode-rain" style="flex:1" onclick="if(confirm('Rain mode: Lily only (plus Bob if on). Evelina, Lenora, Jasper, Edgar and the A19 bulbs stay out. Switch?'))api('/api/mode',{mode:'rain'})">🌧 RAIN</button>
+      <button class="btn btn-blue btn-sm" id="mode-rain" style="flex:1" onclick="api('/api/mode',{mode:'rain'})">🌧 RAIN</button>
     </div>
     <div id="mode-note" style="font-size:.68em;color:var(--dim2);margin-top:8px"></div>
   </div>
-
 </div>
 
 <!-- ─── SHOW ─── -->
@@ -1685,6 +1777,7 @@ function connectWS() {
         if (msg.type === 'log')      appendLog(msg.msg, msg.category);
         if (msg.type === 'govee')    applyGovee(msg.data);
         if (msg.type === 'lightMode') renderLightMode(msg.data);
+        if (msg.type === 'rain')     renderRain(msg.data);
         if (msg.type === 'settings') applySettings(msg.data);
       } catch(_) {}
     };
@@ -2479,7 +2572,7 @@ function renderShowMode(mode) {
   document.getElementById('mode-normal').style.opacity = rain ? .45 : 1;
   document.getElementById('mode-rain').style.opacity = rain ? 1 : .45;
   document.getElementById('mode-note').textContent = rain
-    ? 'RAIN MODE — Lily (and Bob if on) from the garage. Yard characters and A19 bulbs are out.'
+    ? 'RAIN MODE — Lily runs the night (yard or garage above). The other characters stay silent; A19 bulbs stay off.'
     : 'Normal show — full yard.';
 }
 function renderLightMode(st) {
@@ -2546,6 +2639,101 @@ async function lmFlip() { if (lmCur) await api('/api/lights/order', { order: [..
     const m = await apiGet('/api/mode'); if (m && m.mode) renderShowMode(m.mode);
   } catch (_) {}
 })();
+
+// ── Rain night tab ────────────────────────────────────────────────────────────
+let camPts = [];
+function rainStart() { api('/api/rain/start', { source: document.getElementById('rain-mic').value || undefined }); }
+function rainSpeak() { const el = document.getElementById('rain-speak'); const t = el.value.trim(); if (t) { api('/api/lily/talk/speak', { text: t }); el.value = ''; } }
+function rainSay() { const el = document.getElementById('rain-say'); const t = el.value.trim(); if (t) { api('/api/lily/talk/say', { text: t }); el.value = ''; } }
+async function spkAdapters() {
+  const r = await api('/api/speaker/adapters');
+  const sel = document.getElementById('spk-adapter');
+  const cur = (window._rain && window._rain.speaker.adapter) || sel.value;
+  sel.innerHTML = (r && r.rain && r.rain.adapters || []).map(a => `<option value="${a.address}">${a.address} ${a.name}${a.isDefault ? ' (default — Lily)' : ''}</option>`).join('');
+  if (cur) sel.value = cur;
+}
+async function spkScan() {
+  const b = document.getElementById('spk-scan'); b.disabled = true; b.textContent = '🔍 SCANNING…';
+  const r = await api('/api/speaker/scan', { adapter: document.getElementById('spk-adapter').value });
+  b.disabled = false; b.textContent = '🔍 SCAN (12 s)';
+  const list = (r && r.rain && r.rain.devices) || [];
+  document.getElementById('spk-device').innerHTML = list.length
+    ? list.map(d => `<option value="${d.address}|${d.name.replace(/"/g, '')}">${d.name} — ${d.address}</option>`).join('')
+    : '<option value="">nothing found — pairing mode on?</option>';
+}
+function spkConnect() {
+  const v = document.getElementById('spk-device').value;
+  if (!v) return alert('Scan and pick the speaker first.');
+  const [address, name] = v.split('|');
+  api('/api/speaker/use', { adapter: document.getElementById('spk-adapter').value, address, name });
+}
+function camClick(e) {
+  const r = e.target.getBoundingClientRect();
+  camPts.push({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
+  if (camPts.length === 2) {
+    const [a, b] = camPts; camPts = [];
+    api('/api/lily/camera/config', { motion: { box: { x0: a.x, y0: a.y, x1: b.x, y1: b.y } } }).then(rainLoad);
+  }
+}
+function renderRain(st) {
+  window._rain = st;
+  renderShowMode(st.mode);
+  const fmtT = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const L = st.lights, sp = st.speaker, tk = st.talk || {}, ly = st.lily || {}, cam = st.camera || {};
+  const dot = (ok) => ok ? '🟢' : '🔴';
+  document.getElementById('rain-status').innerHTML = [
+    `${st.running ? '🟢 <b>Rain show running</b>' : '⚪ Rain show stopped'} · Lily in the <b>${st.location}</b>`,
+    `${dot(ly.connected)} Lily ${ly.connected ? 'connected' : 'not connected'}${ly.audio && ly.audio.routed ? ', speaker on' : ', speaker off'} · ${tk.listening ? '👂 listening' : 'not listening'}`,
+    `${dot(sp.connected)} Yard speaker ${sp.connected ? (sp.name || 'connected') : (sp.connecting ? 'connecting…' : 'not connected')}${sp.ambient ? ' · ambient playing' : ''}`,
+    `${dot(cam.running)} Camera ${cam.running ? 'on' : 'off'}${cam.motion && cam.motion.enabled ? ' · watching for guests' : ''}`,
+    `💡 ${L.running ? (L.look || 'lights on') : 'lights off'}${L.nextFlashAt ? ' · ⚡ next ' + fmtT(L.nextFlashAt) : ''}`,
+  ].join('<br>');
+  document.querySelectorAll('#rain-loc button').forEach(b => b.classList.toggle('sel', b.dataset.loc === st.location));
+  const lr = tk.lastReply;
+  document.getElementById('rain-last').textContent = lr && lr.text ? `Last: "${lr.text}"` : '';
+  const flag = (id, on) => { document.getElementById(id).classList.toggle('sel', !!on); document.getElementById(id + '-s').textContent = on ? 'ON' : 'off'; };
+  flag('rain-storm', L.stormFlash);
+  flag('spk-amb', sp.ambientWanted);
+  document.getElementById('spk-status').innerHTML = sp.connected ? `🟢 <b>${sp.name || sp.address}</b> connected` : sp.lastError ? `🔴 ${sp.lastError}` : (sp.address ? `⚪ ${sp.name || sp.address} — not connected` : '⚪ No speaker picked yet');
+  for (const [id, v] of [['spk-av', sp.ambientVolume], ['spk-tv', sp.thunderVolume]]) { const el = document.getElementById(id); if (document.activeElement !== el) el.value = v; }
+  // Camera
+  const m = cam.motion || {};
+  const on = document.getElementById('cam-on'); on.textContent = cam.enabled ? '📷 CAMERA ON' : '📷 CAMERA OFF'; on.className = 'btn btn-sm ' + (cam.enabled ? 'btn-green' : '');
+  const mo = document.getElementById('cam-motion'); mo.textContent = m.enabled ? '👀 GREET ON MOTION: ON' : '👀 GREET ON MOTION: OFF'; mo.className = 'btn btn-sm ' + (m.enabled ? 'btn-green' : '');
+  if (m.box) Object.assign(document.getElementById('cam-box').style, { left: m.box.x0 * 100 + '%', top: m.box.y0 * 100 + '%', width: (m.box.x1 - m.box.x0) * 100 + '%', height: (m.box.y1 - m.box.y0) * 100 + '%' });
+  document.getElementById('cam-info').textContent = cam.running
+    ? `Motion ${Math.round((cam.motionLevel || 0) * 100)}% (greets at ${Math.round((m.minArea || 0) * 100)}%) · light ${cam.brightness ?? '—'}/255${cam.brightness != null && cam.brightness < cam.minBrightness ? ' — too dark for costume comments' : ''}${cam.lastArrival ? ' · last guests ' + fmtT(cam.lastArrival) : ''}${cam.lastSeen ? ' · saw: ' + cam.lastSeen : ''}`
+    : (cam.lastError ? `Camera: ${cam.lastError}` : 'Camera is off.');
+  const sens = document.getElementById('cam-sens'); if (document.activeElement !== sens && m.minArea) sens.value = Math.round(32 - m.minArea * 100);
+  const cool = document.getElementById('cam-cool'); if (document.activeElement !== cool) cool.value = m.cooldownSec ?? 30;
+  // Rotation
+  const ro = L.rotate || {};
+  const rb = document.getElementById('rot-on'); rb.textContent = ro.enabled ? `🔄 ROTATING every ${ro.minutes} min` : '🔄 AUTO-ROTATE: OFF'; rb.className = 'btn btn-sm ' + (ro.enabled ? 'btn-green' : '');
+  const rm = document.getElementById('rot-min'); if (document.activeElement !== rm) rm.value = ro.minutes;
+  document.getElementById('rot-list').innerHTML = (L.rotation || []).map((n, i) => (ro.enabled && i === ro.index ? '▶ <b>' + n + '</b>' : n)).join(' → ');
+}
+async function rainLoad() {
+  const r = await apiGet('/api/rain'); if (r && r.rain) renderRain(r.rain);
+  const t = await apiGet('/api/lily/talk');
+  if (t && t.sources) {
+    const sel = document.getElementById('rain-mic'), cur = sel.value || (t.talk && t.talk.source);
+    sel.innerHTML = t.sources.map(s => `<option value="${s.name}">${s.description}</option>`).join('');
+    if (cur) sel.value = cur;
+  }
+  const c = await apiGet('/api/lily/camera/list');
+  if (c && c.cameras) {
+    const sel = document.getElementById('cam-dev'), cur = window._rain && window._rain.camera.device;
+    sel.innerHTML = '<option value="">first camera found</option>' + c.cameras.map(x => `<option value="${x.device}">${x.name} (${x.device})</option>`).join('');
+    sel.value = cur || '';
+  }
+}
+// Live camera picture while the RAIN tab is open.
+setInterval(() => {
+  const pane = document.getElementById('pane-rain');
+  if (pane && pane.classList.contains('active') && window._rain && window._rain.camera.running) document.getElementById('cam-snap').src = '/api/lily/camera/snapshot.jpg?t=' + Date.now();
+}, 1000);
+document.querySelectorAll('.tab[data-pane="rain"]').forEach(t => t.addEventListener('click', () => { rainLoad(); spkAdapters(); }));
+rainLoad();
 
 async function toggleShow() {
   if (appState.showActive) await api('/api/show/stop');

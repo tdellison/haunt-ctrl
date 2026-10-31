@@ -308,6 +308,98 @@ class LinuxLilyAudioRouter {
     }
   }
 
+  // ── Second adapter (owner, 2026-10-31: the waterproof yard speaker has its
+  // own Bluetooth dongle). One-shot bluetoothctl always works on the DEFAULT
+  // controller, so anything for another controller runs as one interactive
+  // session that `select`s it first. Lily stays on the default controller.
+  _session(ctrl, steps) {
+    return new Promise((resolve) => {
+      const p = spawn(this.o.bluetoothctlBin, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let out = '';
+      p.stdout.on('data', d => { out += d; });
+      p.stderr.on('data', d => { out += d; });
+      p.on('error', (e) => resolve(`${out}\n${e.message}`));
+      p.on('exit', () => resolve(out.replace(/\x1b\[[0-9;]*m/g, '')));
+      const all = [...(ctrl ? [[`select ${ctrl}`, 400]] : []), ...steps, ['quit', 300]];
+      let i = 0;
+      const next = () => {
+        if (i >= all.length) return;
+        const [cmd, wait] = all[i++];
+        try { p.stdin.write(cmd + '\n'); } catch (_) {}
+        setTimeout(next, wait);
+      };
+      next();
+      setTimeout(() => { try { p.kill(); } catch (_) {} }, all.reduce((t, s) => t + s[1], 0) + 5000);
+    });
+  }
+
+  async listAdapters() {
+    const res = await this._bt(['list']);
+    return [...res.out.matchAll(/Controller\s+([0-9A-F:]{17})\s+(.*?)(\s+\[default\])?\s*$/gim)]
+      .map(m => ({ address: m[1], name: m[2].trim(), isDefault: !!m[3] }));
+  }
+
+  // Classic discovery on one controller -> [{ address, name }] it knows.
+  async scanOn(ctrl, seconds = 12) {
+    const out = await this._session(ctrl, [['power on', 500], ['scan on', seconds * 1000], ['scan off', 500], ['devices', 800]]);
+    const seen = new Map();
+    for (const m of out.matchAll(/Device\s+([0-9A-F:]{17})\s+(.+)/gi)) {
+      const name = m[2].replace(/\s+(RSSI|TxPower|ManufacturerData|UUIDs|ServiceData|Class|Icon).*$/i, '').trim();
+      if (name && !/^(RSSI|TxPower|ManufacturerData|UUIDs|ServiceData|Class|Icon|Connected|Paired|Trusted)/i.test(name)) seen.set(m[1].toUpperCase(), name);
+    }
+    return [...seen].map(([address, name]) => ({ address, name }));
+  }
+
+  async infoOn(ctrl, addr) {
+    const out = await this._session(ctrl, [[`info ${addr}`, 1200]]);
+    return { paired: /Paired:\s*yes/i.test(out), connected: /Connected:\s*yes/i.test(out), out };
+  }
+
+  // Pair (if needed) + trust + connect on a chosen controller, then wait for
+  // its PipeWire sink. Speaker must be in pairing mode for a first pair.
+  async connectOn(ctrl, addr) {
+    this.address = addr;
+    const { log } = this.o;
+    let info = await this.infoOn(ctrl, addr);
+    if (!info.connected) {
+      if (!info.paired) {
+        log(`Pairing ${addr} on ${ctrl || 'default adapter'} (speaker must be in pairing mode)`);
+        await this._session(ctrl, [['power on', 500], ['scan on', 8000], [`pair ${addr}`, 10000], [`trust ${addr}`, 800], ['scan off', 300]]);
+      }
+      await this._session(ctrl, [['power on', 500], [`trust ${addr}`, 600], [`connect ${addr}`, 8000]]);
+      info = await this.infoOn(ctrl, addr);
+      if (!info.connected) throw new Error(`Could not connect ${addr} — is it on and in range (pairing mode the first time)?`);
+    }
+    log(`Connected ${addr} - waiting for audio sink to publish`);
+    await this._waitForSink();
+    this.sinkName = await this._sinkName(this.sinkId);
+    if (!this.sinkName) throw new Error(`Could not resolve the speaker's sink`);
+    await this._wpctl(['set-volume', String(this.sinkId), '1.0']);
+    log(`Speaker playback -> ${this.sinkName}; system default untouched`);
+  }
+
+  async disconnectOn(ctrl, addr) {
+    await this._session(ctrl, [[`disconnect ${addr || this.address}`, 2000]]);
+    this.sinkId = null; this.sinkName = null;
+  }
+
+  // A player pinned to this device's sink. loop = forever (ambient bed);
+  // volume 0-100 (ffplay's own volume). Returns the child process.
+  // maxSec: play only the first N seconds, fading out over the last 2.
+  spawnOnSink(file, { loop = false, volume = 100, maxSec = 0 } = {}) {
+    if (!this.sinkName) throw new Error('Speaker not routed - connect it first');
+    const env = {
+      ...process.env,
+      SDL_AUDIODRIVER: 'pulseaudio',
+      PULSE_SINK: this.sinkName,
+      XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`,
+    };
+    const args = ['-nodisp', '-loglevel', 'error', '-volume', String(Math.max(0, Math.min(100, Math.round(volume)))),
+      ...(loop ? ['-loop', '0'] : ['-autoexit']),
+      ...(maxSec > 0 ? ['-t', String(maxSec), '-af', `afade=t=out:st=${Math.max(0, maxSec - 2)}:d=2`] : []), file];
+    return spawn(this.o.ffplayBin, args, { env, stdio: 'ignore' });
+  }
+
   async disconnect() {
     if (!this.address) return;
     await this._bt(['disconnect', this.address]);

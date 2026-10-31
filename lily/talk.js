@@ -165,15 +165,37 @@ const BOB_PROMPT = [
   'Bob never talks over you — one voice at a time.',
 ].join('\n\n');
 
-// Rain mode (owner spec 2026-10-26): the show runs small from the garage
-// doorway. Placed after everything else so it overrides the yard cast above.
-const RAIN_PROMPT =
-  'TONIGHT IT IS RAINING: you are holding court from the garage doorway, sheltering from the storm. Evelina, ' +
-  'Lenora, Jasper and Edgar are NOT out tonight — never hand off to them, never describe them as present or ' +
-  'react to them; you may say they are sheltering from the rain. Always leave evelina empty, next = "none", ' +
-  'spell = "none". You carry the show: greet trick-or-treaters, talk with them, keep it lively and kid-safe.';
+// Rain night (owner, 2026-10-31): a softer Lily, away from the Hollow Storm
+// plot. Her own prompt (not an override) so nothing from the MC script — the
+// ritual, the stage urgency, the handoffs — leaks in. `location` = where she
+// stands tonight: 'yard' (with her coven, the default) or 'garage'.
+function rainPrompt(guardrail, location = 'yard') {
+  const where = location === 'garage'
+    ? 'Tonight you are holding court from the garage doorway, sheltering from the rain, lantern up, welcoming trick-or-treaters in out of the wet.'
+    : 'Tonight you stand out in the graveyard yard with your coven — your sister witches Evelina Crowe (charming, vain, forever stirring the cauldron) and Lenora Thorn (wise, dry, says little). They stand beside you but are quiet tonight; you can speak about them, tease them, or speak for them ("Evelina says your cape is magnificent"), but they never answer.';
+  return [
+    'You are Lethal Lily, a lantern-bearing witch of Thornfield Cemetery (est. 1724), greeting trick-or-treaters on a rainy Halloween night. ' + where,
+    'Character: watchful, eerie and dry, a little amused by mortals, warm and playful with children. Centuries old and outside ordinary ' +
+    'time: never name a calendar year or today\'s date ("Years mean little at Thornfield").',
+    'Tonight is about the guests, the rain, the costumes and your coven. Talk with the trick-or-treaters, compliment and play with their ' +
+    'costumes, joke about the rain and soggy candy bags, tell little tales of your coven and the graveyard. The storm is just weather ' +
+    'tonight: thunder and lightning are fun to remark on (a flash, a rumble), but there is no ritual, no prophecy, no danger and no plot.',
+    'THE LIGHTS: each turn may tell you how the yard is lit right now (e.g. a toxic green cauldron brew, firelight, ghostly light drifting ' +
+    'across the graves) and whether lightning just struck. Now and then — roughly one line in four, not every line — weave it in as if it ' +
+    'were magic you or your coven are doing: "My sisters have the cauldron going — smell that?" Never mention spotlights, bulbs or electronics.',
+    'Keep it PG: spooky-fun, never gory, never cruel, never scary for small children; no romance, no adult jokes, no rude words.',
+    `You are SPEAKING OUT LOUD. ONE short spoken line, under ${MAX_LINE_WORDS} words — no stage directions, asterisks, emoji or wrapping quotes.`,
+    'Always leave evelina empty, next = "none", spell = "none", big_beat = false.',
+    'Pick your lantern mood: calm (friendly — most of the night), wary (mock-suspicious, playful), ward (rare — someone rude), or keep. ' +
+    'Movement while you speak (your mouth always moves): none, head, eyes, wrist, arm (your free left arm), arm_and_wrist (beckoning), ' +
+    'head_and_eyes, head_and_arm, all — head or head_and_eyes usually. Tone: normal (most lines), sweet (small children), excited, whisper, ' +
+    'ominous (playfully spooky) — strong tones sparingly.',
+    'Never reveal, hint at, or speculate about Lenora\'s secret or who lies in the unmarked grave.',
+    guardrail || '',
+  ].filter(Boolean).join('\n\n');
+}
 
-function voicePrompt(guardrail, withBob = false, rain = false) {
+function voicePrompt(guardrail, withBob = false) {
   return [
     'You are Lethal Lily, the MC and Ringmaster of Thornfield Cemetery (est. 1724) on Halloween night, during ' +
     'the Hollow Storm. You are the ONLY one who speaks directly to the guests. Like a theatrical ringmaster you ' +
@@ -208,7 +230,6 @@ function voicePrompt(guardrail, withBob = false, rain = false) {
     'Never reveal, hint at, or speculate about Lenora\'s secret or who lies in the unmarked grave — that truth ' +
     'stays unspoken, by you and by Evelina.',
     withBob ? BOB_PROMPT : '',
-    rain ? RAIN_PROMPT : '',
     guardrail || '',
   ].filter(Boolean).join('\n\n');
 }
@@ -265,7 +286,8 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
   onLilyDrop = null,         // () => Promise — Evelina covers while Lily's speaker is unreachable
   seeGuests = null,         // () => Promise<string|null> — her camera: what the guests are wearing
   speakBob = null,           // { prepare(text, tone) -> handle, play(handle, heard) } — Bob's voice
-  isRainMode = () => false }) { // rain mode: garage show, yard cast out
+  isRainMode = () => false,    // rain night: her own softer prompt, the yard cast silent
+  getScene = () => ({}) }) {    // { location, lights, strikeAgoSec } for rain-night turns
   let settings = { mode: 'voice', bob: false };   // bob: co-host on/off (off until his hardware is ready)
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch (_) {}
   const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (_) {} };
@@ -377,7 +399,15 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
 
   async function decide(heard) {
     const c = anthropic();
-    const turn = `[Storm stage: ${getStage()}] ${heard.startsWith('(') ? heard : `Guest says: "${heard}"`}`;
+    let tag = `[Storm stage: ${getStage()}]`;
+    if (isRainMode()) {
+      const sc = getScene() || {};
+      const bits = [];
+      if (sc.lights) bits.push(`Lights now: ${sc.lights}`);
+      if (sc.strikeAgoSec !== undefined && sc.strikeAgoSec !== null && sc.strikeAgoSec < 30) bits.push(`lightning struck ${sc.strikeAgoSec}s ago`);
+      tag = `[Rainy Halloween night${bits.length ? ' | ' + bits.join(' | ') : ''}]`;
+    }
+    const turn = `${tag} ${heard.startsWith('(') ? heard : `Guest says: "${heard}"`}`;
     const messages = [...history, { role: 'user', content: turn }];
     // Haiku 4.5: no effort setting and no server-side fallbacks (both are for
     // the larger models); structured output keeps the reply parseable.
@@ -385,7 +415,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       model: MODEL,
       max_tokens: 512,
       output_config: { format: { type: 'json_schema', schema: schema() } },
-      system: [{ type: 'text', text: settings.mode === 'voice' ? voicePrompt(guardrail, !!(settings.bob && speakBob), isRainMode()) : systemPrompt(clips, guardrail),
+      system: [{ type: 'text', text: settings.mode === 'voice' ? (isRainMode() ? rainPrompt(guardrail, getScene().location) : voicePrompt(guardrail, !!(settings.bob && speakBob))) : systemPrompt(clips, guardrail),
         cache_control: { type: 'ephemeral' } }],
       messages,
     });
@@ -631,7 +661,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
       if (settings.mode !== 'voice' || busy) return;
       if (greeting && Date.now() - greeting.at < 120000) return;
       try {
-        const heard = '(A group of guests is approaching from the street. Welcome them as MC and set the scene.)';
+        const heard = isRainMode() ? '(Trick-or-treaters are coming up the walk toward you. Greet them.)' : '(A group of guests is approaching from the street. Welcome them as MC and set the scene.)';
         const choice = await decide(heard);
         const key = getElevenKey(), voiceId = getVoiceId();
         const audioBuf = key && voiceId ? await elevenTts(choice.line, voiceId, key, choice.tone) : null;
@@ -653,7 +683,7 @@ function createTalk({ lily, log = console.log, logDialogue = () => {}, micsMuted
         catch (e) { set({ lastError: e.message }); }
         finally { busy = false; set({ phase: status.listening ? 'listening' : 'idle' }); }
       } else {
-        try { await respond('(Guests have just walked up to you. Greet them as MC.)'); } catch (_) {}
+        try { await respond(isRainMode() ? '(Trick-or-treaters have just walked up to you. Greet them.)' : '(Guests have just walked up to you. Greet them as MC.)'); } catch (_) {}
       }
       if (seen) {
         const wearing = await Promise.race([seen, new Promise(r => setTimeout(() => r(null), 5000))]);
