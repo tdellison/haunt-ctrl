@@ -16,3 +16,4 @@ light-mode.json
 show-mode.json
 firmware/*/secrets.h
 yard-speaker.json
+tls/

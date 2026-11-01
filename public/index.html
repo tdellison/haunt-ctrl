@@ -1776,7 +1776,7 @@ let ws, wsRetry = 1000;
 function connectWS() {
   if (DEMO) return;
   try {
-    ws = new WebSocket(`ws://${location.host}`);
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
     ws.onopen  = () => { wsRetry = 1000; appendLog('WebSocket connected', 'SYSTEM'); };
     ws.onmessage = (e) => {
       try {
@@ -2652,39 +2652,43 @@ async function lmFlip() { if (lmCur) await api('/api/lights/order', { order: [..
 
 // ── Rain night tab ────────────────────────────────────────────────────────────
 let camPts = [];
-// Push-to-talk: hold, speak, let go — your words go to Lily. Uses the phone's
-// speech recognition when the browser allows it; iPhone Safari blocks the mic
-// on a plain-http page, so then it opens the text box for keyboard dictation.
-let pttRec = null, pttText = '';
-function pttSend(text) {
-  const t = String(text || '').trim();
-  if (!t) return;
-  api(document.getElementById('ptt-answer').checked ? '/api/lily/talk/say' : '/api/lily/talk/speak', { text: t });
-  appendLog(`You (push-to-talk): ${t}`, 'SYSTEM');
-}
-function pttDown(e) {
+// Push-to-talk: hold, speak, let go — the phone records, the server writes it
+// down (whisper) and Lily says it (or answers it). Phones only allow the mic
+// on a secure page, so on plain http the button points to the https address.
+let pttRec = null, pttChunks = [], pttStream = null;
+const PTT_HTTPS = `https://${location.hostname}:3443/`;
+async function pttDown(e) {
   e.preventDefault();
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const btn = document.getElementById('ptt');
-  if (!SR || !window.isSecureContext) {
-    const box = document.getElementById(document.getElementById('ptt-answer').checked ? 'rain-say' : 'rain-speak');
-    box.focus();
-    btn.textContent = '⌨️ Tap the 🎤 on your keyboard, speak, then SAY IT';
-    setTimeout(() => { btn.textContent = '🎙 HOLD TO TALK'; }, 5000);
+  if (!window.isSecureContext || !navigator.mediaDevices || !window.MediaRecorder) {
+    if (confirm('Your phone only allows the mic on the secure page.\n\nOpen ' + PTT_HTTPS + ' ?\n(First time: tap "Show Details" → "visit this website", or "Advanced" → "Proceed". Then bookmark it.)')) location.href = PTT_HTTPS;
     return;
   }
-  pttText = '';
   try {
-    pttRec = new SR();
-    pttRec.lang = 'en-US'; pttRec.interimResults = true; pttRec.continuous = true;
-    pttRec.onresult = (ev) => { pttText = [...ev.results].map(r => r[0].transcript).join(' '); btn.textContent = '🔴 ' + pttText.slice(-40); };
-    pttRec.onerror = (ev) => { btn.textContent = '🎙 HOLD TO TALK'; if (ev.error === 'not-allowed') alert('The phone blocked the mic for this page — use the 🎤 on your keyboard in the text box instead.'); };
-    pttRec.onend = () => { if (pttRec) { const t = pttText; pttRec = null; btn.textContent = '🎙 HOLD TO TALK'; pttSend(t); } };
+    pttStream = pttStream || await navigator.mediaDevices.getUserMedia({ audio: true });
+    pttChunks = [];
+    pttRec = new MediaRecorder(pttStream);
+    pttRec.ondataavailable = (ev) => { if (ev.data && ev.data.size) pttChunks.push(ev.data); };
+    pttRec.onstop = async () => {
+      const blob = new Blob(pttChunks, { type: pttRec.mimeType || 'audio/mp4' });
+      pttRec = null;
+      btn.textContent = '⏳ Sending…';
+      try {
+        const answer = document.getElementById('ptt-answer').checked ? '1' : '0';
+        const r = await fetch('/api/lily/ptt?answer=' + answer, { method: 'POST', body: blob });
+        const d = await r.json();
+        btn.textContent = d.ok ? `✅ "${d.text.slice(0, 40)}"` : `⚠️ ${d.error}`;
+      } catch (err) { btn.textContent = '⚠️ ' + err.message; }
+      setTimeout(() => { btn.textContent = '🎙 HOLD TO TALK'; }, 4000);
+    };
     pttRec.start();
-    btn.textContent = '🔴 Listening… let go to send';
-  } catch (_) { pttRec = null; btn.textContent = '🎙 HOLD TO TALK'; }
+    btn.textContent = '🔴 Recording… let go to send';
+  } catch (err) {
+    btn.textContent = '🎙 HOLD TO TALK';
+    alert('Mic not available: ' + err.message);
+  }
 }
-function pttUp() { if (pttRec) { try { pttRec.stop(); } catch (_) {} } }
+function pttUp() { if (pttRec && pttRec.state === 'recording') { try { pttRec.stop(); } catch (_) {} } }
 
 function rainStart() { api('/api/rain/start', { source: document.getElementById('rain-mic').value || undefined }); }
 function rainSpeak() { const el = document.getElementById('rain-speak'); const t = el.value.trim(); if (t) { api('/api/lily/talk/speak', { text: t }); el.value = ''; } }

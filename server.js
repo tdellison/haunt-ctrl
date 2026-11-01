@@ -14,7 +14,11 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+// One WebSocket server shared by the http page (port 3000) and the https page
+// (port 3443 — phones only allow the mic on a secure page, for push-to-talk).
+const wss = new WebSocketServer({ noServer: true });
+const wsUpgrade = (req, sock, head) => wss.handleUpgrade(req, sock, head, (ws) => wss.emit('connection', ws, req));
+server.on('upgrade', wsUpgrade);
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 let config = {
@@ -4194,6 +4198,27 @@ app.post('/api/rain/location', rainRoute(({ location }) => {
   try { lilyTalk.resetConversation(); } catch (_) {}
   broadcastLog(`Lily is now in the ${location}`, 'SYSTEM');
 }));
+// Push-to-talk: the phone records the owner's voice (any browser format),
+// ffmpeg turns it into 16 kHz mono PCM, whisper writes it down, and Lily
+// either says it word for word or answers it.
+app.post('/api/lily/ptt', express.raw({ type: () => true, limit: '15mb' }), async (req, res) => {
+  const tmp = path.join(require('os').tmpdir(), `ptt-${Date.now()}`);
+  try {
+    if (!req.body || !req.body.length) throw new Error('no audio');
+    fs.writeFileSync(tmp, req.body);
+    const pcm = await new Promise((resolve, reject) => require('child_process').execFile('ffmpeg',
+      ['-loglevel', 'error', '-i', tmp, '-ac', '1', '-ar', '16000', '-f', 's16le', 'pipe:1'],
+      { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 20000 }, (e, out) => e ? reject(e) : resolve(out)));
+    const text = (await require('./lily/talk').transcribe(pcm)).trim();
+    if (!text) throw new Error("Couldn't make out any words — try again, closer to the phone");
+    broadcastLog(`Push-to-talk: "${text}"`, 'SYSTEM');
+    const answer = String(req.query.answer || '') === '1';
+    (answer ? lilyTalk.say(text) : lilyTalk.speak(text)).catch(e => broadcastLog(`Push-to-talk: ${e.message}`, 'SYSTEM'));
+    res.json({ ok: true, text });
+  } catch (e) {
+    res.status(409).json({ ok: false, error: e.message });
+  } finally { try { fs.unlinkSync(tmp); } catch (_) {} }
+});
 app.post('/api/rain/raining', rainRoute(({ raining }) => {
   showRaining = !!raining; saveShowMode();
   try { lilyTalk.resetConversation(); } catch (_) {}
@@ -5252,6 +5277,18 @@ setInterval(async () => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = 3000;
+// HTTPS twin on 3443 with a self-signed cert (tls/, gitignored) — the phone
+// shows a one-time warning, then the mic works for push-to-talk.
+const HTTPS_PORT = 3443;
+try {
+  const tlsDir = path.join(__dirname, 'tls');
+  if (fs.existsSync(path.join(tlsDir, 'key.pem'))) {
+    const httpsServer = https.createServer({ key: fs.readFileSync(path.join(tlsDir, 'key.pem')), cert: fs.readFileSync(path.join(tlsDir, 'cert.pem')) }, app);
+    httpsServer.on('upgrade', wsUpgrade);
+    httpsServer.on('error', (e) => console.log(`[HAUNT] https: ${e.message}`));
+    httpsServer.listen(HTTPS_PORT, () => console.log(`[HAUNT] https on ${HTTPS_PORT} (push-to-talk mic)`));
+  }
+} catch (e) { console.log(`[HAUNT] https not started: ${e.message}`); }
 server.listen(PORT, () => {
   // A missing player binary fails silently - spawn errors are swallowed by the
   // per-process error handlers and the yard just goes quiet. Say so at startup
