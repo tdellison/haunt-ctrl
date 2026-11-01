@@ -1075,10 +1075,10 @@ body::before { animation:scanlines 10s linear infinite; }
       <button class="btn btn-sm" id="cam-motion" onclick="api('/api/lily/camera/config',{motion:{enabled:!(window._rain&&window._rain.camera.motion.enabled)}}).then(rainLoad)"></button>
     </div>
     <div style="position:relative;margin-top:8px;user-select:none">
-      <img id="cam-snap" alt="camera" style="display:block;width:100%;aspect-ratio:16/9;object-fit:fill;background:#000;border-radius:6px;cursor:crosshair" onclick="camClick(event)">
+      <img id="cam-snap" alt="camera" style="display:block;width:100%;aspect-ratio:16/9;object-fit:fill;background:#000;border-radius:6px">
       <div id="cam-box" style="position:absolute;border:2px solid var(--orange);pointer-events:none;border-radius:3px"></div>
     </div>
-    <div style="font-size:.68em;color:var(--dim2);margin-top:6px">Tap the picture twice — top-left, then bottom-right — to draw where guests walk up. Keep it off the rain and the street.</div>
+    <div style="font-size:.68em;color:var(--dim2);margin-top:6px">The orange box is where she watches for guests (fixed — taps don't change it).</div>
     <div id="cam-info" style="font-size:.72em;margin-top:6px"></div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.7em;color:var(--dim2)">
       SENSITIVITY <input type="range" min="2" max="30" id="cam-sens" style="flex:1" onchange="api('/api/lily/camera/config',{motion:{minArea:(32-this.value)/100}}).then(rainLoad)">

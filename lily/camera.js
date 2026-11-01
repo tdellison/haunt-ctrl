@@ -32,7 +32,7 @@ const THUMB = 16 * 12;
 const MW = 160, MH = 120, MPIX = MW * MH;
 const MOTION_DEFAULTS = {
   enabled: false,
-  box: { x0: 0.2, y0: 0.15, x1: 0.8, y1: 0.95 },  // fractions of the picture
+  box: { x0: 0.2, y0: 0.08, x1: 0.82, y1: 1.0 },  // fractions of the picture — LOCKED (owner, Halloween 2026)
   pixelDelta: 25,          // how much a pixel must change (0-255) to count
   minArea: 0.06,           // share of the box that must change (sensitivity)
   framesToTrigger: 2,
@@ -83,7 +83,7 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
   let settings = { enabled: false, device: '', minBrightness: 35, chance: 1, motion: { ...MOTION_DEFAULTS } };
   try {
     const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-    settings = { ...settings, ...saved, motion: { ...MOTION_DEFAULTS, ...(saved.motion || {}), box: { ...MOTION_DEFAULTS.box, ...((saved.motion || {}).box || {}) } } };
+    settings = { ...settings, ...saved, motion: { ...MOTION_DEFAULTS, ...(saved.motion || {}), box: { ...MOTION_DEFAULTS.box } } };
   } catch (_) {}
   const save = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (e) { log(`camera settings save failed: ${e.message}`); } };
 
@@ -263,7 +263,9 @@ function createLilyCamera({ log = console.log, getApiKey, trackTokens = () => {}
         if (m.enabled !== undefined) c.enabled = !!m.enabled;
         if (m.minArea !== undefined) c.minArea = Math.max(0.005, Math.min(0.9, Number(m.minArea) || 0.06));
         if (m.cooldownSec !== undefined) c.cooldownSec = Math.max(0, Math.min(600, Number(m.cooldownSec) || 0));
-        if (m.box) {
+        // The detection box is fixed (owner: "keep it big, not adjustable") —
+        // stray taps on the phone kept shrinking it. Box changes are ignored.
+        if (m.box && false) {
           const b = { ...c.box, ...m.box };
           const v = (x) => Math.max(0, Math.min(1, Number(x)));
           const nb = { x0: v(Math.min(b.x0, b.x1)), x1: v(Math.max(b.x0, b.x1)), y0: v(Math.min(b.y0, b.y1)), y1: v(Math.max(b.y0, b.y1)) };
