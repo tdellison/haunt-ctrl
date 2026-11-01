@@ -1019,6 +1019,11 @@ body::before { animation:scanlines 10s linear infinite; }
 
   <div class="panel">
     <div class="lm-step">MAKE LILY TALK</div>
+    <button class="btn btn-orange btn-full btn-lg" id="ptt" style="margin-bottom:6px;touch-action:none;user-select:none;-webkit-user-select:none"
+      onpointerdown="pttDown(event)" onpointerup="pttUp()" onpointercancel="pttUp()" onpointerleave="pttUp()">🎙 HOLD TO TALK</button>
+    <label style="display:flex;gap:6px;align-items:center;font-size:.72em;color:var(--dim2);margin-bottom:10px">
+      <input type="checkbox" id="ptt-answer"> She answers it in her own words (off = she says exactly what you said)
+    </label>
     <div style="display:flex;gap:6px">
       <input class="raw-input" id="rain-speak" placeholder="Exact words she says…" style="flex:1" onkeydown="if(event.key==='Enter')rainSpeak()"/>
       <button class="btn btn-orange btn-sm" onclick="rainSpeak()">🗣 SAY IT</button>
@@ -2647,6 +2652,40 @@ async function lmFlip() { if (lmCur) await api('/api/lights/order', { order: [..
 
 // ── Rain night tab ────────────────────────────────────────────────────────────
 let camPts = [];
+// Push-to-talk: hold, speak, let go — your words go to Lily. Uses the phone's
+// speech recognition when the browser allows it; iPhone Safari blocks the mic
+// on a plain-http page, so then it opens the text box for keyboard dictation.
+let pttRec = null, pttText = '';
+function pttSend(text) {
+  const t = String(text || '').trim();
+  if (!t) return;
+  api(document.getElementById('ptt-answer').checked ? '/api/lily/talk/say' : '/api/lily/talk/speak', { text: t });
+  appendLog(`You (push-to-talk): ${t}`, 'SYSTEM');
+}
+function pttDown(e) {
+  e.preventDefault();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('ptt');
+  if (!SR || !window.isSecureContext) {
+    const box = document.getElementById(document.getElementById('ptt-answer').checked ? 'rain-say' : 'rain-speak');
+    box.focus();
+    btn.textContent = '⌨️ Tap the 🎤 on your keyboard, speak, then SAY IT';
+    setTimeout(() => { btn.textContent = '🎙 HOLD TO TALK'; }, 5000);
+    return;
+  }
+  pttText = '';
+  try {
+    pttRec = new SR();
+    pttRec.lang = 'en-US'; pttRec.interimResults = true; pttRec.continuous = true;
+    pttRec.onresult = (ev) => { pttText = [...ev.results].map(r => r[0].transcript).join(' '); btn.textContent = '🔴 ' + pttText.slice(-40); };
+    pttRec.onerror = (ev) => { btn.textContent = '🎙 HOLD TO TALK'; if (ev.error === 'not-allowed') alert('The phone blocked the mic for this page — use the 🎤 on your keyboard in the text box instead.'); };
+    pttRec.onend = () => { if (pttRec) { const t = pttText; pttRec = null; btn.textContent = '🎙 HOLD TO TALK'; pttSend(t); } };
+    pttRec.start();
+    btn.textContent = '🔴 Listening… let go to send';
+  } catch (_) { pttRec = null; btn.textContent = '🎙 HOLD TO TALK'; }
+}
+function pttUp() { if (pttRec) { try { pttRec.stop(); } catch (_) {} } }
+
 function rainStart() { api('/api/rain/start', { source: document.getElementById('rain-mic').value || undefined }); }
 function rainSpeak() { const el = document.getElementById('rain-speak'); const t = el.value.trim(); if (t) { api('/api/lily/talk/speak', { text: t }); el.value = ''; } }
 function rainSay() { const el = document.getElementById('rain-say'); const t = el.value.trim(); if (t) { api('/api/lily/talk/say', { text: t }); el.value = ''; } }
